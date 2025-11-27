@@ -56,6 +56,8 @@ app.use((req, res, next) => {
   next();
 });
 
+console.log("Hora backend:", new Date());
+
 app.use("/usuarios", usuarioRoutes);
 app.use("/horarios", horarioRoutes);
 app.use("/servicios", servicioRoutes);
