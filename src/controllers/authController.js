@@ -27,20 +27,22 @@ export const login = async (req, res) => {
 
     const token = generarToken(usuario);
 
-    // ✅ SOLO cookies - NO enviar token en el response JSON
+    // ✅ CONFIGURACIÓN MEJORADA PARA MÓVILES
     const isProduction = process.env.NODE_ENV === "production";
 
     res.cookie("token", token, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
-      maxAge: 24 * 60 * 60 * 1000,
+      sameSite: isProduction ? "none" : "lax", // "none" es crucial para cross-site
+      maxAge: 24 * 60 * 60 * 1000, // 1 día
+      path: "/", // Asegurar que esté disponible en todas las rutas
     });
 
-    // ✅ Respuesta SIN token
+    // ✅ También enviar el token en la respuesta para móviles (fallback)
     return res.status(200).json({
       message: "Login exitoso",
       user: userData,
+      token: token, // 👈 Fallback para dispositivos problemáticos
     });
   } catch (error) {
     console.error("Error en login:", error);

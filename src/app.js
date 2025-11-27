@@ -13,33 +13,22 @@ import webhookRoutes from "./routes/webhooksRoutes.js";
 import cookieParser from "cookie-parser";
 import testRoutes from "./routes/testRoutes.js";
 
-// ✅ AHORA SÍ PUEDE IMPORTARSE DESPUÉS DE QUE DOTENV SE CARGÓ EN INDEX.JS
 import RecordatoriosJob from "./jobs/recordatoriosJob.js";
 
 const app = express();
 app.use(cookieParser());
 
-const allowedOrigins = [
-  "https://frontend-barberia-tcv6.onrender.com",
-  "http://localhost:3000",
-  "https://frontend-barberia-tcv6.onrender.com/", // por si acaso
-];
-
-// ✅ CORRECCIÓN: Configuración simplificada de CORS
+// ✅ CORS simplificado pero efectivo
 app.use(cors({
-  origin: allowedOrigins,
+  origin: ["https://frontend-barberia-tcv6.onrender.com", "http://localhost:3000"],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"]
 }));
 
-// ✅ ELIMINAR completamente la línea problemática
-// NO usar: app.options("*", ...)
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ INICIAR JOBS - AHORA CON VARIABLES CARGADAS
 RecordatoriosJob.init();
 
 // Rutas
