@@ -72,13 +72,12 @@ export const getHorasDisponibles = async (req, res) => {
 
     if (!fecha) return res.status(400).json({ message: "Fecha requerida" });
 
-    // Obtener hora actual en Chile
+    // Hora actual en Chile
     const ahoraChile = dayjs().tz("America/Santiago");
-    console.log("Hora backend Chile:", ahoraChile.format());
 
     // Fecha del día solicitado en Chile
     const fechaConsulta = dayjs.tz(fecha, "YYYY-MM-DD", "America/Santiago");
-    const diaSemana = fechaConsulta.day(); // 0=Domingo, 6=Sábado
+    const diaSemana = fechaConsulta.day();
     const usuario = req.usuario;
 
     // Validar suscripción
@@ -138,11 +137,11 @@ export const getHorasDisponibles = async (req, res) => {
       );
     });
 
-    // Definir inicio y fin del día en Chile
+    // Inicio y fin del día en Chile
     const inicioDia = fechaConsulta.startOf("day").toDate();
     const finDia = fechaConsulta.endOf("day").toDate();
 
-    // Obtener excepciones
+    // Excepciones
     const excepciones = await ExcepcionHorarioModel.find({
       barbero: barberoId,
       fecha: { $gte: inicioDia, $lt: finDia },
@@ -175,14 +174,15 @@ export const getHorasDisponibles = async (req, res) => {
 
     horasFinales = horasFinales.filter((hora) => {
       return !reservasDelDia.some((reserva) => {
-        const reservaHora = dayjs(reserva.fecha)
+        // Convertir reserva a hora Chile
+        const reservaHoraChile = dayjs(reserva.fecha)
           .tz("America/Santiago")
           .format("HH:mm");
-        return reservaHora === hora;
+        return reservaHoraChile === hora;
       });
     });
 
-    // 🔹 FILTRAR HORAS PASADAS SI LA FECHA ES HOY
+    // Filtrar horas pasadas si es hoy
     if (fechaConsulta.isSame(ahoraChile, "day")) {
       const horaActual = ahoraChile.hour();
       const minutoActual = ahoraChile.minute();
@@ -207,7 +207,7 @@ export const getHorasDisponibles = async (req, res) => {
 
     res.json({
       barbero: barbero.nombre,
-      fecha,
+      fecha: fechaConsulta.format("YYYY-MM-DD"),
       horasDisponibles: horasFinales,
       todasLasHoras: Array.from(
         new Set([...todasLasHoras, ...horasExtra, ...horasBloqueadas])
