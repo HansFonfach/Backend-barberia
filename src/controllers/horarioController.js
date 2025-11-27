@@ -64,19 +64,25 @@ export const getHorariosByBarbero = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
 export const getHorasDisponibles = async (req, res) => {
   try {
     const { id: barberoId } = req.params;
     const { fecha } = req.query;
 
+    console.log("🔍🔍🔍 INICIO getHorasDisponibles 🔍🔍🔍");
+    console.log("📅 Fecha recibida:", fecha);
+    console.log("👨 Barbero ID:", barberoId);
+
     if (!fecha) return res.status(400).json({ message: "Fecha requerida" });
 
     // Hora actual en Chile
     const ahoraChile = dayjs().tz("America/Santiago");
+    console.log("⏰ Ahora en Chile:", ahoraChile.format("YYYY-MM-DD HH:mm"));
 
     // Fecha del día solicitado en Chile
     const fechaConsulta = dayjs.tz(fecha, "YYYY-MM-DD", "America/Santiago");
+    console.log("📆 Fecha consulta Chile:", fechaConsulta.format("YYYY-MM-DD"));
+
     const diaSemana = fechaConsulta.day();
     const usuario = req.usuario;
 
@@ -91,7 +97,6 @@ export const getHorasDisponibles = async (req, res) => {
       });
     }
 
-    // DEFINIR diasPermitidos aquí para que esté disponible en todo el scope
     const diasPermitidos = suscripcionActiva ? 31 : 15;
     const limite = ahoraChile.add(diasPermitidos, "day");
 
@@ -138,9 +143,15 @@ export const getHorasDisponibles = async (req, res) => {
       );
     });
 
-    // CORRECCIÓN: Definir inicio y fin del día en Chile
+    console.log("🕒 Horas generadas del barbero:", todasLasHoras);
+
+    // Inicio y fin del día en Chile
     const inicioDiaChile = fechaConsulta.startOf("day").toDate();
     const finDiaChile = fechaConsulta.endOf("day").toDate();
+
+    console.log("📊 Rango de búsqueda en DB:");
+    console.log("   Inicio:", inicioDiaChile);
+    console.log("   Fin:", finDiaChile);
 
     // Excepciones
     const excepciones = await ExcepcionHorarioModel.find({
@@ -163,32 +174,57 @@ export const getHorasDisponibles = async (req, res) => {
       .filter((e) => e.tipo === "bloqueo")
       .map((e) => e.horaInicio);
 
+    // Filtrar reservas existentes
+    const reservasDelDia = await Reserva.find({
+      barbero: barberoId,
+      fecha: { $gte: inicioDiaChile, $lt: finDiaChile },
+    });
+
+    console.log("📋 Reservas encontradas en DB:", reservasDelDia.length);
+
+    // DEBUG DETALLADO DE CADA RESERVA
+    reservasDelDia.forEach((reserva, index) => {
+      const fechaReservaUTC = dayjs(reserva.fecha);
+      const fechaReservaChile = dayjs(reserva.fecha).tz("America/Santiago");
+
+      console.log(`   Reserva ${index + 1}:`);
+      console.log(`     - En DB (UTC): ${reserva.fecha}`);
+      console.log(
+        `     - Interpretada UTC: ${fechaReservaUTC.format("YYYY-MM-DD HH:mm")}`
+      );
+      console.log(
+        `     - Interpretada Chile: ${fechaReservaChile.format(
+          "YYYY-MM-DD HH:mm"
+        )}`
+      );
+      console.log(`     - Hora Chile: ${fechaReservaChile.format("HH:mm")}`);
+    });
+
     let horasFinales = Array.from(
       new Set([...todasLasHoras, ...horasExtra])
     ).filter((hora) => !horasBloqueadas.includes(hora));
 
-    // CORRECCIÓN CRÍTICA: Filtrar reservas existentes
-    const reservasDelDia = await Reserva.find({
-      barbero: barberoId,
-      fecha: {
-        $gte: inicioDiaChile,
-        $lt: finDiaChile,
-      },
-    });
+    console.log("🕒 Horas antes de filtrar reservas:", horasFinales);
 
-    // CORRECCIÓN: Convertir todas las fechas de reserva a hora Chile para comparar correctamente
+    // Convertir todas las fechas de reserva a hora Chile
     horasFinales = horasFinales.filter((hora) => {
-      return !reservasDelDia.some((reserva) => {
-        // Convertir la fecha de la reserva a Chile y comparar solo la hora
+      const estaOcupada = reservasDelDia.some((reserva) => {
         const fechaReservaChile = dayjs(reserva.fecha).tz("America/Santiago");
         const horaReserva = fechaReservaChile.format("HH:mm");
 
-        // Debug: puedes loggear esto temporalmente
-        // console.log(`Reserva: ${reserva.fecha} -> Chile: ${horaReserva}, Comparando con: ${hora}`);
+        console.log(
+          `   Comparando: ${hora} vs ${horaReserva} -> ${
+            hora === horaReserva ? "OCUPADA" : "disponible"
+          }`
+        );
 
         return horaReserva === hora;
       });
+
+      return !estaOcupada;
     });
+
+    console.log("✅ Horas después de filtrar reservas:", horasFinales);
 
     // Filtrar horas pasadas si es hoy
     if (fechaConsulta.isSame(ahoraChile, "day")) {
@@ -213,7 +249,7 @@ export const getHorasDisponibles = async (req, res) => {
     ordenarHoras(horasExtra);
     ordenarHoras(horasBloqueadas);
 
-    res.json({
+    const response = {
       barbero: barbero.nombre,
       fecha: fechaConsulta.format("YYYY-MM-DD"),
       horasDisponibles: horasFinales,
@@ -223,8 +259,13 @@ export const getHorasDisponibles = async (req, res) => {
       horasBloqueadas,
       horasExtra,
       data: horasFinales,
-      diasPermitidos, // Ahora sí está definido
-    });
+      diasPermitidos,
+    };
+
+    console.log("📤 Response final:", response);
+    console.log("🔍🔍🔍 FIN getHorasDisponibles 🔍🔍🔍");
+
+    res.json(response);
   } catch (error) {
     console.error("❌ Error en getHorasDisponibles:", error);
     res.status(500).json({ message: error.message });

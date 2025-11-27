@@ -130,11 +130,18 @@ const verificarReservaExistente = async (
     if (reservaExistente) throw new Error("Hora ya reservada");
   }
 };
-
 // 🔹 Controlador principal: Crear una nueva reserva
 export const createReserva = async (req, res) => {
   try {
     const { barbero, servicio, fecha, hora, cliente } = req.body;
+
+    console.log("🔍🔍🔍 CREANDO RESERVA 🔍🔍🔍");
+    console.log("📅 Fecha recibida:", fecha);
+    console.log("🕒 Hora recibida:", hora);
+    console.log("👤 Cliente ID:", cliente);
+    console.log("💈 Barbero ID:", barbero);
+    console.log("💼 Servicio ID:", servicio);
+
     if (!barbero || !servicio || !fecha || !hora || !cliente)
       throw new Error("Todos los campos son obligatorios");
 
@@ -151,7 +158,21 @@ export const createReserva = async (req, res) => {
     fechaObj.setMilliseconds(0);
 
     console.log("💡 Fecha creada (local):", fechaObj);
+    console.log("💡 Fecha creada (ISO):", fechaObj.toISOString());
+
+    // DEBUG: Mostrar cómo se interpreta esta fecha en diferentes timezones
+    const fechaChile = dayjs(fechaObj).tz("America/Santiago");
+    const fechaUTC = dayjs(fechaObj).utc();
+    console.log("🌎 Interpretación de fechas:");
+    console.log("   - En Chile:", fechaChile.format("YYYY-MM-DD HH:mm"));
+    console.log("   - En UTC:", fechaUTC.format("YYYY-MM-DD HH:mm"));
+    console.log(
+      "   - Diferencia:",
+      fechaUTC.diff(fechaChile, "hour") + " horas"
+    );
+
     const diaSemana = fechaObj.getDay();
+    console.log("📅 Día de la semana:", diaSemana);
 
     // Cliente
     const clienteDoc = await usuarioModel.findById(cliente);
@@ -185,11 +206,17 @@ export const createReserva = async (req, res) => {
 
     const { startOfDay, endOfDay } = crearFechasUTC(fecha);
 
+    console.log("📊 Rango de búsqueda para excepciones:");
+    console.log("   - Inicio día:", startOfDay);
+    console.log("   - Fin día:", endOfDay);
+
     // Excepciones (bloqueos y horas extra)
     const excepciones = await excepcionHorarioModel.find({
       barbero,
       fecha: { $gte: startOfDay, $lte: endOfDay },
     });
+
+    console.log("🚫 Excepciones encontradas:", excepciones.length);
 
     // Horas disponibles
     const horasDisponibles = await obtenerHorasDisponibles(
@@ -197,6 +224,12 @@ export const createReserva = async (req, res) => {
       excepciones,
       barbero,
       fecha
+    );
+
+    console.log("🕒 Horas disponibles calculadas:", horasDisponibles);
+    console.log(
+      "❓ Hora solicitada disponible?",
+      horasDisponibles.includes(formatHora(hora))
     );
 
     if (!horasDisponibles.includes(formatHora(hora))) {
@@ -207,12 +240,19 @@ export const createReserva = async (req, res) => {
     const horaFinReserva = new Date(fechaObj);
     horaFinReserva.setHours(horaFinReserva.getHours() + 1);
 
+    console.log("🔍 Buscando reservas existentes:");
+    console.log("   - Fecha inicio:", fechaObj);
+    console.log("   - Fecha fin:", horaFinReserva);
+
     const reservaExistente = await Reserva.findOne({
       barbero,
       fecha: { $gte: fechaObj, $lt: horaFinReserva },
     });
 
-    if (reservaExistente) throw new Error("Hora ya reservada");
+    if (reservaExistente) {
+      console.log("❌ Reserva existente encontrada:", reservaExistente);
+      throw new Error("Hora ya reservada");
+    }
 
     const servicioDoc = await servicioModel.findById(servicio);
 
@@ -221,6 +261,7 @@ export const createReserva = async (req, res) => {
     }
 
     // Crear reserva
+    console.log("💾 Guardando reserva en DB...");
     const nuevaReserva = await Reserva.create({
       cliente,
       barbero,
@@ -228,6 +269,20 @@ export const createReserva = async (req, res) => {
       fecha: fechaObj,
       estado: "pendiente",
     });
+
+    console.log("✅ Reserva guardada en DB:");
+    console.log("   - ID:", nuevaReserva._id);
+    console.log("   - Fecha guardada:", nuevaReserva.fecha);
+    console.log(
+      "   - Fecha interpretada Chile:",
+      dayjs(nuevaReserva.fecha)
+        .tz("America/Santiago")
+        .format("YYYY-MM-DD HH:mm")
+    );
+    console.log(
+      "   - Fecha interpretada UTC:",
+      dayjs(nuevaReserva.fecha).utc().format("YYYY-MM-DD HH:mm")
+    );
 
     res.status(201).json(nuevaReserva);
 
@@ -240,8 +295,10 @@ export const createReserva = async (req, res) => {
       hora,
       servicio: nombreServicio,
     });
+
+    console.log("🔍🔍🔍 RESERVA CREADA EXITOSAMENTE 🔍🔍🔍");
   } catch (error) {
-    console.error("Error en createReserva:", error);
+    console.error("❌ Error en createReserva:", error);
     const statusCode = error.message.includes("no encontrado")
       ? 404
       : error.message.includes("sábado")
