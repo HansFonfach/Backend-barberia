@@ -63,6 +63,7 @@ export const getHorasDisponibles = async (req, res) => {
   try {
     const { id: barberoId } = req.params;
     const { fecha } = req.query; // formato "YYYY-MM-DD"
+     console.log("Hora backend 2:", new Date()); // AGREGA ESTO AQUÍ
 
     if (!fecha) return res.status(400).json({ message: "Fecha requerida" });
 
