@@ -8,7 +8,6 @@ export const login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // Buscar usuario por email
     const usuario = await Usuario.findOne({ email });
     if (!usuario) {
       return res
@@ -16,7 +15,6 @@ export const login = async (req, res) => {
         .json({ message: "Usuario y/o contraseña incorrecta" });
     }
 
-    //  Validar contraseña
     const validPassword = await bcrypt.compare(password, usuario.password);
     if (!validPassword) {
       return res
@@ -24,23 +22,25 @@ export const login = async (req, res) => {
         .json({ message: "Usuario y/o contraseña incorrecta" });
     }
 
-    // (Opcional) Eliminar password del objeto antes de enviarlo
     const userData = usuario.toObject();
     delete userData.password;
 
-    // Crear el token con información mínima
     const token = generarToken(usuario);
+
+    // ✅ SOLO cookies - NO enviar token en el response JSON
+    const isProduction = process.env.NODE_ENV === "production";
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 24 * 60 * 60 * 1000,
     });
 
-    // Respuesta exitosa
+    // ✅ Respuesta SIN token
     return res.status(200).json({
       message: "Login exitoso",
-      user: userData, // 🔥 Aquí mandas al frontend los datos del usuario logeado
+      user: userData,
     });
   } catch (error) {
     console.error("Error en login:", error);
@@ -150,5 +150,11 @@ export const updateUsuarioPassword = async (req, res) => {
 };
 
 export const logout = (req, res) => {
-  res.clearCookie("token").json({ message: "Sesión cerrada" });
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  });
+
+  res.json({ message: "Logout exitoso" });
 };

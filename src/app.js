@@ -22,22 +22,30 @@ app.use(cookieParser());
 const allowedOrigins = [
   "https://frontend-barberia-tcv6.onrender.com",
   "http://localhost:3000",
+  "https://frontend-barberia-tcv6.onrender.com/", // por si acaso
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Permitir requests sin origin (como mobile apps o algunas requests)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.log("CORS bloqueado para origin:", origin);
         callback(new Error("Not allowed by CORS"));
       }
     },
     credentials: true,
-    methods: "GET,POST,PUT,DELETE,PATCH",
-    allowedHeaders: "Content-Type,Authorization",
+    methods: "GET,POST,PUT,DELETE,PATCH,OPTIONS",
+    allowedHeaders: "Content-Type,Authorization,Accept,Origin,X-Requested-With",
   })
 );
+
+// Manejar preflight OPTIONS requests
+app.options("*", cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -49,8 +57,6 @@ RecordatoriosJob.init();
 app.get("/", (req, res) => {
   res.send("API Barbería funcionando 🚀");
 });
-
-
 
 console.log("Hora backend:", new Date());
 
