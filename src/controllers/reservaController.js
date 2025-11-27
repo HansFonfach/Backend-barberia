@@ -138,7 +138,19 @@ export const createReserva = async (req, res) => {
     if (!barbero || !servicio || !fecha || !hora || !cliente)
       throw new Error("Todos los campos son obligatorios");
 
-    const fechaObj = new Date(`${fecha}T${formatHora(hora)}:00`);
+    // Construir la fecha en hora local (sin conversión a UTC)
+    const [h, m] = formatHora(hora).split(":");
+
+    const fechaObj = new Date();
+    fechaObj.setFullYear(Number(fecha.split("-")[0]));
+    fechaObj.setMonth(Number(fecha.split("-")[1]) - 1);
+    fechaObj.setDate(Number(fecha.split("-")[2]));
+    fechaObj.setHours(Number(h));
+    fechaObj.setMinutes(Number(m));
+    fechaObj.setSeconds(0);
+    fechaObj.setMilliseconds(0);
+
+    console.log("💡 Fecha creada (local):", fechaObj);
     const diaSemana = fechaObj.getDay();
 
     // Cliente

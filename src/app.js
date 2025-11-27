@@ -50,11 +50,7 @@ app.get("/", (req, res) => {
   res.send("API Barbería funcionando 🚀");
 });
 
-app.use((req, res, next) => {
-  console.log("Origin:", req.headers.origin);
-  res.header("Access-Control-Allow-Credentials", "true");
-  next();
-});
+
 
 console.log("Hora backend:", new Date());
 
