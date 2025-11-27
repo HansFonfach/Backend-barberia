@@ -131,6 +131,7 @@ const verificarReservaExistente = async (
   }
 };
 // 🔹 Controlador principal: Crear una nueva reserva
+// 🔹 Controlador principal: Crear una nueva reserva CORREGIDO
 export const createReserva = async (req, res) => {
   try {
     const { barbero, servicio, fecha, hora, cliente } = req.body;
@@ -138,40 +139,32 @@ export const createReserva = async (req, res) => {
     console.log("🔍🔍🔍 CREANDO RESERVA 🔍🔍🔍");
     console.log("📅 Fecha recibida:", fecha);
     console.log("🕒 Hora recibida:", hora);
-    console.log("👤 Cliente ID:", cliente);
-    console.log("💈 Barbero ID:", barbero);
-    console.log("💼 Servicio ID:", servicio);
 
     if (!barbero || !servicio || !fecha || !hora || !cliente)
       throw new Error("Todos los campos son obligatorios");
 
-    // Construir la fecha en hora local (sin conversión a UTC)
-    const [h, m] = formatHora(hora).split(":");
-
-    const fechaObj = new Date();
-    fechaObj.setFullYear(Number(fecha.split("-")[0]));
-    fechaObj.setMonth(Number(fecha.split("-")[1]) - 1);
-    fechaObj.setDate(Number(fecha.split("-")[2]));
-    fechaObj.setHours(Number(h));
-    fechaObj.setMinutes(Number(m));
-    fechaObj.setSeconds(0);
-    fechaObj.setMilliseconds(0);
-
-    console.log("💡 Fecha creada (local):", fechaObj);
-    console.log("💡 Fecha creada (ISO):", fechaObj.toISOString());
-
-    // DEBUG: Mostrar cómo se interpreta esta fecha en diferentes timezones
-    const fechaChile = dayjs(fechaObj).tz("America/Santiago");
-    const fechaUTC = dayjs(fechaObj).utc();
-    console.log("🌎 Interpretación de fechas:");
-    console.log("   - En Chile:", fechaChile.format("YYYY-MM-DD HH:mm"));
-    console.log("   - En UTC:", fechaUTC.format("YYYY-MM-DD HH:mm"));
+    // ✅ CORRECCIÓN: Crear la fecha en hora de Chile explícitamente
+    const fechaCompletaChile = dayjs.tz(
+      `${fecha} ${formatHora(hora)}`,
+      "YYYY-MM-DD HH:mm",
+      "America/Santiago"
+    );
     console.log(
-      "   - Diferencia:",
-      fechaUTC.diff(fechaChile, "hour") + " horas"
+      "📆 Fecha completa Chile:",
+      fechaCompletaChile.format("YYYY-MM-DD HH:mm")
     );
 
-    const diaSemana = fechaObj.getDay();
+    // Convertir a UTC para guardar en DB
+    const fechaCompletaUTC = fechaCompletaChile.utc();
+    console.log(
+      "🌐 Fecha completa UTC:",
+      fechaCompletaUTC.format("YYYY-MM-DD HH:mm")
+    );
+
+    const fechaObj = fechaCompletaUTC.toDate();
+    console.log("💾 Fecha para guardar en DB:", fechaObj);
+
+    const diaSemana = fechaCompletaChile.day();
     console.log("📅 Día de la semana:", diaSemana);
 
     // Cliente
@@ -181,9 +174,9 @@ export const createReserva = async (req, res) => {
 
     // ✅ Validar rango de días según plan
     const diasPermitidos = clienteDoc.suscrito ? 31 : 15;
-    const limite = dayjs().add(diasPermitidos, "day");
+    const limite = dayjs().tz("America/Santiago").add(diasPermitidos, "day");
 
-    if (dayjs(fecha).isAfter(limite)) {
+    if (fechaCompletaChile.isAfter(limite)) {
       return res.status(400).json({
         message: `No puedes reservar con más de ${diasPermitidos} días de anticipación.`,
       });
@@ -204,16 +197,18 @@ export const createReserva = async (req, res) => {
       (h) => Number(h.dia) === diaSemana
     );
 
-    const { startOfDay, endOfDay } = crearFechasUTC(fecha);
+    // ✅ CORRECCIÓN: Usar las mismas fechas Chile para las búsquedas
+    const inicioDiaChile = fechaCompletaChile.startOf("day").toDate();
+    const finDiaChile = fechaCompletaChile.endOf("day").toDate();
 
     console.log("📊 Rango de búsqueda para excepciones:");
-    console.log("   - Inicio día:", startOfDay);
-    console.log("   - Fin día:", endOfDay);
+    console.log("   - Inicio día:", inicioDiaChile);
+    console.log("   - Fin día:", finDiaChile);
 
     // Excepciones (bloqueos y horas extra)
     const excepciones = await excepcionHorarioModel.find({
       barbero,
-      fecha: { $gte: startOfDay, $lte: endOfDay },
+      fecha: { $gte: inicioDiaChile, $lte: finDiaChile },
     });
 
     console.log("🚫 Excepciones encontradas:", excepciones.length);
@@ -237,8 +232,7 @@ export const createReserva = async (req, res) => {
     }
 
     // Verificar conflicto con reservas existentes
-    const horaFinReserva = new Date(fechaObj);
-    horaFinReserva.setHours(horaFinReserva.getHours() + 1);
+    const horaFinReserva = fechaCompletaChile.add(1, "hour").toDate();
 
     console.log("🔍 Buscando reservas existentes:");
     console.log("   - Fecha inicio:", fechaObj);
@@ -266,7 +260,7 @@ export const createReserva = async (req, res) => {
       cliente,
       barbero,
       servicio,
-      fecha: fechaObj,
+      fecha: fechaObj, // ← Esta fecha ya está correctamente en UTC
       estado: "pendiente",
     });
 
@@ -279,20 +273,19 @@ export const createReserva = async (req, res) => {
         .tz("America/Santiago")
         .format("YYYY-MM-DD HH:mm")
     );
-    console.log(
-      "   - Fecha interpretada UTC:",
-      dayjs(nuevaReserva.fecha).utc().format("YYYY-MM-DD HH:mm")
-    );
 
-    res.status(201).json(nuevaReserva);
+    res.status(201).json({
+      ...nuevaReserva.toObject(),
+      fechaChile: fechaCompletaChile.format("YYYY-MM-DD HH:mm"), // Para el frontend
+    });
 
     const nombreServicio = servicioDoc.nombre;
 
     await sendReservationEmail(clienteDoc.email, {
       nombreCliente: clienteDoc.nombre,
       nombreBarbero: barberoDoc.nombre,
-      fecha,
-      hora,
+      fecha: fechaCompletaChile.format("YYYY-MM-DD"),
+      hora: formatHora(hora),
       servicio: nombreServicio,
     });
 
