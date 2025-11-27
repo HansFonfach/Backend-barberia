@@ -25,36 +25,16 @@ const allowedOrigins = [
   "https://frontend-barberia-tcv6.onrender.com/", // por si acaso
 ];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Permitir requests sin origin (como mobile apps o algunas requests)
-      if (!origin) return callback(null, true);
+// ✅ CORRECCIÓN: Configuración simplificada de CORS
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"]
+}));
 
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.log("CORS bloqueado para origin:", origin);
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-    methods: "GET,POST,PUT,DELETE,PATCH,OPTIONS",
-    allowedHeaders: "Content-Type,Authorization,Accept,Origin,X-Requested-With",
-  })
-);
-
-// ✅ CORRECCIÓN: Manejar preflight OPTIONS requests correctamente
-app.options("*", (req, res) => {
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-  }
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,Origin,X-Requested-With');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.sendStatus(200);
-});
+// ✅ ELIMINAR completamente la línea problemática
+// NO usar: app.options("*", ...)
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
