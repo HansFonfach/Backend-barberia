@@ -21,7 +21,12 @@ app.use(cookieParser());
 
 app.use(
   cors({
-    origin: [process.env.FRONTEND_URL, "http://localhost:3000"],
+    origin: [
+      "https://frontend-barberia-tcv6.onrender.com", // tu frontend en Render
+      "http://localhost:3000", // para desarrollo local
+    ],
+    methods: "GET,POST,PUT,DELETE,PATCH",
+    allowedHeaders: "Content-Type,Authorization",
     credentials: true,
   })
 );
