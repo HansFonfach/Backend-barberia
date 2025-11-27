@@ -63,11 +63,12 @@ export const getHorasDisponibles = async (req, res) => {
   try {
     const { id: barberoId } = req.params;
     const { fecha } = req.query; // formato "YYYY-MM-DD"
-     console.log("Hora backend 2:", new Date()); // AGREGA ESTO AQUÍ
+    console.log("Hora backend 2:", new Date()); // AGREGA ESTO AQUÍ
 
     if (!fecha) return res.status(400).json({ message: "Fecha requerida" });
 
-    const diaSemana = new Date(fecha).getUTCDay(); // 0=Dom, 6=Sáb
+    const f = new Date(`${fecha}T00:00:00`);
+    const diaSemana = f.getDay(); // 👈 LOCAL, correcto en Chile
     const usuario = req.usuario;
 
     // Validar suscripción
@@ -126,10 +127,8 @@ export const getHorasDisponibles = async (req, res) => {
       );
     });
 
-    const inicioDia = new Date(fecha);
-    inicioDia.setUTCHours(0, 0, 0, 0);
-    const finDia = new Date(fecha);
-    finDia.setUTCHours(23, 59, 59, 999);
+    const inicioDia = new Date(`${fecha}T00:00:00`);
+    const finDia = new Date(`${fecha}T23:59:59`);
 
     const excepciones = await ExcepcionHorarioModel.find({
       barbero: barberoId,
