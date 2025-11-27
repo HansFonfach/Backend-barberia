@@ -19,15 +19,23 @@ import RecordatoriosJob from "./jobs/recordatoriosJob.js";
 const app = express();
 app.use(cookieParser());
 
+const allowedOrigins = [
+  "https://frontend-barberia-tcv6.onrender.com",
+  "http://localhost:3000",
+];
+
 app.use(
   cors({
-    origin: [
-      "https://frontend-barberia-tcv6.onrender.com", // tu frontend en Render
-      "http://localhost:3000", // para desarrollo local
-    ],
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
     methods: "GET,POST,PUT,DELETE,PATCH",
     allowedHeaders: "Content-Type,Authorization",
-    credentials: true,
   })
 );
 
@@ -40,6 +48,12 @@ RecordatoriosJob.init();
 // Rutas
 app.get("/", (req, res) => {
   res.send("API Barbería funcionando 🚀");
+});
+
+app.use((req, res, next) => {
+  console.log("Origin:", req.headers.origin);
+  res.header("Access-Control-Allow-Credentials", "true");
+  next();
 });
 
 app.use("/usuarios", usuarioRoutes);
