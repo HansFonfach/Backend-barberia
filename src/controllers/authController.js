@@ -78,12 +78,16 @@ export const register = async (req, res) => {
 
     const token = generarToken(newUser);
 
+    // ✅ CONFIGURACIÓN MEJORADA PARA MÓVILES
+    const isProduction = process.env.NODE_ENV === "production";
+
     res.cookie("token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax", // "none" es crucial para cross-site
+      maxAge: 24 * 60 * 60 * 1000, // 1 día
+      path: "/", // Asegurar que esté disponible en todas las rutas
     });
-
     // Ocultar password en la respuesta
     const userWithoutPassword = newUser.toObject();
     delete userWithoutPassword.password;
