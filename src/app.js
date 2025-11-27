@@ -18,13 +18,29 @@ import RecordatoriosJob from "./jobs/recordatoriosJob.js";
 const app = express();
 app.use(cookieParser());
 
-// ✅ CORS simplificado pero efectivo
-app.use(cors({
-  origin: ["https://frontend-barberia-tcv6.onrender.com", "http://localhost:3000"],
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"]
-}));
+// Dominios permitidos (frontend Render + localhost)
+const allowedOrigins = [
+  "https://frontend-barberia-tcv6.onrender.com",
+  "http://localhost:3000",
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Permitir requests sin origin (ej: Postman)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true, // ✅ permite enviar cookies
+    methods: "GET,POST,PUT,DELETE,PATCH,OPTIONS",
+    allowedHeaders:
+      "Content-Type,Authorization,Accept,Origin,X-Requested-With,X-CSRF-Token",
+    exposedHeaders: "Set-Cookie", // importante para leer cookies en frontend
+  })
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
