@@ -8,14 +8,11 @@ export const crearSuscripcion = async (req, res) => {
 
     const count = await Suscripcion.countDocuments({ activa: true });
     if (count >= 20) {
-      return res
-        .status(400)
-        .json({
-          message: "Ya se alcanzó el límite máximo de suscripciones activas.",
-        });
+      return res.status(400).json({
+        message: "Ya se alcanzó el límite máximo de suscripciones activas.",
+      });
     }
 
-    // Verificar si el usuario existe
     const usuario = await Usuario.findById(id);
     if (!usuario) {
       return res.status(404).json({
@@ -24,7 +21,6 @@ export const crearSuscripcion = async (req, res) => {
       });
     }
 
-    // Verificar EXPLÍCITAMENTE si ya tiene suscripción activa
     const suscripcionActiva = await Suscripcion.findOne({
       usuario: id,
       activa: true,
@@ -37,9 +33,6 @@ export const crearSuscripcion = async (req, res) => {
       });
     }
 
-    // Si hay suscripciones inactivas, las mantenemos como historial
-    // y creamos una nueva
-
     const fechaInicio = new Date();
     const fechaFin = new Date();
     fechaFin.setMonth(fechaFin.getMonth() + 1);
@@ -50,11 +43,14 @@ export const crearSuscripcion = async (req, res) => {
       fechaInicio,
       fechaFin,
       historial: false,
+
+      // 🔥 IMPORTANTE: inicializamos los servicios
+      serviciosTotales: 2,
+      serviciosUsados: 0,
     });
 
     await nuevaSuscripcion.save();
 
-    // Actualizar usuario
     await Usuario.findByIdAndUpdate(id, { suscrito: true });
 
     return res.status(201).json({
@@ -67,7 +63,6 @@ export const crearSuscripcion = async (req, res) => {
   } catch (error) {
     console.error("Error al crear suscripción:", error);
 
-    // Si es error de duplicado, dar mensaje específico
     if (error.code === 11000) {
       return res.status(409).json({
         success: false,
@@ -120,5 +115,76 @@ export const cancelarSuscripcion = async (req, res) => {
       success: false,
       message: "Error interno del servidor al cancelar la suscripción.",
     });
+  }
+};
+
+export const estadoSuscripcionCliente = async (req, res) => {
+  try {
+    const { userId} = req.params;
+
+    const suscripcion = await Suscripcion.findOne({
+      usuario: userId,
+      activa: true,
+    });
+
+    if (!suscripcion) {
+      return res.json({ activa: false, msg: "Usuario sin suscripción" });
+    }
+
+    const restantes =
+      suscripcion.serviciosTotales - suscripcion.serviciosUsados;
+
+    return res.json({
+      activa: true,
+      serviciosTotales: suscripcion.serviciosTotales,
+      serviciosUsados: suscripcion.serviciosUsados,
+      restantes,
+      cobrar: restantes <= 0,
+    });
+  } catch (error) {
+    res.status(500).json({ msg: "Error" });
+  }
+};
+
+export const registrarUsoServicio = async (req, res) => {
+  try {
+    const { usuarioId } = req.body;
+
+    const suscripcion = await Suscripcion.findOne({
+      usuario: usuarioId,
+      activa: true,
+    });
+
+    if (!suscripcion) {
+      return res.status(404).json({
+        success: false,
+        message: "El usuario no tiene una suscripción activa.",
+      });
+    }
+
+    if (suscripcion.serviciosUsados >= suscripcion.serviciosTotales) {
+      return res.json({
+        success: true,
+        msg: "El usuario ya usó todos sus servicios de la suscripción.",
+        cobrar: true,
+        serviciosUsados: suscripcion.serviciosUsados,
+        serviciosTotales: suscripcion.serviciosTotales,
+      });
+    }
+
+    suscripcion.serviciosUsados += 1;
+    await suscripcion.save();
+
+    return res.json({
+      success: true,
+      msg: "Servicio registrado.",
+      cobrar: false,
+      serviciosUsados: suscripcion.serviciosUsados,
+      serviciosRestantes:
+        suscripcion.serviciosTotales - suscripcion.serviciosUsados,
+    });
+  } catch (error) {
+    console.error("Error al registrar uso:", error);
+    return res.status(500).json({ success: false, message: "Error interno." });
   }
 };

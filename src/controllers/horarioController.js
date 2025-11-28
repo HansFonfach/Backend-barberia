@@ -69,19 +69,13 @@ export const getHorasDisponibles = async (req, res) => {
     const { id: barberoId } = req.params;
     const { fecha } = req.query;
 
-    console.log("🔍🔍🔍 INICIO getHorasDisponibles 🔍🔍🔍");
-    console.log("📅 Fecha recibida:", fecha);
-    console.log("👨 Barbero ID:", barberoId);
-
     if (!fecha) return res.status(400).json({ message: "Fecha requerida" });
 
     // Hora actual en Chile
     const ahoraChile = dayjs().tz("America/Santiago");
-    console.log("⏰ Ahora en Chile:", ahoraChile.format("YYYY-MM-DD HH:mm"));
 
     // Fecha del día solicitado en Chile
     const fechaConsulta = dayjs.tz(fecha, "YYYY-MM-DD", "America/Santiago");
-    console.log("📆 Fecha consulta Chile:", fechaConsulta.format("YYYY-MM-DD"));
 
     const diaSemana = fechaConsulta.day();
     const usuario = req.usuario;
@@ -143,15 +137,9 @@ export const getHorasDisponibles = async (req, res) => {
       );
     });
 
-    console.log("🕒 Horas generadas del barbero:", todasLasHoras);
-
     // Inicio y fin del día en Chile
     const inicioDiaChile = fechaConsulta.startOf("day").toDate();
     const finDiaChile = fechaConsulta.endOf("day").toDate();
-
-    console.log("📊 Rango de búsqueda en DB:");
-    console.log("   Inicio:", inicioDiaChile);
-    console.log("   Fin:", finDiaChile);
 
     // Excepciones
     const excepciones = await ExcepcionHorarioModel.find({
@@ -180,31 +168,15 @@ export const getHorasDisponibles = async (req, res) => {
       fecha: { $gte: inicioDiaChile, $lt: finDiaChile },
     });
 
-    console.log("📋 Reservas encontradas en DB:", reservasDelDia.length);
-
     // DEBUG DETALLADO DE CADA RESERVA
     reservasDelDia.forEach((reserva, index) => {
       const fechaReservaUTC = dayjs(reserva.fecha);
       const fechaReservaChile = dayjs(reserva.fecha).tz("America/Santiago");
-
-      console.log(`   Reserva ${index + 1}:`);
-      console.log(`     - En DB (UTC): ${reserva.fecha}`);
-      console.log(
-        `     - Interpretada UTC: ${fechaReservaUTC.format("YYYY-MM-DD HH:mm")}`
-      );
-      console.log(
-        `     - Interpretada Chile: ${fechaReservaChile.format(
-          "YYYY-MM-DD HH:mm"
-        )}`
-      );
-      console.log(`     - Hora Chile: ${fechaReservaChile.format("HH:mm")}`);
     });
 
     let horasFinales = Array.from(
       new Set([...todasLasHoras, ...horasExtra])
     ).filter((hora) => !horasBloqueadas.includes(hora));
-
-    console.log("🕒 Horas antes de filtrar reservas:", horasFinales);
 
     // Convertir todas las fechas de reserva a hora Chile
     horasFinales = horasFinales.filter((hora) => {
@@ -212,19 +184,11 @@ export const getHorasDisponibles = async (req, res) => {
         const fechaReservaChile = dayjs(reserva.fecha).tz("America/Santiago");
         const horaReserva = fechaReservaChile.format("HH:mm");
 
-        console.log(
-          `   Comparando: ${hora} vs ${horaReserva} -> ${
-            hora === horaReserva ? "OCUPADA" : "disponible"
-          }`
-        );
-
         return horaReserva === hora;
       });
 
       return !estaOcupada;
     });
-
-    console.log("✅ Horas después de filtrar reservas:", horasFinales);
 
     // Filtrar horas pasadas si es hoy
     if (fechaConsulta.isSame(ahoraChile, "day")) {
@@ -261,9 +225,6 @@ export const getHorasDisponibles = async (req, res) => {
       data: horasFinales,
       diasPermitidos,
     };
-
-    console.log("📤 Response final:", response);
-    console.log("🔍🔍🔍 FIN getHorasDisponibles 🔍🔍🔍");
 
     res.json(response);
   } catch (error) {

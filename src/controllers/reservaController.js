@@ -135,10 +135,7 @@ const verificarReservaExistente = async (
 export const createReserva = async (req, res) => {
   try {
     const { barbero, servicio, fecha, hora, cliente } = req.body;
-
-    console.log("🔍🔍🔍 CREANDO RESERVA 🔍🔍🔍");
-    console.log("📅 Fecha recibida:", fecha);
-    console.log("🕒 Hora recibida:", hora);
+    console.log(cliente);
 
     if (!barbero || !servicio || !fecha || !hora || !cliente)
       throw new Error("Todos los campos son obligatorios");
@@ -149,23 +146,15 @@ export const createReserva = async (req, res) => {
       "YYYY-MM-DD HH:mm",
       "America/Santiago"
     );
-    console.log(
-      "📆 Fecha completa Chile:",
-      fechaCompletaChile.format("YYYY-MM-DD HH:mm")
-    );
 
     // Convertir a UTC para guardar en DB
     const fechaCompletaUTC = fechaCompletaChile.utc();
-    console.log(
-      "🌐 Fecha completa UTC:",
-      fechaCompletaUTC.format("YYYY-MM-DD HH:mm")
-    );
 
     const fechaObj = fechaCompletaUTC.toDate();
-    console.log("💾 Fecha para guardar en DB:", fechaObj);
+    
 
     const diaSemana = fechaCompletaChile.day();
-    console.log("📅 Día de la semana:", diaSemana);
+
 
     // Cliente
     const clienteDoc = await usuarioModel.findById(cliente);
@@ -201,17 +190,11 @@ export const createReserva = async (req, res) => {
     const inicioDiaChile = fechaCompletaChile.startOf("day").toDate();
     const finDiaChile = fechaCompletaChile.endOf("day").toDate();
 
-    console.log("📊 Rango de búsqueda para excepciones:");
-    console.log("   - Inicio día:", inicioDiaChile);
-    console.log("   - Fin día:", finDiaChile);
-
     // Excepciones (bloqueos y horas extra)
     const excepciones = await excepcionHorarioModel.find({
       barbero,
       fecha: { $gte: inicioDiaChile, $lte: finDiaChile },
     });
-
-    console.log("🚫 Excepciones encontradas:", excepciones.length);
 
     // Horas disponibles
     const horasDisponibles = await obtenerHorasDisponibles(
@@ -221,22 +204,12 @@ export const createReserva = async (req, res) => {
       fecha
     );
 
-    console.log("🕒 Horas disponibles calculadas:", horasDisponibles);
-    console.log(
-      "❓ Hora solicitada disponible?",
-      horasDisponibles.includes(formatHora(hora))
-    );
-
     if (!horasDisponibles.includes(formatHora(hora))) {
       throw new Error("Hora no disponible");
     }
 
     // Verificar conflicto con reservas existentes
     const horaFinReserva = fechaCompletaChile.add(1, "hour").toDate();
-
-    console.log("🔍 Buscando reservas existentes:");
-    console.log("   - Fecha inicio:", fechaObj);
-    console.log("   - Fecha fin:", horaFinReserva);
 
     const reservaExistente = await Reserva.findOne({
       barbero,
@@ -255,28 +228,34 @@ export const createReserva = async (req, res) => {
     }
 
     // Crear reserva
-    console.log("💾 Guardando reserva en DB...");
     const nuevaReserva = await Reserva.create({
       cliente,
       barbero,
       servicio,
-      fecha: fechaObj, // ← Esta fecha ya está correctamente en UTC
+      fecha: fechaObj,
       estado: "pendiente",
     });
 
-    console.log("✅ Reserva guardada en DB:");
-    console.log("   - ID:", nuevaReserva._id);
-    console.log("   - Fecha guardada:", nuevaReserva.fecha);
-    console.log(
-      "   - Fecha interpretada Chile:",
-      dayjs(nuevaReserva.fecha)
-        .tz("America/Santiago")
-        .format("YYYY-MM-DD HH:mm")
-    );
+    // 🔥 DESCONTAR SERVICIO SI TIENE SUSCRIPCIÓN ACTIVA
+    const suscripcion = await suscripcionModel.findOne({
+      usuario: cliente,
+      activa: true,
+      fechaInicio: { $lte: new Date() },
+      fechaFin: { $gte: new Date() },
+    });
 
+    if (suscripcion) {
+      // 👈 Este es el campo correcto
+      if (suscripcion.serviciosUsados < suscripcion.serviciosTotales) {
+        suscripcion.serviciosUsados += 1;
+        await suscripcion.save();
+      }
+    }
+
+    // 👌 Recién ahora mandamos la respuesta
     res.status(201).json({
       ...nuevaReserva.toObject(),
-      fechaChile: fechaCompletaChile.format("YYYY-MM-DD HH:mm"), // Para el frontend
+      fechaChile: fechaCompletaChile.format("YYYY-MM-DD HH:mm"),
     });
 
     const nombreServicio = servicioDoc.nombre;
@@ -288,8 +267,6 @@ export const createReserva = async (req, res) => {
       hora: formatHora(hora),
       servicio: nombreServicio,
     });
-
-    console.log("🔍🔍🔍 RESERVA CREADA EXITOSAMENTE 🔍🔍🔍");
   } catch (error) {
     console.error("❌ Error en createReserva:", error);
     const statusCode = error.message.includes("no encontrado")
@@ -321,7 +298,7 @@ export const getReservasByUserId = async (req, res) => {
 
     // buscar todas las reservas de ese usuario
     const reservas = await Reserva.find({ cliente: userId })
-      .populate("barbero", "nombre apellido")
+      .populate("barbero", "nombre apellido suscrito")
       .populate("servicio", "nombre duracion precio")
       .sort({ fecha: 1 }); // ordenadas por fecha
 
@@ -411,15 +388,15 @@ export const getReservasActivas = async (req, res) => {
     });
   }
 };
-
 export const getReservasPorFechaBarbero = async (req, res) => {
   try {
-    const { fecha } = req.query; // YYYY-MM-DD
-    const barberoId = req.usuario.id; // usa "id", no "_id"
+    const { fecha } = req.query;
+    const barberoId = req.usuario.id;
 
-    const inicioDia = new Date(fecha + "T00:00:00"); // hora local inicio
-    const finDia = new Date(fecha + "T23:59:59"); // hora local fin
+    const inicioDia = new Date(fecha + "T00:00:00");
+    const finDia = new Date(fecha + "T23:59:59");
 
+    // 1. Obtener todas las reservas del día
     const reservas = await Reserva.find({
       barbero: barberoId,
       fecha: { $gte: inicioDia, $lte: finDia },
@@ -428,7 +405,50 @@ export const getReservasPorFechaBarbero = async (req, res) => {
       .populate("servicio", "nombre")
       .sort({ fecha: 1 });
 
-    res.json({ reservas });
+    // 2. Procesar cada reserva para incluir posición dentro de la suscripción
+    const reservasConInfo = await Promise.all(
+      reservas.map(async (reserva) => {
+        const clienteId = reserva.cliente?._id;
+        if (!clienteId) return reserva;
+
+        // Buscar suscripción activa para esta fecha
+        const sus = await suscripcionModel.findOne({
+          usuario: clienteId,
+          activa: true,
+          fechaInicio: { $lte: reserva.fecha },
+          fechaFin: { $gte: reserva.fecha },
+        });
+
+        if (!sus) {
+          return {
+            ...reserva.toObject(),
+            suscripcion: null,
+          };
+        }
+
+        // Reservas que el cliente ha hecho dentro del periodo de la suscripción
+        const reservasDelCliente = await Reserva.find({
+          cliente: clienteId,
+          fecha: { $gte: sus.fechaInicio, $lte: reserva.fecha },
+        }).sort({ fecha: 1 });
+
+        // Posición EXACTA en la suscripción (1, 2, 3…)
+        const posicion =
+          reservasDelCliente.findIndex(
+            (r) => r._id.toString() === reserva._id.toString()
+          ) + 1;
+
+        return {
+          ...reserva.toObject(),
+          suscripcion: {
+            posicion,
+            limite: sus.serviciosTotales,
+          },
+        };
+      })
+    );
+
+    res.json({ reservas: reservasConInfo });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Error al obtener reservas por fecha" });

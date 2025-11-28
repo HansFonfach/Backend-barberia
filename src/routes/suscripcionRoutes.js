@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   cancelarSuscripcion,
   crearSuscripcion,
+  estadoSuscripcionCliente,
 } from "../controllers/suscripcionController.js";
 
 const router = Router();
@@ -10,5 +11,6 @@ const router = Router();
 
 router.post("/usuario/:id/suscribir", crearSuscripcion);
 router.put("/usuario/:id/cancelarSub", cancelarSuscripcion);
+router.get("/usuario/estado/:userId", estadoSuscripcionCliente)
 
 export default router;

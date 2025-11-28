@@ -1,37 +1,37 @@
-import { Schema, model } from "mongoose";
+  import { Schema, model } from "mongoose";
 
-const UsuarioSchema = new Schema(
-  {
-    rut: { type: String, unique: true, required: true },
-    nombre: { type: String, required: true },
-    apellido: { type: String },
-    email: { type: String, unique: true, required: true },
-    telefono: { type: String, required: true },
-    suscrito: { type: Boolean, default: false },
-    password: String, // Encriptada con bcryptjs
-    estado: {
-      type: String,
-      enum: ["activo", "inactivo"],
-      default: "activo",
-    },
-    rol: {
-      type: String,
-      enum: ["cliente", "barbero", "admin"],
-      default: "cliente",
-    },
-    plan: {
-      type: String,
-      enum: ["gratis", "premium"],
-      default: "gratis",
-    },
-    maxReservas: {
-      type: Number,
-      default: 2,
-    },
+  const UsuarioSchema = new Schema(
+    {
+      rut: { type: String, unique: true, required: true },
+      nombre: { type: String, required: true },
+      apellido: { type: String },
+      email: { type: String, unique: true, required: true },
+      telefono: { type: String, required: true },
+      suscrito: { type: Boolean, default: false },
+      password: String, // Encriptada con bcryptjs
+      estado: {
+        type: String,
+        enum: ["activo", "inactivo"],
+        default: "activo",
+      },
+      rol: {
+        type: String,
+        enum: ["cliente", "barbero", "admin"],
+        default: "cliente",
+      },
+      plan: {
+        type: String,
+        enum: ["gratis", "premium"],
+        default: "gratis",
+      },
+      maxReservas: {
+        type: Number,
+        default: 2,
+      },
 
-    horariosDisponibles: [{ type: Schema.Types.ObjectId, ref: "Horario" }], // solo aplica si es barbero
-  },
-  { timestamps: true }
-);
+      horariosDisponibles: [{ type: Schema.Types.ObjectId, ref: "Horario" }], // solo aplica si es barbero
+    },
+    { timestamps: true }
+  );
 
-export default model("Usuario", UsuarioSchema);
+  export default model("Usuario", UsuarioSchema);

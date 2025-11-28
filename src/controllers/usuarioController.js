@@ -1,3 +1,4 @@
+import suscripcionModel from "../models/suscripcion.model.js";
 import Usuario from "../models/usuario.model.js";
 import bcrypt from "bcrypt";
 
@@ -96,8 +97,6 @@ export const updateUsuario = async (req, res) => {
   }
 };
 
-
-
 //eliminar usuario
 export const deleteUsuario = async (req, res) => {
   try {
@@ -106,3 +105,27 @@ export const deleteUsuario = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+export const getAllUsersWithSuscripcion = async (req, res) => {
+  try {
+    const usuarios = await Usuario.find().lean();
+
+    const usuariosConSub = await Promise.all(
+      usuarios.map(async (u) => {
+        const sus = await suscripcionModel.findOne({
+          usuario: u._id,
+          activa: true,
+          fechaInicio: { $lte: new Date() },
+          fechaFin: { $gte: new Date() },
+        }).lean();
+        return { ...u, suscripcion: sus || null };
+      })
+    );
+
+    res.json({ usuarios: usuariosConSub }); // ← ESTE ES EL CORRECTO
+  } catch (err) {
+    console.error("❌ ERROR getAllUsersWithSuscripcion:", err);
+    res.status(500).json({ message: "Error cargando usuarios" });
+  }
+};
+
