@@ -12,6 +12,7 @@ import estadisticasRoutes from "./routes/estadisticasRoutes.js";
 import webhookRoutes from "./routes/webhooksRoutes.js";
 import cookieParser from "cookie-parser";
 import testRoutes from "./routes/testRoutes.js";
+import feriadoRoutes from "./routes/feriadoRoutes.js";
 
 import RecordatoriosJob from "./jobs/recordatoriosJob.js";
 
@@ -64,5 +65,6 @@ app.use("/excepcionHorario", excepcionRoutes);
 app.use("/estadisticas", estadisticasRoutes);
 app.use("/webhook", webhookRoutes);
 app.use("/test", testRoutes);
+app.use("/feriados", feriadoRoutes);
 
 export default app;
