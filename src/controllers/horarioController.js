@@ -12,6 +12,7 @@ import feriados from "../models/feriados.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+
 /** Crear horario y asignarlo al barbero */
 export const createHorario = async (req, res) => {
   try {
@@ -85,15 +86,12 @@ export const getHorasDisponibles = async (req, res) => {
     const inicioDiaUTC = fechaConsulta.startOf("day").utc().toDate();
     const finDiaUTC = fechaConsulta.endOf("day").utc().toDate();
 
-    console.log("🔹 Fecha consulta:", fechaConsulta.format());
-    console.log("🔹 Inicio día UTC:", inicioDiaUTC);
-    console.log("🔹 Fin día UTC:", finDiaUTC);
     const fechaStr = fechaConsulta.format("YYYY-MM-DD");
     const feriado = await feriados.findOne({
       fecha: { $eq: new Date(fechaStr) },
       activo: true,
     });
-    console.log("🔹 Feriado encontrado:", feriado);
+
     if (feriado) {
       return res.status(200).json({
         barbero: null,

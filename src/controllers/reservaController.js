@@ -130,12 +130,11 @@ const verificarReservaExistente = async (
     if (reservaExistente) throw new Error("Hora ya reservada");
   }
 };
-// 🔹 Controlador principal: Crear una nueva reserva
+
 // 🔹 Controlador principal: Crear una nueva reserva CORREGIDO
 export const createReserva = async (req, res) => {
   try {
     const { barbero, servicio, fecha, hora, cliente } = req.body;
-    console.log(cliente);
 
     if (!barbero || !servicio || !fecha || !hora || !cliente)
       throw new Error("Todos los campos son obligatorios");
@@ -151,10 +150,9 @@ export const createReserva = async (req, res) => {
     const fechaCompletaUTC = fechaCompletaChile.utc();
 
     const fechaObj = fechaCompletaUTC.toDate();
-    
 
     const diaSemana = fechaCompletaChile.day();
-
+    console.log("📅 Día de la semana:", diaSemana);
 
     // Cliente
     const clienteDoc = await usuarioModel.findById(cliente);
