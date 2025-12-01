@@ -1,7 +1,7 @@
 import Horario from "../models/horario.model.js";
 import Usuario from "../models/usuario.model.js";
 import Reserva from "../models/reserva.model.js";
-import { generarHoras} from "../utils/horas.js";
+import { generarHoras } from "../utils/horas.js";
 import Suscripcion from "../models/suscripcion.model.js";
 import ExcepcionHorarioModel from "../models/excepcionHorario.model.js";
 import horarioModel from "../models/horario.model.js";
@@ -65,7 +65,6 @@ export const getHorariosByBarbero = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
 
 export const getHorasDisponibles = async (req, res) => {
   try {
@@ -164,11 +163,17 @@ export const getHorasDisponibles = async (req, res) => {
       );
     });
 
+    const inicioDiaChile = fechaConsulta.startOf("day");
+    const finDiaChile = fechaConsulta.endOf("day");
+
+    const inicioUTC = inicioDiaChile.utc().toDate();
+    const finUTC = finDiaChile.utc().toDate();
+
     const excepciones = await ExcepcionHorarioModel.find({
       barbero: barberoId,
       fecha: {
-        $gte: fechaConsulta.startOf("day").toDate(),
-        $lt: fechaConsulta.endOf("day").toDate(),
+        $gte: inicioUTC,
+        $lt: finUTC,
       },
     });
 
