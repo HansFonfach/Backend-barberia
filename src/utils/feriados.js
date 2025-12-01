@@ -131,3 +131,37 @@ export const determinarVistaSegunFeriado = (
     };
   }
 };
+
+export const getHorasParaBarberoFeriado = (
+  todasLasHoras,
+  excepciones,
+  feriado
+) => {
+  const horasExtra = excepciones
+    .filter((e) => e.tipo === "extra")
+    .map((e) => e.horaInicio);
+
+  const horasBloqueadasManual = excepciones
+    .filter((e) => e.tipo === "bloqueo")
+    .map((e) => e.horaInicio);
+
+  // Para barbero viendo CUALQUIER feriado, todas las horas aparecen bloqueadas inicialmente
+  const horasYaDesbloqueadas = horasBloqueadasManual;
+
+  // Todas las horas base están bloqueadas por feriado
+  const horasBloqueadasPorFeriado = todasLasHoras.filter(
+    (hora) => !horasYaDesbloqueadas.includes(hora)
+  );
+
+  // Combinar bloqueos
+  const todasHorasBloqueadas = [
+    ...new Set([...horasBloqueadasPorFeriado, ...horasBloqueadasManual]),
+  ];
+
+  return {
+    horasExtra,
+    horasBloqueadas: todasHorasBloqueadas,
+    horasDisponibles: [], // Ninguna disponible inicialmente
+    message: `FERIADO: ${feriado.nombre}. Todas las horas aparecen bloqueadas. Haz clic en "Reactivar" para habilitar las que quieras trabajar.`,
+  };
+};
