@@ -1,12 +1,11 @@
 import { Router } from "express";
-import { 
-  getFeriados, 
-  toggleFeriado, 
+import {
+  getFeriados,
+  toggleFeriado,
   cargarFeriadosChile,
-  cambiarComportamientoFeriado,  // NUEVO
-  verificarFeriado               // NUEVO
+  cambiarComportamientoFeriado, // NUEVO
+  verificarFeriado, // NUEVO
 } from "../controllers/feriadoController.js";
-import { autenticar } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
@@ -14,11 +13,11 @@ const router = Router();
 router.get("/verificar", verificarFeriado);
 
 // Rutas protegidas (solo barberos/admins)
-router.get("/", autenticar, getFeriados);
-router.patch("/:id/toggle", autenticar, toggleFeriado);
-router.patch("/:id/comportamiento", autenticar, cambiarComportamientoFeriado); // NUEVO
+router.get("/", getFeriados);
+router.patch("/:id/toggle", toggleFeriado);
+router.patch("/:id/comportamiento", cambiarComportamientoFeriado); // NUEVO
 
 // ⚠ Ejecutar SOLO manualmente 1 vez al año
-router.post("/cargar-chile", autenticar, cargarFeriadosChile);
+router.post("/cargar-chile", cargarFeriadosChile);
 
 export default router;

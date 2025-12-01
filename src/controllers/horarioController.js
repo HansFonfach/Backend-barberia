@@ -8,8 +8,11 @@ import horarioModel from "../models/horario.model.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
-import feriados from "../models/feriados.js";
-import { bloquearFeriado } from "../utils/feriados.js";
+import {
+  verificarFeriadoConComportamiento,
+  determinarVistaSegunFeriado,
+  bloquearFeriado,
+} from "../utils/feriados.js";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
@@ -66,12 +69,6 @@ export const getHorariosByBarbero = async (req, res) => {
   }
 };
 // controllers/horas.controller.js
-import dayjs from "dayjs";
-import {
-  verificarFeriadoConComportamiento,
-  determinarVistaSegunFeriado,
-  bloquearFeriado,
-} from "../utils/feriados.js";
 
 export const getHorasDisponibles = async (req, res) => {
   try {
