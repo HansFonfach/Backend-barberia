@@ -159,9 +159,34 @@ export const createReserva = async (req, res) => {
     if (!clienteDoc)
       return res.status(404).json({ message: "Cliente no encontrado" });
 
-    // ✅ Validar rango de días según plan
+    // ✅ Validar rango de días según plan y fecha de suscripción
     const diasPermitidos = clienteDoc.suscrito ? 31 : 15;
-    const limite = dayjs().tz("America/Santiago").add(diasPermitidos, "day");
+    let limite = dayjs().tz("America/Santiago").add(diasPermitidos, "day");
+
+    // ⚡ Nueva validación: si el cliente tiene suscripción activa, limitar por fechaFin
+    const suscripcionActiva = await suscripcionModel.findOne({
+      usuario: cliente,
+      activa: true,
+      fechaInicio: { $lte: new Date() },
+      fechaFin: { $gte: new Date() },
+    });
+
+    if (suscripcionActiva && suscripcionActiva.fechaFin) {
+      const fechaFinSuscripcion = dayjs(suscripcionActiva.fechaFin).tz(
+        "America/Santiago"
+      );
+      if (fechaFinSuscripcion.isBefore(limite)) {
+        limite = fechaFinSuscripcion;
+      }
+    }
+
+    if (fechaCompletaChile.isAfter(limite)) {
+      return res.status(400).json({
+        message: `No puedes reservar más allá del ${limite.format(
+          "YYYY-MM-DD"
+        )}.`,
+      });
+    }
 
     if (fechaCompletaChile.isAfter(limite)) {
       return res.status(400).json({
