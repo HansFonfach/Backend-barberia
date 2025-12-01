@@ -6,68 +6,67 @@ import timezone from "dayjs/plugin/timezone.js";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-// Función auxiliar para convertir fecha Chile a UTC del inicio del día CHILE
+// Función auxiliar para convertir fecha Chile a UTC
 const fechaChileToUTC = (fechaChileStr) => {
-  // fechaChileStr: "YYYY-MM-DD"
-  // Creamos la fecha en Chile a las 00:00
-  const fechaChile = dayjs.tz(`${fechaChileStr} 00:00`, "YYYY-MM-DD HH:mm", "America/Santiago");
-  // Convertimos a UTC
+  const fechaChile = dayjs.tz(
+    `${fechaChileStr} 00:00`,
+    "YYYY-MM-DD HH:mm",
+    "America/Santiago"
+  );
   return fechaChile.utc().toDate();
 };
 
-export const cancelarHora = async (req, res) => {
+// **FUNCIÓN PRINCIPAL ÚNICA - Maneja tanto cancelar como reactivar**
+export const toggleHora = async (req, res) => {
   const { barbero, fecha, horaInicio, motivo } = req.body;
 
   try {
-    // Convertir fecha Chile a UTC
     const fechaUTC = fechaChileToUTC(fecha);
 
-    const horaCancelada = await excepcionHorario.create({
-      barbero,
-      fecha: fechaUTC,
-      horaInicio,
-      motivo,
-      tipo: "bloqueo",
-    });
-
-    res.status(201).json({
-      message: "Hora cancelada correctamente",
-      horaCancelada,
-      fechaOriginal: fecha,
-      fechaUTC: fechaUTC,
-    });
-  } catch (error) {
-    console.error("❌ Error en cancelarHora:", error);
-    res.status(500).json({ message: "Error al cancelar la hora", error });
-  }
-};
-
-export const revertirHora = async (req, res) => {
-  const { barbero, fecha, horaInicio } = req.body;
-
-  try {
-    const fechaUTC = fechaChileToUTC(fecha);
-
-    const eliminado = await excepcionHorario.findOneAndDelete({
+    // Verificar si ya existe un bloqueo para esta hora
+    const bloqueoExistente = await excepcionHorario.findOne({
       barbero,
       fecha: fechaUTC,
       horaInicio,
       tipo: "bloqueo",
     });
 
-    if (!eliminado) {
-      return res
-        .status(404)
-        .json({ message: "No se encontró la hora cancelada" });
+    if (bloqueoExistente) {
+      // Si EXISTE → eliminarlo (REACTIVAR la hora)
+      await excepcionHorario.findByIdAndDelete(bloqueoExistente._id);
+      
+      return res.status(200).json({
+        message: "Hora reactivada correctamente",
+        accion: "reactivada",
+        fechaOriginal: fecha,
+        hora: horaInicio,
+        barbero
+      });
+    } else {
+      // Si NO existe → crearlo (CANCELAR la hora)
+      const nuevoBloqueo = await excepcionHorario.create({
+        barbero,
+        fecha: fechaUTC,
+        horaInicio,
+        motivo: motivo || "Cancelación manual",
+        tipo: "bloqueo",
+      });
+
+      return res.status(201).json({
+        message: "Hora cancelada correctamente",
+        accion: "cancelada",
+        fechaOriginal: fecha,
+        hora: horaInicio,
+        barbero,
+        bloqueo: nuevoBloqueo
+      });
     }
-
-    res.status(200).json({ 
-      message: "Hora disponible nuevamente",
-      fechaOriginal: fecha
-    });
   } catch (error) {
-    console.error("❌ Error en revertirHora:", error);
-    res.status(500).json({ message: "Error al revertir hora", error });
+    console.error("❌ Error en toggleHora:", error);
+    res.status(500).json({ 
+      message: "Error al modificar la hora", 
+      error: error.message 
+    });
   }
 };
 
@@ -95,105 +94,79 @@ export const agregarHoraExtra = async (req, res) => {
   }
 };
 
-export const cancelarHoraExtra = async (req, res) => {
+export const eliminarHoraExtra = async (req, res) => {
   const { barbero, fecha, horaInicio } = req.body;
 
   try {
     const fechaUTC = fechaChileToUTC(fecha);
 
-    const horaExtraCancelada = await excepcionHorario.findOneAndDelete({
+    const horaExtraEliminada = await excepcionHorario.findOneAndDelete({
       barbero,
       fecha: fechaUTC,
       horaInicio,
       tipo: "extra",
     });
 
-    if (!horaExtraCancelada)
+    if (!horaExtraEliminada)
       return res.status(404).json({ message: "No se encontró la hora extra" });
 
-    res.status(200).json({ 
-      message: "Hora extra cancelada correctamente",
-      fechaOriginal: fecha
+    res.status(200).json({
+      message: "Hora extra eliminada correctamente",
+      fechaOriginal: fecha,
     });
   } catch (error) {
-    console.error("❌ Error en cancelarHoraExtra:", error);
-    res.status(500).json({ message: "Error al cancelar la hora extra", error });
+    console.error("❌ Error en eliminarHoraExtra:", error);
+    res.status(500).json({ message: "Error al eliminar la hora extra", error });
   }
 };
 
 export const obtenerExcepcionesPorDia = async (req, res) => {
   const { barberoId } = req.params;
-  const { fecha } = req.query; // fecha en formato "YYYY-MM-DD" (Chile)
+  const { fecha } = req.query;
 
   if (!fecha) {
     return res.status(400).json({ message: "Se requiere la fecha" });
   }
 
   try {
-    // IMPORTANTE: Rango UTC correspondiente al día completo en Chile
-    const inicioDiaChile = dayjs.tz(`${fecha} 00:00`, "YYYY-MM-DD HH:mm", "America/Santiago");
-    const finDiaChile = dayjs.tz(`${fecha} 23:59:59.999`, "YYYY-MM-DD HH:mm:ss.SSS", "America/Santiago");
-    
+    const inicioDiaChile = dayjs.tz(
+      `${fecha} 00:00`,
+      "YYYY-MM-DD HH:mm",
+      "America/Santiago"
+    );
+    const finDiaChile = dayjs.tz(
+      `${fecha} 23:59:59.999`,
+      "YYYY-MM-DD HH:mm:ss.SSS",
+      "America/Santiago"
+    );
+
     const inicioUTC = inicioDiaChile.utc().toDate();
     const finUTC = finDiaChile.utc().toDate();
 
-    console.log(`🔍 Buscando excepciones para fecha Chile: ${fecha}`);
-    console.log(`   Rango UTC: ${inicioUTC.toISOString()} - ${finUTC.toISOString()}`);
+    const excepciones = await excepcionHorario
+      .find({
+        barbero: barberoId,
+        fecha: { $gte: inicioUTC, $lte: finUTC },
+      })
+      .sort({ horaInicio: 1 });
 
-    // Buscar excepciones en ese rango UTC
-    const excepciones = await excepcionHorario.find({
-      barbero: barberoId,
-      fecha: { $gte: inicioUTC, $lte: finUTC },
-    }).sort({ horaInicio: 1 });
-
-    console.log(`   Encontradas: ${excepciones.length} excepciones`);
-
-    // Convertir fechas UTC a fecha Chile para mostrar
     const excepcionesFormateadas = excepciones.map((excepcion) => {
       const fechaUTC = dayjs(excepcion.fecha);
       const fechaChile = fechaUTC.tz("America/Santiago");
-      
+
       return {
         ...excepcion._doc,
         fechaChile: fechaChile.format("YYYY-MM-DD"),
-        fechaUTC: fechaUTC.format("YYYY-MM-DD HH:mm:ssZ"),
       };
     });
 
     res.status(200).json({
-      fecha: fecha,
-      fechaBusqueda: fecha,
+      fecha,
       excepciones: excepcionesFormateadas,
       total: excepcionesFormateadas.length,
-      rangoUTC: {
-        inicio: inicioUTC.toISOString(),
-        fin: finUTC.toISOString()
-      }
     });
   } catch (error) {
     console.error("❌ Error al obtener excepciones:", error);
     res.status(500).json({ message: "Error al obtener excepciones", error });
   }
-};
-
-// Función para debug
-export const verificarFecha = async (req, res) => {
-  const { fecha } = req.query; // "YYYY-MM-DD" (Chile)
-  
-  const inicioDiaChile = dayjs.tz(`${fecha} 00:00`, "YYYY-MM-DD HH:mm", "America/Santiago");
-  const finDiaChile = dayjs.tz(`${fecha} 23:59:59.999`, "YYYY-MM-DD HH:mm:ss.SSS", "America/Santiago");
-  
-  const inicioUTC = inicioDiaChile.utc();
-  const finUTC = finDiaChile.utc();
-  
-  res.json({
-    fechaChile: fecha,
-    inicioChile: inicioDiaChile.format("YYYY-MM-DD HH:mm:ss"),
-    finChile: finDiaChile.format("YYYY-MM-DD HH:mm:ss"),
-    inicioUTC: inicioUTC.format("YYYY-MM-DD HH:mm:ss"),
-    finUTC: finUTC.format("YYYY-MM-DD HH:mm:ss"),
-    offsetChile: inicioDiaChile.format("Z"),
-    diferenciaHoras: inicioDiaChile.diff(inicioUTC, 'hour'),
-    mensaje: `Cuando en Chile es ${fecha} 00:00, en UTC es ${inicioUTC.format("YYYY-MM-DD HH:mm:ss")}`
-  });
 };

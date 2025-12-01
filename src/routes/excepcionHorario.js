@@ -1,22 +1,29 @@
 import { Router } from "express";
-
 import { validarToken } from "../middlewares/validarToken.js";
 import {
+  toggleHora, // ← Nueva función unificada
   agregarHoraExtra,
-  cancelarHora,
-  cancelarHoraExtra,
+  eliminarHoraExtra, // ← Renombrada
   obtenerExcepcionesPorDia,
-  revertirHora,
+  // revertirHora,  // ← Ya no se usa
+  // cancelarHora,  // ← Ya no se usa
+  // cancelarHoraExtra,  // ← Renombrada
 } from "../controllers/excepcionHorarioController.js";
 
 const router = Router();
 
-// Rutas RESTful
+// Rutas RESTful actualizadas
 
-router.post("/cancelar", validarToken, cancelarHora); // Crear nuevo
-router.post("/revertir", validarToken, revertirHora);
+// Ruta única para toggle (cancelar/reactivar) - REEMPLAZA A cancelarHora y revertirHora
+router.post("/toggle", validarToken, toggleHora);
+
+// Ruta para agregar hora extra (se mantiene igual)
 router.post("/agregar-hora-extra", validarToken, agregarHoraExtra);
-router.post("/cancelar-hora-extra", validarToken, cancelarHoraExtra);
+
+// Ruta para eliminar hora extra (renombrada de cancelar-hora-extra)
+router.post("/eliminar-hora-extra", validarToken, eliminarHoraExtra);
+
+// Ruta para obtener excepciones por día (se mantiene igual)
 router.get("/:barberoId", validarToken, obtenerExcepcionesPorDia);
 
 export default router;
