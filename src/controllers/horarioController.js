@@ -1,7 +1,7 @@
 import Horario from "../models/horario.model.js";
 import Usuario from "../models/usuario.model.js";
 import Reserva from "../models/reserva.model.js";
-import { generarHoras } from "../utils/horas.js";
+import { generarHoras} from "../utils/horas.js";
 import Suscripcion from "../models/suscripcion.model.js";
 import ExcepcionHorarioModel from "../models/excepcionHorario.model.js";
 import horarioModel from "../models/horario.model.js";
@@ -9,7 +9,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
 import feriados from "../models/feriados.js";
-
+import { bloquearFeriado } from "../utils/feriados.js";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
@@ -65,6 +65,7 @@ export const getHorariosByBarbero = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 export const getHorasDisponibles = async (req, res) => {
   try {

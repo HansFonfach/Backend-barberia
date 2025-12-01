@@ -16,10 +16,8 @@ export const cancelarHora = async (req, res) => {
       message: "Hora cancelada correctamente",
       horaCancelada,
     });
-   
   } catch (error) {
     res.status(500).json({ message: "Error al cancelar la hora", error });
-    
   }
 };
 
