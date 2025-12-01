@@ -1,5 +1,7 @@
+// controllers/feriados.controller.js
 import Feriado from "../models/feriados.js";
 import axios from "axios";
+import dayjs from "dayjs";
 
 /** Obtener todos */
 export const getFeriados = async (req, res) => {
@@ -28,6 +30,71 @@ export const toggleFeriado = async (req, res) => {
   }
 };
 
+/** Cambiar comportamiento de feriado */
+export const cambiarComportamientoFeriado = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { comportamiento } = req.body;
+
+    // Validar que sea barbero
+    if (req.usuario?.rol !== "barbero") {
+      return res.status(403).json({ message: "No autorizado" });
+    }
+
+    const feriado = await Feriado.findById(id);
+    if (!feriado) {
+      return res.status(404).json({ message: "Feriado no encontrado" });
+    }
+
+    // Validar comportamiento
+    if (!["bloquear_todo", "permitir_excepciones"].includes(comportamiento)) {
+      return res.status(400).json({ message: "Comportamiento inválido" });
+    }
+
+    feriado.comportamiento = comportamiento;
+    await feriado.save();
+
+    res.json({
+      message: `Feriado "${feriado.nombre}" ahora ${comportamiento === "bloquear_todo" ? "bloquea completamente" : "permite excepciones"}`,
+      feriado
+    });
+  } catch (error) {
+    console.error("❌ Error al cambiar comportamiento:", error);
+    res.status(500).json({ message: "Error al actualizar feriado" });
+  }
+};
+
+/** Verificar feriado por fecha */
+export const verificarFeriado = async (req, res) => {
+  try {
+    const { fecha } = req.query;
+    
+    if (!fecha) {
+      return res.status(400).json({ message: "Fecha requerida" });
+    }
+
+    const fechaDate = new Date(fecha);
+    const feriado = await Feriado.findOne({
+      fecha: {
+        $gte: dayjs(fechaDate).startOf('day').toDate(),
+        $lt: dayjs(fechaDate).endOf('day').toDate()
+      },
+      activo: true
+    });
+
+    res.json({
+      esFeriado: !!feriado,
+      nombre: feriado?.nombre || null,
+      comportamiento: feriado?.comportamiento || "permitir_excepciones",
+      activo: feriado?.activo || false,
+      fecha: fecha
+    });
+  } catch (error) {
+    console.error("❌ Error al verificar feriado:", error);
+    res.status(500).json({ message: "Error al verificar feriado" });
+  }
+};
+
 /** Cargar feriados desde API Nager.Date */
 export const cargarFeriadosChile = async (req, res) => {
   try {
@@ -37,22 +104,31 @@ export const cargarFeriadosChile = async (req, res) => {
     let cargados = 0;
 
     for (const f of data) {
-      const fecha = new Date(f.date); // <- date en vez de fecha
-      const nombre = f.localName;     // <- localName en vez de nombre
+      const fecha = new Date(f.date);
+      const nombre = f.localName;
 
       const existe = await Feriado.findOne({ fecha });
-      if (existe) continue;
+      if (existe) {
+        // Actualizar si ya existe
+        existe.nombre = nombre;
+        await existe.save();
+        continue;
+      }
 
       await Feriado.create({
         fecha,
         nombre,
-        activo: true
+        activo: true,
+        comportamiento: "permitir_excepciones" // Por defecto
       });
 
       cargados++;
     }
 
-    res.json({ message: `Feriados cargados: ${cargados}` });
+    res.json({ 
+      message: `Feriados cargados/actualizados: ${cargados}`,
+      total: cargados
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al cargar feriados" });
