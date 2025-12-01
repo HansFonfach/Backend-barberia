@@ -68,7 +68,6 @@ export const getHorariosByBarbero = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-// controllers/horas.controller.js
 export const getHorasDisponibles = async (req, res) => {
   try {
     const { id: barberoId } = req.params;
@@ -87,33 +86,6 @@ export const getHorasDisponibles = async (req, res) => {
     // --- VERIFICAR FERIADO ---
     const feriado = await verificarFeriadoConComportamiento(fecha);
 
-    // Verificar si hay excepciones creadas por el barbero para este feriado
-    let hayExcepcionesBarbero = false;
-    if (feriado) {
-      const inicioDiaUTC = fechaConsulta.utc().startOf("day").toDate();
-      const finDiaUTC = fechaConsulta.utc().endOf("day").toDate();
-
-      const excepcionesBarbero = await ExcepcionHorarioModel.find({
-        barbero: barberoId,
-        fecha: { $gte: inicioDiaUTC, $lt: finDiaUTC },
-        $or: [
-          {
-            tipo: "bloqueo",
-            motivo: { $ne: `Feriado automático: ${feriado.nombre}` },
-          },
-          { tipo: "extra" },
-        ],
-      });
-
-      hayExcepcionesBarbero = excepcionesBarbero.length > 0;
-    }
-
-    const vistaFeriado = determinarVistaSegunFeriado(
-      feriado,
-      usuario,
-      hayExcepcionesBarbero
-    );
-
     // Respuesta base para todos los casos
     const respuestaBase = {
       barbero: null,
@@ -124,22 +96,13 @@ export const getHorasDisponibles = async (req, res) => {
       horasExtra: [],
       data: [],
       diasPermitidos: usuario?.suscrito ? 31 : 15,
-      esFeriado: vistaFeriado.esFeriado || false,
+      esFeriado: !!feriado,
       nombreFeriado: feriado?.nombre || null,
-      mensajeFeriado: vistaFeriado.mensaje || null,
       comportamientoFeriado: feriado?.comportamiento || null,
     };
 
-    // CASO 1: Cliente viendo feriado bloqueado o sin excepciones
-    if (vistaFeriado.esFeriado && !vistaFeriado.mostrarHoras) {
-      return res.status(200).json({
-        ...respuestaBase,
-        message: vistaFeriado.mensaje,
-      });
-    }
-
-    // CASO 2: Barbero viendo feriado
-    if (vistaFeriado.esFeriado && usuario?.rol === "barbero") {
+    // --- CASO ESPECIAL: BARBERO VIENDO FERIADO ---
+    if (feriado && usuario?.rol === "barbero") {
       const barbero = await Usuario.findById(barberoId).populate(
         "horariosDisponibles"
       );
@@ -174,50 +137,7 @@ export const getHorasDisponibles = async (req, res) => {
         .filter((e) => e.tipo === "bloqueo")
         .map((e) => e.horaInicio);
 
-      // === LÓGICA CORREGIDA PARA FERIADOS ===
-      // Para feriados "bloquear_todo": todas las horas aparecen bloqueadas
-      // Para feriados "permitir_excepciones": horas normales
-
-      let horasBloqueadasPorFeriado = [];
-      let horasDisponiblesParaBarbero = [];
-
-      if (feriado.comportamiento === "bloquear_todo") {
-        // Obtener horas que deberían bloquearse por feriado
-        horasBloqueadasPorFeriado = await bloquearFeriado(
-          barberoId,
-          fechaConsulta,
-          barbero.horariosDisponibles
-        );
-
-        // Para "bloquear_todo", todas las horas base están bloqueadas
-        // Excepto las que ya fueron desbloqueadas manualmente
-        const horasYaDesbloqueadas = excepciones
-          .filter(
-            (e) =>
-              e.tipo === "bloqueo" &&
-              (!e.motivo || !e.motivo.includes("Feriado automático"))
-          )
-          .map((e) => e.horaInicio);
-
-        horasBloqueadasPorFeriado = horasBloqueadasPorFeriado.filter(
-          (hora) => !horasYaDesbloqueadas.includes(hora)
-        );
-
-        // Para barbero en feriado "bloquear_todo", inicialmente NO hay horas disponibles
-        horasDisponiblesParaBarbero = [];
-      } else if (feriado.comportamiento === "permitir_excepciones") {
-        // Para "permitir_excepciones", lógica normal
-        horasDisponiblesParaBarbero = todasLasHoras.filter(
-          (hora) => !horasBloqueadasManual.includes(hora)
-        );
-      }
-
-      // Combinar todas las horas bloqueadas
-      const todasHorasBloqueadas = [
-        ...new Set([...horasBloqueadasPorFeriado, ...horasBloqueadasManual]),
-      ].filter((hora) => todasLasHoras.includes(hora)); // Solo horas que existen en el horario base
-
-      // Ordenar
+      // Ordenar función
       const ordenarHoras = (arr) =>
         arr.sort((a, b) => {
           const [hA, mA] = a.split(":").map(Number);
@@ -225,64 +145,103 @@ export const getHorasDisponibles = async (req, res) => {
           return hA - hB || mA - mB;
         });
 
-      const mensajeParaBarbero =
-        feriado.comportamiento === "bloquear_todo"
-          ? `FERIADO: ${feriado.nombre}. Todas las horas aparecen bloqueadas. Haz clic en "Reactivar" para habilitar las que quieras trabajar.`
-          : `FERIADO: ${feriado.nombre}. Horas normales, pero recuerda que es feriado.`;
+      // FERIADO "BLOQUEAR_TODO"
+      if (feriado.comportamiento === "bloquear_todo") {
+        // Para feriado "bloquear_todo", TODAS las horas base aparecen bloqueadas
+        // excepto las que ya fueron desbloqueadas manualmente
 
-      return res.status(200).json({
-        ...respuestaBase,
-        barbero: barbero.nombre,
-        todasLasHoras: ordenarHoras([
-          ...new Set([...todasLasHoras, ...horasExtra]),
-        ]),
-        horasBloqueadas: ordenarHoras(todasHorasBloqueadas),
-        horasExtra: ordenarHoras(horasExtra),
-        horasDisponibles: ordenarHoras(horasDisponiblesParaBarbero),
-        message: mensajeParaBarbero,
-        metadata: {
-          esBarberoViendoFeriado: true,
-          comportamientoFeriado: feriado.comportamiento,
-          totalHorasBase: todasLasHoras.length,
-          horasBloqueadasPorFeriado: horasBloqueadasPorFeriado.length,
-          horasBloqueadasManual: horasBloqueadasManual.length,
-        },
-      });
+        // Horas que ya fueron desbloqueadas (tienen registro de bloqueo manual)
+        const horasYaDesbloqueadas = horasBloqueadasManual;
+
+        // Todas las horas base están bloqueadas por feriado
+        const horasBloqueadasPorFeriado = todasLasHoras.filter(
+          (hora) => !horasYaDesbloqueadas.includes(hora)
+        );
+
+        // Combinar bloqueos
+        const todasHorasBloqueadas = [
+          ...new Set([...horasBloqueadasPorFeriado, ...horasBloqueadasManual]),
+        ];
+
+        return res.status(200).json({
+          ...respuestaBase,
+          barbero: barbero.nombre,
+          todasLasHoras: ordenarHoras([
+            ...new Set([...todasLasHoras, ...horasExtra]),
+          ]),
+          horasBloqueadas: ordenarHoras(todasHorasBloqueadas), // ← TODAS bloqueadas
+          horasExtra: ordenarHoras(horasExtra),
+          horasDisponibles: [], // ← VACÍO, ninguna disponible inicialmente
+          message: `FERIADO: ${feriado.nombre}. Todas las horas aparecen bloqueadas. Haz clic en "Reactivar" para habilitar las que quieras trabajar.`,
+          metadata: {
+            esBarberoViendoFeriado: true,
+            comportamientoFeriado: "bloquear_todo",
+            totalHorasBase: todasLasHoras.length,
+            horasBloqueadasPorFeriado: horasBloqueadasPorFeriado.length,
+            horasYaDesbloqueadas: horasYaDesbloqueadas.length,
+          },
+        });
+      }
+
+      // FERIADO "PERMITIR_EXCEPCIONES"
+      if (feriado.comportamiento === "permitir_excepciones") {
+        // Para "permitir_excepciones", lógica normal
+        const horasDisponibles = todasLasHoras.filter(
+          (hora) => !horasBloqueadasManual.includes(hora)
+        );
+
+        return res.status(200).json({
+          ...respuestaBase,
+          barbero: barbero.nombre,
+          todasLasHoras: ordenarHoras([
+            ...new Set([...todasLasHoras, ...horasExtra]),
+          ]),
+          horasBloqueadas: ordenarHoras(horasBloqueadasManual),
+          horasExtra: ordenarHoras(horasExtra),
+          horasDisponibles: ordenarHoras(horasDisponibles),
+          message: `FERIADO: ${feriado.nombre}. Horas normales, pero recuerda que es feriado.`,
+        });
+      }
     }
 
-    // CASO 3: Cliente viendo feriado que permite excepciones
-    if (
-      vistaFeriado.esFeriado &&
-      vistaFeriado.comportamiento === "permitir_excepciones"
-    ) {
-      // Primero, verificar si hay excepciones de este barbero para este día
+    // --- CASO: CLIENTE VIENDO FERIADO ---
+    if (feriado && usuario?.rol !== "barbero") {
+      // Para clientes, verificar si hay horas habilitadas
       const inicioDiaUTC = fechaConsulta.utc().startOf("day").toDate();
       const finDiaUTC = fechaConsulta.utc().endOf("day").toDate();
 
-      // Buscar excepciones de bloqueo que NO sean del feriado automático
       const excepcionesCliente = await ExcepcionHorarioModel.find({
         barbero: barberoId,
         fecha: { $gte: inicioDiaUTC, $lt: finDiaUTC },
-        $or: [
-          {
-            tipo: "bloqueo",
-            motivo: { $ne: `Feriado automático: ${feriado.nombre}` },
-          },
-          { tipo: "extra" },
-        ],
+        tipo: "bloqueo", // Solo bloqueos manuales (no del feriado automático)
       });
 
-      // Si NO hay excepciones manuales, mostrar mensaje de feriado
-      if (excepcionesCliente.length === 0) {
+      // Si es feriado "bloquear_todo" y no hay excepciones, mostrar vacío
+      if (
+        feriado.comportamiento === "bloquear_todo" &&
+        excepcionesCliente.length === 0
+      ) {
+        return res.status(200).json({
+          ...respuestaBase,
+          message: `Feriado nacional: ${feriado.nombre}. No hay atención este día.`,
+        });
+      }
+
+      // Si es feriado "permitir_excepciones" y no hay excepciones, mostrar mensaje
+      if (
+        feriado.comportamiento === "permitir_excepciones" &&
+        excepcionesCliente.length === 0
+      ) {
         return res.status(200).json({
           ...respuestaBase,
           message: `Feriado: ${feriado.nombre}. No hay horas habilitadas para este día.`,
         });
       }
-      // Si HAY excepciones, continuar con el flujo normal (no retornar)
+
+      // Si hay excepciones (barbero habilitó horas), continuar con flujo normal
     }
 
-    // --- VALIDAR SUSCRIPCIÓN ---
+    // --- VALIDAR SUSCRIPCIÓN (continúa solo si no es feriado bloqueado) ---
     let suscripcionActiva = null;
     if (usuario) {
       suscripcionActiva = await Suscripcion.findOne({
@@ -303,7 +262,7 @@ export const getHorasDisponibles = async (req, res) => {
         horasDisponibles: [],
         horasBloqueadas: [],
         horasExtra: [],
-        esFeriado: vistaFeriado.esFeriado,
+        esFeriado: !!feriado,
         nombreFeriado: feriado?.nombre || null,
       });
     }
@@ -319,12 +278,12 @@ export const getHorasDisponibles = async (req, res) => {
           horasDisponibles: [],
           horasBloqueadas: [],
           horasExtra: [],
-          esFeriado: vistaFeriado.esFeriado,
+          esFeriado: !!feriado,
         });
       }
     }
 
-    // --- Obtener horarios del barbero ---
+    // --- OBTENER HORARIOS DEL BARBERO (flujo normal) ---
     const barbero = await Usuario.findById(barberoId).populate(
       "horariosDisponibles"
     );
@@ -341,16 +300,6 @@ export const getHorasDisponibles = async (req, res) => {
         horario.bloques.flatMap(generarHoras)
       );
     });
-
-    // Si es feriado "bloquear_todo", obtener horas bloqueadas por feriado
-    let horasBloqueadasPorFeriado = [];
-    if (feriado && feriado.comportamiento === "bloquear_todo") {
-      horasBloqueadasPorFeriado = await bloquearFeriado(
-        barberoId,
-        fechaConsulta,
-        barbero.horariosDisponibles
-      );
-    }
 
     // Convertir fecha de consulta a inicio y fin del día en UTC
     const inicioDiaUTC = fechaConsulta.startOf("day").utc().toDate();
@@ -374,14 +323,9 @@ export const getHorasDisponibles = async (req, res) => {
       .filter((e) => e.tipo === "extra")
       .map((e) => e.horaInicio);
 
-    const horasBloqueadasManual = excepcionesValidas
+    const horasBloqueadas = excepcionesValidas
       .filter((e) => e.tipo === "bloqueo")
       .map((e) => e.horaInicio);
-
-    // Combinar bloqueos de feriado con bloqueos manuales
-    const todasHorasBloqueadas = [
-      ...new Set([...horasBloqueadasPorFeriado, ...horasBloqueadasManual]),
-    ];
 
     const reservasDelDia = await Reserva.find({
       barbero: barberoId,
@@ -392,7 +336,7 @@ export const getHorasDisponibles = async (req, res) => {
     });
 
     let horasFinales = Array.from(new Set([...todasLasHoras, ...horasExtra]))
-      .filter((hora) => !todasHorasBloqueadas.includes(hora))
+      .filter((hora) => !horasBloqueadas.includes(hora))
       .filter((hora) => {
         return !reservasDelDia.some((reserva) => {
           const fechaReservaChile = dayjs(reserva.fecha).tz("America/Santiago");
@@ -420,23 +364,23 @@ export const getHorasDisponibles = async (req, res) => {
 
     horasFinales = ordenarHoras(horasFinales);
     ordenarHoras(horasExtra);
-    ordenarHoras(todasHorasBloqueadas);
+    ordenarHoras(horasBloqueadas);
 
     res.json({
       barbero: barbero.nombre,
       fecha: fechaConsulta.format("YYYY-MM-DD"),
       horasDisponibles: horasFinales,
       todasLasHoras: Array.from(
-        new Set([...todasLasHoras, ...horasExtra, ...todasHorasBloqueadas])
+        new Set([...todasLasHoras, ...horasExtra, ...horasBloqueadas])
       ),
-      horasBloqueadas: todasHorasBloqueadas,
+      horasBloqueadas: horasBloqueadas,
       horasExtra: horasExtra,
       data: horasFinales,
       diasPermitidos,
-      esFeriado: vistaFeriado.esFeriado,
+      esFeriado: !!feriado,
       nombreFeriado: feriado?.nombre || null,
-      mensaje: vistaFeriado.mensaje || null,
       comportamientoFeriado: feriado?.comportamiento || null,
+      message: feriado ? `Feriado: ${feriado.nombre}` : null,
     });
   } catch (error) {
     console.error("❌ Error en getHorasDisponibles:", error);
