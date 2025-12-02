@@ -8,12 +8,7 @@ import horarioModel from "../models/horario.model.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
-import {
-  verificarFeriadoConComportamiento,
-  determinarVistaSegunFeriado,
-  bloquearFeriado,
-  getHorasParaBarberoFeriado,
-} from "../utils/feriados.js";
+import { verificarFeriadoConComportamiento } from "../utils/feriados.js";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
@@ -67,6 +62,46 @@ export const getHorariosByBarbero = async (req, res) => {
     res.status(200).json(horarios);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+
+export const getHorarioBasePorDia = async (req, res) => {
+  try {
+    const { barberoId } = req.params;
+    const { fecha } = req.query;
+
+    console.log(">>> barberoId recibido:", barberoId);
+    console.log(">>> fecha recibida:", fecha);
+
+    if (!fecha) return res.status(400).json({ message: "Fecha requerida" });
+
+    const d = new Date(fecha);
+    const diaSemana = d.getDay(); // 0 domingo - 6 sábado
+
+    console.log(">>> diaSemana:", diaSemana);
+
+    // Buscar el horario base
+    const horario = await Horario.findOne({
+      barbero: barberoId,
+      dia: diaSemana,
+    });
+
+    console.log(">>> horario encontrado:", horario);
+
+    if (!horario) {
+      return res.status(200).json({
+        bloques: [],
+        message: "No hay horario base para este día",
+      });
+    }
+
+    return res.status(200).json({
+      bloques: horario.bloques,
+    });
+  } catch (error) {
+    console.error("ERROR getHorarioBasePorDia:", error);
+    return res.status(500).json({ message: "Error del servidor" });
   }
 };
 
@@ -331,13 +366,6 @@ export const getHorasDisponibles = async (req, res) => {
     ) {
       mensajeFinal = `Feriado: ${feriado.nombre}. No hay horas disponibles.`;
     }
-
-    console.log("✅ Respuesta final:", {
-      esFeriado: !!feriado,
-      horasBloqueadas: horasBloqueadas.length,
-      horasDisponibles: horasFinales.length,
-      todasLasHoras: todasLasHoras.length,
-    });
 
     res.json({
       barbero: barbero.nombre,
