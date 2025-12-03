@@ -48,6 +48,18 @@ export const totalClientes = async (req, res) => {
   }
 };
 
+export const reservasTotales = async (req, res) => {
+  try {
+    const total = await reservaModel.countDocuments();
+    return res.json({ total });
+  } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ message: "Error al contar total de reservas" });
+  }
+};
+
 export const ingresoMensual = async (req, res) => {
   const hoy = new Date();
 
@@ -82,6 +94,138 @@ export const ingresoMensual = async (req, res) => {
     return res
       .status(500)
       .json({ message: "Error al obtener Ingreso Mensual" });
+  }
+};
+
+export const ingresoPorFecha = (req, res) => {};
+
+export const getTop5Clientes = async (req, res) => {
+  try {
+    // Pipeline para top clientes - SIN filtrar por estado
+    const pipeline = [
+      // Obtener datos del cliente (todas las reservas)
+      {
+        $lookup: {
+          from: "usuarios",
+          localField: "cliente",
+          foreignField: "_id",
+          as: "clienteInfo",
+        },
+      },
+      { $unwind: "$clienteInfo" },
+      // Filtrar solo clientes (no barberos/admins)
+      {
+        $match: {
+          "clienteInfo.rol": "cliente",
+          // Quitamos el filtro de estado: "clienteInfo.estado": "activo"
+        },
+      },
+      // Obtener precio del servicio
+      {
+        $lookup: {
+          from: "servicios",
+          localField: "servicio",
+          foreignField: "_id",
+          as: "servicioInfo",
+        },
+      },
+      { $unwind: "$servicioInfo" },
+      // Ahora agrupar por cliente
+      {
+        $group: {
+          _id: "$cliente",
+          totalReservas: { $sum: 1 },
+          totalGastado: { $sum: "$servicioInfo.precio" },
+          nombre: { $first: "$clienteInfo.nombre" },
+          apellido: { $first: "$clienteInfo.apellido" },
+          email: { $first: "$clienteInfo.email" },
+        },
+      },
+      // Ordenar por total gastado
+      {
+        $sort: { totalGastado: -1 },
+      },
+      // Limitar a 5
+      {
+        $limit: 5,
+      },
+    ];
+
+    const topClientes = await reservaModel.aggregate(pipeline);
+
+    // Calcular total general de ventas - SIN filtrar por estado
+    const totalVentasPipeline = [
+      {
+        $lookup: {
+          from: "servicios",
+          localField: "servicio",
+          foreignField: "_id",
+          as: "servicioInfo",
+        },
+      },
+      { $unwind: "$servicioInfo" },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$servicioInfo.precio" },
+          totalReservas: { $sum: 1 },
+        },
+      },
+    ];
+
+    const totalVentasResult = await reservaModel.aggregate(totalVentasPipeline);
+    const ventasTotales = totalVentasResult[0]?.total || 0;
+    const totalReservasSistema = totalVentasResult[0]?.totalReservas || 0;
+
+    // Formateador de moneda chilena
+    const formatter = new Intl.NumberFormat("es-CL", {
+      style: "currency",
+      currency: "CLP",
+      minimumFractionDigits: 0,
+    });
+
+    // Formatear resultados
+    const resultado = topClientes.map((cliente) => {
+      const porcentaje =
+        ventasTotales > 0 ? (cliente.totalGastado / ventasTotales) * 100 : 0;
+
+      return {
+        id: cliente._id,
+        nombre: cliente.nombre,
+        apellido: cliente.apellido,
+        email: cliente.email,
+        totalReservas: cliente.totalReservas,
+        totalGastado: cliente.totalGastado,
+        totalGastadoFormateado: formatter.format(cliente.totalGastado),
+        porcentaje: Math.round(porcentaje * 10) / 10, // 1 decimal
+        // String formateado para mostrar
+        display: `${cliente.nombre} ${cliente.apellido || ""}
+${cliente.totalReservas} reservas • ${formatter.format(cliente.totalGastado)}
+${Math.round(porcentaje * 10) / 10}%`,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: resultado,
+      estadisticasGenerales: {
+        totalVentas: ventasTotales,
+        totalVentasFormateado: formatter.format(ventasTotales),
+        totalReservas: totalReservasSistema,
+        cantidadClientesTop: resultado.length,
+      },
+      message:
+        resultado.length === 0
+          ? "No hay reservas en el sistema"
+          : "Datos obtenidos correctamente",
+    });
+  } catch (error) {
+    console.error("Error en getTopClientesDashboard:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error del servidor",
+      error: error.message,
+    });
   }
 };
 
@@ -166,6 +310,7 @@ export const ultimaReserva = async (req, res) => {
   }
 };
 
+
 export const proximaReserva = async (req, res) => {
   try {
     const { clienteId } = req.params;
@@ -206,3 +351,92 @@ export const proximaReserva = async (req, res) => {
 };
 
 
+export const getHoraMasSolicitada = async (req, res) => {
+  try {
+    const pipeline = [
+      // Convertir string a Date si es necesario
+      {
+        $addFields: {
+          fechaDate: {
+            $cond: {
+              if: { $eq: [{ $type: "$fecha" }, "string"] },
+              then: { $dateFromString: { dateString: "$fecha" } },
+              else: "$fecha"
+            }
+          }
+        }
+      },
+      // Extraer hora
+      { $addFields: { hora: { $hour: "$fechaDate" } } },
+      // Agrupar
+      { $group: { _id: "$hora", total: { $sum: 1 } } },
+      // Ordenar
+      { $sort: { total: -1 } },
+      // Limitar a 1
+      { $limit: 1 },
+      // Formatear
+      {
+        $project: {
+          hora: "$_id",
+          totalReservas: "$total",
+          hora24: { $concat: [{ $toString: "$_id" }, ":00"] },
+          hora12: {
+            $concat: [
+              {
+                $cond: {
+                  if: { $eq: ["$_id", 0] },
+                  then: "12",
+                  else: {
+                    $cond: {
+                      if: { $gt: ["$_id", 12] },
+                      then: { $toString: { $subtract: ["$_id", 12] } },
+                      else: { $toString: "$_id" }
+                    }
+                  }
+                }
+              },
+              ":00 ",
+              { $cond: { if: { $lt: ["$_id", 12] }, then: "AM", else: "PM" } }
+            ]
+          },
+          _id: 0
+        }
+      }
+    ];
+
+    const resultado = await reservaModel.aggregate(pipeline);
+    const totalReservas = await reservaModel.countDocuments();
+
+    if (resultado.length === 0) {
+      return res.json({
+        success: true,
+        data: null,
+        message: "No hay reservas para analizar"
+      });
+    }
+
+    const horaPico = resultado[0];
+    
+    res.json({
+      success: true,
+      data: {
+        horaPico: horaPico.hora12,
+        hora24: horaPico.hora24,
+        horaNumero: horaPico.hora,
+        totalReservasEnHoraPico: horaPico.totalReservas,
+        totalReservasSistema: totalReservas,
+        porcentaje: Math.round((horaPico.totalReservas / totalReservas) * 100 * 10) / 10 + '%',
+        rangoHorario: `${horaPico.hora}:00 - ${horaPico.hora + 1}:00`,
+        // Mensaje amigable
+        mensaje: `La hora más solicitada es ${horaPico.hora12} con ${horaPico.totalReservas} de ${totalReservas} reservas totales`
+      }
+    });
+
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error calculando hora pico" 
+    });
+  }
+};
