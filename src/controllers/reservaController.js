@@ -4,8 +4,9 @@ import usuarioModel from "../models/usuario.model.js";
 import { generarHoras, formatHora, crearFechasUTC } from "../utils/horas.js"; // 👈 faltaba esto
 import suscripcionModel from "../models/suscripcion.model.js";
 import dayjs from "dayjs";
-import { sendReservationEmail } from "./mailController.js";
+import { sendReservationEmail, sendWaitlistNotificationEmail } from "./mailController.js";
 import servicioModel from "../models/servicio.model.js";
+import notificacionModel from "../models/notificacion.Model.js";
 
 // 🔹 Convierte "HH:mm" a minutos desde medianoche
 const horaAminutos = (hora) => {
@@ -352,25 +353,61 @@ export const getReservasByBarberId = async (req, res) => {
     return res.status(500).json({ message: "Error al obtener reservas" });
   }
 };
-
 export const postDeleteReserva = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log("📌 Cancelando reserva con ID:", id);
 
     const existeReserva = await Reserva.findById(id);
-    console.log(id);
-
     if (!existeReserva) {
-      return res.status(404).json({
-        message: "No se ha encontrado la reserva.",
-      });
+      return res
+        .status(404)
+        .json({ message: "No se ha encontrado la reserva." });
     }
+    console.log("✅ Reserva encontrada:", existeReserva);
 
+    // Eliminar la reserva
     await Reserva.findByIdAndDelete(id);
+    console.log("✅ Reserva eliminada");
+
+    // ────────────────────────────────
+    // Buscar notificaciones pendientes
+    // ────────────────────────────────
+    const notificaciones = await notificacionModel
+      .find({
+        barberoId: existeReserva.barbero, // usar el campo correcto
+        fecha: existeReserva.fecha,
+        enviado: false,
+      })
+      .populate("usuarioId");
+
+    console.log("📢 Notificaciones encontradas:", notificaciones.length);
+
+    // ────────────────────────────────
+    // Enviar correos y marcar como enviado
+    // ────────────────────────────────
+    await Promise.all(
+      notificaciones.map(async (noti) => {
+        if (noti.usuarioId?.email) {
+          await sendWaitlistNotificationEmail(noti.usuarioId.email, {
+            nombreCliente: noti.usuarioId.nombre,
+            nombreBarbero: "Nombre del Barbero", // o extraer del modelo Barbero
+            fecha: noti.fecha.toLocaleDateString(),
+            hora: noti.fecha.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          });
+        }
+        noti.enviado = true;
+        await noti.save();
+      })
+    );
 
     res.status(200).json({
-      message: "Reserva eliminada correctamente",
+      message: "Reserva eliminada y notificaciones enviadas",
       reserva: existeReserva,
+      notificacionesEnviadas: notificaciones.length,
     });
   } catch (error) {
     console.error("Error al eliminar reserva:", error);
@@ -379,6 +416,7 @@ export const postDeleteReserva = async (req, res) => {
       .json({ message: "Error del servidor al eliminar la reserva." });
   }
 };
+
 export const getReservasActivas = async (req, res) => {
   try {
     const { userId } = req.params;

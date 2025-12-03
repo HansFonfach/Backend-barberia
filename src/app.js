@@ -13,8 +13,8 @@ import webhookRoutes from "./routes/webhooksRoutes.js";
 import cookieParser from "cookie-parser";
 import testRoutes from "./routes/testRoutes.js";
 import feriadoRoutes from "./routes/feriadoRoutes.js";
-
 import RecordatoriosJob from "./jobs/recordatoriosJob.js";
+import notificacionRoutes from "./routes/notificacionRoutes.js";
 
 const app = express();
 app.use(cookieParser());
@@ -66,5 +66,6 @@ app.use("/estadisticas", estadisticasRoutes);
 app.use("/webhook", webhookRoutes);
 app.use("/test", testRoutes);
 app.use("/feriados", feriadoRoutes);
+app.use("/notificaciones", notificacionRoutes)
 
 export default app;

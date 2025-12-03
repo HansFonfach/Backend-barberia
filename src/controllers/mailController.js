@@ -61,3 +61,28 @@ export const sendCancelReservationEmail = async (to, data) => {
     html,
   });
 };
+
+export const sendWaitlistNotificationEmail = async (to, data) => {
+  const { nombreCliente, nombreBarbero, fecha, hora } = data;
+
+  const html = `
+    <h2>Hora disponible ✂️</h2>
+    <p>Hola <strong>${nombreCliente}</strong>, se ha liberado una hora que seleccionaste en tu lista de espera.</p>
+    
+    <h3>Detalles de la hora disponible:</h3>
+    <ul>
+      <li><strong>Barbero:</strong> ${nombreBarbero}</li>
+      <li><strong>Fecha:</strong> ${fecha}</li>
+      <li><strong>Hora:</strong> ${hora}</li>
+    </ul>
+
+    <p>Si deseas reservarla, ingresa a la plataforma lo antes posible, ¡las horas se llenan rápido!</p>
+  `;
+
+  return await transporter.sendMail({
+    from: `"Barbería" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: "⌛ Se liberó una hora con tu barbero",
+    html,
+  });
+};
