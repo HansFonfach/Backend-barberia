@@ -14,6 +14,7 @@ export const crearNotificacion = async (req, res) => {
         enviado: false,
       });
     });
+    
 
     const nueva = await NotificacionHora({
       usuarioId,
