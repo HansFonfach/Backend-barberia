@@ -1,5 +1,11 @@
 import reservaModel from "../models/reserva.model.js";
 import usuarioModel from "../models/usuario.model.js";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 export const totalReservasHoyBarbero = async (req, res) => {
   const userId = req.usuario.id; // este viene del token JWT
@@ -439,12 +445,11 @@ export const getHoraMasSolicitada = async (req, res) => {
     });
   }
 };
-
 export const getProximoCliente = async (req, res) => {
   try {
     const ahora = new Date();
 
-    // Busca la próxima reserva mayor a la hora actual
+    // Buscar próxima reserva
     const reserva = await reservaModel
       .findOne({ fecha: { $gt: ahora } })
       .sort({ fecha: 1 })
@@ -458,15 +463,12 @@ export const getProximoCliente = async (req, res) => {
       });
     }
 
-    // Formateo de fecha y hora
-    const fechaObj = new Date(reserva.fecha);
-    const fecha = fechaObj.toLocaleDateString();
-    const hora = fechaObj.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    // Convertir UTC → Hora Chile
+    const fechaChile = dayjs(reserva.fecha).tz("America/Santiago");
 
-    // Respuesta final
+    const fecha = fechaChile.format("YYYY-MM-DD"); // 2025-12-04
+    const hora = fechaChile.format("HH:mm"); // 19:00
+
     return res.status(200).json({
       success: true,
       data: {
