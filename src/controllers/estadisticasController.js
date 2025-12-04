@@ -310,7 +310,6 @@ export const ultimaReserva = async (req, res) => {
   }
 };
 
-
 export const proximaReserva = async (req, res) => {
   try {
     const { clienteId } = req.params;
@@ -350,7 +349,6 @@ export const proximaReserva = async (req, res) => {
   }
 };
 
-
 export const getHoraMasSolicitada = async (req, res) => {
   try {
     const pipeline = [
@@ -361,10 +359,10 @@ export const getHoraMasSolicitada = async (req, res) => {
             $cond: {
               if: { $eq: [{ $type: "$fecha" }, "string"] },
               then: { $dateFromString: { dateString: "$fecha" } },
-              else: "$fecha"
-            }
-          }
-        }
+              else: "$fecha",
+            },
+          },
+        },
       },
       // Extraer hora
       { $addFields: { hora: { $hour: "$fechaDate" } } },
@@ -390,18 +388,18 @@ export const getHoraMasSolicitada = async (req, res) => {
                     $cond: {
                       if: { $gt: ["$_id", 12] },
                       then: { $toString: { $subtract: ["$_id", 12] } },
-                      else: { $toString: "$_id" }
-                    }
-                  }
-                }
+                      else: { $toString: "$_id" },
+                    },
+                  },
+                },
               },
               ":00 ",
-              { $cond: { if: { $lt: ["$_id", 12] }, then: "AM", else: "PM" } }
-            ]
+              { $cond: { if: { $lt: ["$_id", 12] }, then: "AM", else: "PM" } },
+            ],
           },
-          _id: 0
-        }
-      }
+          _id: 0,
+        },
+      },
     ];
 
     const resultado = await reservaModel.aggregate(pipeline);
@@ -411,12 +409,12 @@ export const getHoraMasSolicitada = async (req, res) => {
       return res.json({
         success: true,
         data: null,
-        message: "No hay reservas para analizar"
+        message: "No hay reservas para analizar",
       });
     }
 
     const horaPico = resultado[0];
-    
+
     res.json({
       success: true,
       data: {
@@ -425,18 +423,66 @@ export const getHoraMasSolicitada = async (req, res) => {
         horaNumero: horaPico.hora,
         totalReservasEnHoraPico: horaPico.totalReservas,
         totalReservasSistema: totalReservas,
-        porcentaje: Math.round((horaPico.totalReservas / totalReservas) * 100 * 10) / 10 + '%',
+        porcentaje:
+          Math.round((horaPico.totalReservas / totalReservas) * 100 * 10) / 10 +
+          "%",
         rangoHorario: `${horaPico.hora}:00 - ${horaPico.hora + 1}:00`,
         // Mensaje amigable
-        mensaje: `La hora más solicitada es ${horaPico.hora12} con ${horaPico.totalReservas} de ${totalReservas} reservas totales`
-      }
+        mensaje: `La hora más solicitada es ${horaPico.hora12} con ${horaPico.totalReservas} de ${totalReservas} reservas totales`,
+      },
     });
-
   } catch (error) {
     console.error("Error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Error calculando hora pico" 
+    res.status(500).json({
+      success: false,
+      message: "Error calculando hora pico",
     });
+  }
+};
+
+export const getProximoCliente = async (req, res) => {
+  try {
+    const ahora = new Date();
+
+    // Busca la próxima reserva mayor a la hora actual
+    const reserva = await reservaModel
+      .findOne({ fecha: { $gt: ahora } })
+      .sort({ fecha: 1 })
+      .populate("cliente", "nombre apellido")
+      .lean();
+
+    if (!reserva) {
+      return res.status(200).json({
+        success: false,
+        message: "No hay próximas reservas",
+      });
+    }
+
+    // Formateo de fecha y hora
+    const fechaObj = new Date(reserva.fecha);
+    const fecha = fechaObj.toLocaleDateString();
+    const hora = fechaObj.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // Respuesta final
+    return res.status(200).json({
+      success: true,
+      data: {
+        fecha,
+        hora,
+        cliente: {
+          nombreCompleto: `${reserva.cliente?.nombre || ""} ${
+            reserva.cliente?.apellido || ""
+          }`.trim(),
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error obteniendo próxima reserva:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Error interno del servidor" });
   }
 };
