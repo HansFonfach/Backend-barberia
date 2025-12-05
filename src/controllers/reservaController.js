@@ -4,7 +4,10 @@ import usuarioModel from "../models/usuario.model.js";
 import { generarHoras, formatHora, crearFechasUTC } from "../utils/horas.js"; // 👈 faltaba esto
 import suscripcionModel from "../models/suscripcion.model.js";
 import dayjs from "dayjs";
-import { sendReservationEmail, sendWaitlistNotificationEmail } from "./mailController.js";
+import {
+  sendReservationEmail,
+  sendWaitlistNotificationEmail,
+} from "./mailController.js";
 import servicioModel from "../models/servicio.model.js";
 import notificacionModel from "../models/notificacion.Model.js";
 
@@ -343,10 +346,10 @@ export const getReservasByBarberId = async (req, res) => {
       barbero: barberId,
       fecha: { $gte: inicio, $lte: fin },
     })
-      .populate("cliente", "nombre apellido") // Trae solo nombre y apellido del cliente
+      .populate("cliente", "nombre apellido telefono") // Trae solo nombre y apellido del cliente
       .populate("servicio", "nombre") // Trae solo nombre del servicio
       .sort({ fecha: 1 }); // Ordena por fecha ascendente
-
+    console.log(reservas);
     return res.json({ reservas });
   } catch (error) {
     console.error("Error al obtener reservas por barbero:", error);
@@ -462,7 +465,7 @@ export const getReservasPorFechaBarbero = async (req, res) => {
       barbero: barberoId,
       fecha: { $gte: inicioDia, $lte: finDia },
     })
-      .populate("cliente", "nombre apellido")
+      .populate("cliente", "nombre apellido telefono")
       .populate("servicio", "nombre")
       .sort({ fecha: 1 });
 
