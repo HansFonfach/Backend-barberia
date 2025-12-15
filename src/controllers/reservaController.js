@@ -167,36 +167,7 @@ export const createReserva = async (req, res) => {
     const diasPermitidos = clienteDoc.suscrito ? 31 : 15;
     let limite = dayjs().tz("America/Santiago").add(diasPermitidos, "day");
 
-    // ⚡ Nueva validación: si el cliente tiene suscripción activa, limitar por fechaFin
-    const suscripcionActiva = await suscripcionModel.findOne({
-      usuario: cliente,
-      activa: true,
-      fechaInicio: { $lte: new Date() },
-      fechaFin: { $gte: new Date() },
-    });
 
-    if (suscripcionActiva && suscripcionActiva.fechaFin) {
-      const fechaFinSuscripcion = dayjs(suscripcionActiva.fechaFin).tz(
-        "America/Santiago"
-      );
-      if (fechaFinSuscripcion.isBefore(limite)) {
-        limite = fechaFinSuscripcion;
-      }
-    }
-
-    if (fechaCompletaChile.isAfter(limite)) {
-      return res.status(400).json({
-        message: `No puedes reservar más allá del ${limite.format(
-          "YYYY-MM-DD"
-        )}.`,
-      });
-    }
-
-    if (fechaCompletaChile.isAfter(limite)) {
-      return res.status(400).json({
-        message: `No puedes reservar con más de ${diasPermitidos} días de anticipación.`,
-      });
-    }
 
     // Validación sábado
     await validarSabadino(clienteDoc, diaSemana);
@@ -263,6 +234,7 @@ export const createReserva = async (req, res) => {
       estado: "pendiente",
     });
 
+
     // 🔥 DESCONTAR SERVICIO SI TIENE SUSCRIPCIÓN ACTIVA
     const suscripcion = await suscripcionModel.findOne({
       usuario: cliente,
@@ -272,7 +244,7 @@ export const createReserva = async (req, res) => {
     });
 
     if (suscripcion) {
-      // 👈 Este es el campo correcto
+      // 👇 Se descuenta SOLO si todavía tiene servicios gratis disponibles
       if (suscripcion.serviciosUsados < suscripcion.serviciosTotales) {
         suscripcion.serviciosUsados += 1;
         await suscripcion.save();

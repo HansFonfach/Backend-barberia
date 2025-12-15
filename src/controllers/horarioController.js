@@ -65,7 +65,6 @@ export const getHorariosByBarbero = async (req, res) => {
   }
 };
 
-
 export const getHorarioBasePorDia = async (req, res) => {
   try {
     const { barberoId } = req.params;
@@ -104,7 +103,6 @@ export const getHorarioBasePorDia = async (req, res) => {
     return res.status(500).json({ message: "Error del servidor" });
   }
 };
-
 export const getHorasDisponibles = async (req, res) => {
   try {
     const { id: barberoId } = req.params;
@@ -132,7 +130,9 @@ export const getHorasDisponibles = async (req, res) => {
       horasBloqueadas: [],
       horasExtra: [],
       data: [],
-      diasPermitidos: usuario?.suscrito ? 31 : 15,
+      diasPermitidos: 15, // Valor por defecto, se actualizará después
+      tieneSuscripcionActiva: false,
+      fechaFinSuscripcion: null,
       esFeriado: !!feriado,
       nombreFeriado: feriado?.nombre || null,
       comportamientoFeriado: feriado?.comportamiento || null,
@@ -198,6 +198,7 @@ export const getHorasDisponibles = async (req, res) => {
         horasDisponibles: ordenarHoras(horasFinales),
         horasBloqueadas: ordenarHoras(horasBloqueadas),
         horasExtra: ordenarHoras(horasExtra),
+        diasPermitidos: 31, // Barbero tiene acceso completo
         message: "Feriado, pero el barbero habilitó horas",
       });
     }
@@ -233,7 +234,7 @@ export const getHorasDisponibles = async (req, res) => {
       // Si hay excepciones, continuar con flujo normal (barbero habilitó horas)
     }
 
-    // --- VALIDAR SUSCRIPCIÓN (solo si no es feriado bloqueado para cliente) ---
+    // --- VALIDAR SUSCRIPCIÓN (NUEVA LÓGICA CORREGIDA) ---
     let suscripcionActiva = null;
     if (usuario) {
       suscripcionActiva = await Suscripcion.findOne({
@@ -244,33 +245,50 @@ export const getHorasDisponibles = async (req, res) => {
       });
     }
 
-    const diasPermitidos = suscripcionActiva ? 31 : 15;
-    const limite = ahoraChile.add(diasPermitidos, "day");
+    // Calcular límite normal (15 días para todos)
+    const limiteNormal = ahoraChile.add(15, "day");
 
-    if (fechaConsulta.isAfter(limite, "day")) {
-      return res.status(400).json({
-        message: `No puedes reservar con más de ${diasPermitidos} días de anticipación.`,
-        diasPermitidos,
-        horasDisponibles: [],
-        horasBloqueadas: [],
-        horasExtra: [],
-        esFeriado: !!feriado,
-        nombreFeriado: feriado?.nombre || null,
-      });
+    if (suscripcionActiva) {
+      // Usuario SUSCRITO: máximo entre fechaFin de suscripción y límite normal
+      const fechaFinSuscripcion = dayjs(suscripcionActiva.fechaFin).tz(
+        "America/Santiago"
+      );
+      const limiteEfectivo = fechaFinSuscripcion.isAfter(limiteNormal)
+        ? fechaFinSuscripcion
+        : limiteNormal;
+
+      if (fechaConsulta.isAfter(limiteEfectivo, "day")) {
+        return res.status(400).json({
+          ...respuestaBase,
+          message: `No puedes reservar más allá del ${limiteEfectivo.format(
+            "DD/MM/YYYY"
+          )}.`,
+          diasPermitidos: 31,
+          tieneSuscripcionActiva: true,
+          fechaFinSuscripcion: fechaFinSuscripcion.format("YYYY-MM-DD"),
+        });
+      }
+    } else {
+      // Usuario NO SUSCRITO: solo límite normal
+      if (fechaConsulta.isAfter(limiteNormal, "day")) {
+        return res.status(400).json({
+          ...respuestaBase,
+          message: `No puedes reservar con más de 15 días de anticipación.`,
+          diasPermitidos: 15,
+        });
+      }
     }
 
     // --- Validar sábado para no suscriptores ---
     if (diaSemana === 6) {
       const esBarbero = usuario?.rol === "barbero";
-      const tieneSuscripcionActiva = !!suscripcionActiva || usuario?.suscrito;
+      const tieneSuscripcionActiva = !!suscripcionActiva;
+
       if (!esBarbero && !tieneSuscripcionActiva) {
         return res.status(403).json({
+          ...respuestaBase,
           message:
             "Las reservas de los sábados son solo para barberos o suscriptores activos",
-          horasDisponibles: [],
-          horasBloqueadas: [],
-          horasExtra: [],
-          esFeriado: !!feriado,
         });
       }
     }
@@ -367,6 +385,9 @@ export const getHorasDisponibles = async (req, res) => {
       mensajeFinal = `Feriado: ${feriado.nombre}. No hay horas disponibles.`;
     }
 
+    // Calcular días permitidos finales para la respuesta
+    const diasPermitidos = suscripcionActiva ? 31 : 15;
+
     res.json({
       barbero: barbero.nombre,
       fecha: fechaConsulta.format("YYYY-MM-DD"),
@@ -378,6 +399,10 @@ export const getHorasDisponibles = async (req, res) => {
       horasExtra: horasExtra,
       data: horasFinales,
       diasPermitidos,
+      tieneSuscripcionActiva: !!suscripcionActiva,
+      fechaFinSuscripcion: suscripcionActiva
+        ? dayjs(suscripcionActiva.fechaFin).format("YYYY-MM-DD")
+        : null,
       esFeriado: !!feriado,
       nombreFeriado: feriado?.nombre || null,
       comportamientoFeriado: feriado?.comportamiento || null,
@@ -388,7 +413,6 @@ export const getHorasDisponibles = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
 // 🧹 FUNCIÓN ADICIONAL: Para limpiar datos corruptos
 export const limpiarDatosCorruptos = async (req, res) => {
   try {

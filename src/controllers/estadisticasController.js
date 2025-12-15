@@ -318,14 +318,15 @@ export const ultimaReserva = async (req, res) => {
 
 export const proximaReserva = async (req, res) => {
   try {
-    const { clienteId } = req.params;
+    const clienteId = req.usuario.id;
+    console.log(clienteId);
 
     const ahora = new Date();
 
     // buscamos reservas con fecha mayor a ahora (futuras)
     const proximaReserva = await reservaModel
       .findOne({
-        clienteId,
+        cliente: clienteId,
         fecha: { $gt: ahora },
       })
       .sort({ fecha: 1 }) // la más cercana primero

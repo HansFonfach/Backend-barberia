@@ -15,14 +15,19 @@ import testRoutes from "./routes/testRoutes.js";
 import feriadoRoutes from "./routes/feriadoRoutes.js";
 import RecordatoriosJob from "./jobs/recordatoriosJob.js";
 import notificacionRoutes from "./routes/notificacionRoutes.js";
+import pagosRoutes from "./routes/pagoRoutes.js";
+
 
 const app = express();
 app.use(cookieParser());
+
+
 
 // Dominios permitidos (frontend Render + localhost)
 const allowedOrigins = [
   "https://frontend-barberia-tcv6.onrender.com",
   "http://localhost:3000",
+  "http://localhost:5173",
 ];
 
 app.use(
@@ -66,6 +71,7 @@ app.use("/estadisticas", estadisticasRoutes);
 app.use("/webhook", webhookRoutes);
 app.use("/test", testRoutes);
 app.use("/feriados", feriadoRoutes);
-app.use("/notificaciones", notificacionRoutes)
+app.use("/notificaciones", notificacionRoutes);
+app.use("/pagos", pagosRoutes);
 
 export default app;

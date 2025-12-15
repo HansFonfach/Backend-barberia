@@ -3,6 +3,7 @@ import Usuario from "../models/usuario.model.js";
 import { generarToken } from "../utils/generarToken.js";
 import crypto from "crypto";
 import sendEmail from "../utils/sendEmail.js";
+import suscripcionModel from "../models/suscripcion.model.js";
 
 export const login = async (req, res) => {
   const { email, password } = req.body;
@@ -13,6 +14,31 @@ export const login = async (req, res) => {
       return res
         .status(400)
         .json({ message: "Usuario y/o contraseña incorrecta" });
+    }
+
+    // 🔍 Revisar si el usuario tiene una suscripción activa
+    const suscripcionActiva = await suscripcionModel.findOne({
+      usuario: usuario._id,
+      activa: true,
+    });
+
+    // 🔥 Si existe suscripción activa, revisar si está vencida
+    if (suscripcionActiva) {
+      const hoy = new Date();
+      if (suscripcionActiva.fechaFin < hoy) {
+        // ⛔ Expiró → desactivar suscripción
+        suscripcionActiva.activa = false;
+        await suscripcionActiva.save();
+
+        usuario.suscrito = false;
+        usuario.plan = "gratis";
+        await usuario.save();
+      } else {
+        // Sigue activa (aseguramos usuario.suscrito)
+        usuario.suscrito = true;
+        usuario.plan = "premium";
+        await usuario.save();
+      }
     }
 
     const validPassword = await bcrypt.compare(password, usuario.password);

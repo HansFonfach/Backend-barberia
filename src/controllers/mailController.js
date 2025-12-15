@@ -86,3 +86,46 @@ export const sendWaitlistNotificationEmail = async (to, data) => {
     html,
   });
 };
+
+export const sendSuscriptionActiveEmail = async (to, data) => {
+  const { nombreCliente, fechaInicio, fechaFin } = data;
+
+  const html = `
+  <h2>Suscripción confirmada</h2>
+
+  <p>Estimado/a <strong>${nombreCliente}</strong>,</p>
+
+  <p>
+    Queremos agradecerte por confiar en nosotros. Te confirmamos que el pago de tu
+    <strong>suscripción</strong> ha sido procesado y acreditado correctamente.
+  </p>
+
+  <h3>Detalles de la suscripción</h3>
+  <ul>
+    <li><strong>Fecha de activación:</strong> ${fechaInicio}</li>
+    <li><strong>Válida hasta:</strong> ${fechaFin}</li>
+  </ul>
+
+  <p>
+    Desde ahora puedes disfrutar de todos los beneficios asociados a tu plan y
+    gestionar tus reservas directamente desde la plataforma.
+  </p>
+
+  <p>
+    Si tienes alguna duda o necesitas asistencia, no dudes en contactarnos.
+    Estaremos encantados de ayudarte.
+  </p>
+
+  <p>
+    Atentamente,<br />
+    <strong>Equipo La Santa Barberia</strong>
+  </p>
+`;
+
+  return await transporter.sendMail({
+    from: `"Barbería" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: "¡ ✅ Pago confirmado !",
+    html,
+  });
+};
