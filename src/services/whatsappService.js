@@ -39,15 +39,10 @@ class WhatsAppService {
       process.env.TWILIO_AUTH_TOKEN
     );
     this.sandboxNumber = process.env.TWILIO_WHATSAPP_NUMBER;
-
-    console.log("✅ Twilio inicializado correctamente en servicio");
-    console.log("📱 Número sandbox:", this.sandboxNumber);
   }
 
   async enviarRecordatorio(reserva) {
     try {
-      console.log("📤 Enviando WhatsApp a:", reserva.usuario.telefono);
-
       const mensaje = this.crearMensajeRecordatorio(reserva);
 
       const message = await this.client.messages.create({
@@ -56,10 +51,8 @@ class WhatsAppService {
         to: `whatsapp:${reserva.usuario.telefono}`,
       });
 
-      console.log("✅ WhatsApp enviado:", message.sid);
       return { success: true, messageId: message.sid };
     } catch (error) {
-      console.error("❌ Error enviando WhatsApp:", error.message);
       return { success: false, error: error.message };
     }
   }

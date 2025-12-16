@@ -78,6 +78,9 @@ export const register = async (req, res) => {
   try {
     const { rut, nombre, apellido, email, telefono, password } = req.body;
 
+    const telefonoCompleto = `569${telefono}`;
+    console.log(telefonoCompleto);
+
     const usuarioExistente = await Usuario.findOne({
       $or: [{ rut }, { email }],
     });
@@ -95,10 +98,11 @@ export const register = async (req, res) => {
       nombre,
       apellido,
       email,
-      telefono,
+      telefono : telefonoCompleto,
       password: hashedPassword,
     });
     await newUser.save();
+    console.log(newUser);
 
     const token = generarToken(newUser);
 

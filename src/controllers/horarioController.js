@@ -340,6 +340,7 @@ export const getHorasDisponibles = async (req, res) => {
         $gte: fechaConsulta.startOf("day").toDate(),
         $lt: fechaConsulta.endOf("day").toDate(),
       },
+      estado: { $in: ["pendiente", "confirmada"] }, // 👈 CLAVE
     });
 
     let horasFinales = Array.from(new Set([...todasLasHoras, ...horasExtra]))

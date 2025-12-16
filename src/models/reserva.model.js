@@ -13,6 +13,15 @@ const ReservaSchema = new Schema(
       enum: ["pendiente", "confirmada", "cancelada", "completada"],
       default: "pendiente",
     },
+
+    puntosOtorgados: {
+      type: Number,
+      default: 10, // por si después cambias reglas
+    },
+    puntosSumados: {
+      type: Boolean,
+      default: false,
+    },
     // ✅ NUEVOS CAMPOS PARA WHATSAPP
     recordatorioEnviado: {
       type: Boolean,
@@ -36,4 +45,13 @@ const ReservaSchema = new Schema(
   { timestamps: true }
 );
 
+ReservaSchema.index(
+  { barbero: 1, fecha: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      estado: { $in: ["pendiente", "confirmada"] },
+    },
+  }
+);
 export default mongoose.model("Reserva", ReservaSchema);

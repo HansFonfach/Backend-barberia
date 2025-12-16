@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import app from "./app.js";
 import { connectDB } from "./database/db.js";
 import { iniciarCronSuscripciones } from "./cron/suscripcionesCron.js";
+import { iniciarJobReservas } from "./jobs/reservasEstado.js";
 
 // Obtener el directorio actual
 const __filename = fileURLToPath(import.meta.url);
@@ -21,7 +22,9 @@ const PORT = process.env.PORT || 4000;
 const startServer = async () => {
   await connectDB();
 
+  //CRON
   iniciarCronSuscripciones();
+  iniciarJobReservas();
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);

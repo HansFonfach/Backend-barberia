@@ -156,7 +156,6 @@ export const createReserva = async (req, res) => {
     const fechaObj = fechaCompletaUTC.toDate();
 
     const diaSemana = fechaCompletaChile.day();
-    console.log("📅 Día de la semana:", diaSemana);
 
     // Cliente
     const clienteDoc = await usuarioModel.findById(cliente);
@@ -166,8 +165,6 @@ export const createReserva = async (req, res) => {
     // ✅ Validar rango de días según plan y fecha de suscripción
     const diasPermitidos = clienteDoc.suscrito ? 31 : 15;
     let limite = dayjs().tz("America/Santiago").add(diasPermitidos, "day");
-
-
 
     // Validación sábado
     await validarSabadino(clienteDoc, diaSemana);
@@ -212,6 +209,7 @@ export const createReserva = async (req, res) => {
     const reservaExistente = await Reserva.findOne({
       barbero,
       fecha: { $gte: fechaObj, $lt: horaFinReserva },
+      estado: { $ne: "cancelada" },
     });
 
     if (reservaExistente) {
@@ -233,7 +231,6 @@ export const createReserva = async (req, res) => {
       fecha: fechaObj,
       estado: "pendiente",
     });
-
 
     // 🔥 DESCONTAR SERVICIO SI TIENE SUSCRIPCIÓN ACTIVA
     const suscripcion = await suscripcionModel.findOne({
@@ -328,6 +325,7 @@ export const getReservasByBarberId = async (req, res) => {
     return res.status(500).json({ message: "Error al obtener reservas" });
   }
 };
+
 export const postDeleteReserva = async (req, res) => {
   try {
     const { id } = req.params;
@@ -335,38 +333,39 @@ export const postDeleteReserva = async (req, res) => {
 
     const existeReserva = await Reserva.findById(id);
     if (!existeReserva) {
-      return res
-        .status(404)
-        .json({ message: "No se ha encontrado la reserva." });
+      return res.status(404).json({
+        message: "No se ha encontrado la reserva.",
+      });
     }
+
     console.log("✅ Reserva encontrada:", existeReserva);
 
+    console.log("🔻 Puntos restados al usuario");
+
     // Eliminar la reserva
-    await Reserva.findByIdAndDelete(id);
+    await Reserva.findByIdAndUpdate(id, {
+      estado: "cancelada",
+      motivoCancelacion: "Cancelada por el usuario",
+    });
     console.log("✅ Reserva eliminada");
 
     // ────────────────────────────────
-    // Buscar notificaciones pendientes
+    // Notificaciones
     // ────────────────────────────────
     const notificaciones = await notificacionModel
       .find({
-        barberoId: existeReserva.barbero, // usar el campo correcto
+        barberoId: existeReserva.barbero,
         fecha: existeReserva.fecha,
         enviado: false,
       })
       .populate("usuarioId");
 
-    console.log("📢 Notificaciones encontradas:", notificaciones.length);
-
-    // ────────────────────────────────
-    // Enviar correos y marcar como enviado
-    // ────────────────────────────────
     await Promise.all(
       notificaciones.map(async (noti) => {
         if (noti.usuarioId?.email) {
           await sendWaitlistNotificationEmail(noti.usuarioId.email, {
             nombreCliente: noti.usuarioId.nombre,
-            nombreBarbero: "Nombre del Barbero", // o extraer del modelo Barbero
+            nombreBarbero: "Nombre del Barbero",
             fecha: noti.fecha.toLocaleDateString(),
             hora: noti.fecha.toLocaleTimeString([], {
               hour: "2-digit",
@@ -379,16 +378,17 @@ export const postDeleteReserva = async (req, res) => {
       })
     );
 
-    res.status(200).json({
-      message: "Reserva eliminada y notificaciones enviadas",
+    return res.status(200).json({
+      message:
+        "Reserva eliminada, puntos actualizados y notificaciones enviadas",
       reserva: existeReserva,
       notificacionesEnviadas: notificaciones.length,
     });
   } catch (error) {
-    console.error("Error al eliminar reserva:", error);
-    res
-      .status(500)
-      .json({ message: "Error del servidor al eliminar la reserva." });
+    console.error("❌ Error al eliminar reserva:", error);
+    return res.status(500).json({
+      message: "Error del servidor al eliminar la reserva.",
+    });
   }
 };
 

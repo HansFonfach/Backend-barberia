@@ -221,7 +221,11 @@ export const confirmarPagoSuscripcion = async (req, res) => {
       process.env.FRONTEND_URL || "http://localhost:3000"
     }/admin/suscripcion/resultado?success=true&suscripcionId=${
       nuevaSuscripcion._id
-    }&fechaInicio=${fechaInicioStr}&fechaFin=${fechaFinStr}`;
+    }&fechaInicio=${encodeURIComponent(
+      fechaInicioStr
+    )}&fechaFin=${encodeURIComponent(fechaFinStr)}&nombre=${encodeURIComponent(
+      usuario.nombre
+    )}`;
 
     console.log("🔗 Redirigiendo a frontend:", frontendUrl);
     return res.redirect(frontendUrl);
