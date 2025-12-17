@@ -16,12 +16,10 @@ import feriadoRoutes from "./routes/feriadoRoutes.js";
 import RecordatoriosJob from "./jobs/recordatoriosJob.js";
 import notificacionRoutes from "./routes/notificacionRoutes.js";
 import pagosRoutes from "./routes/pagoRoutes.js";
-
+import canjeRoutes from "./routes/canjeRoutes.js";
 
 const app = express();
 app.use(cookieParser());
-
-
 
 // Dominios permitidos (frontend Render + localhost)
 const allowedOrigins = [
@@ -73,5 +71,6 @@ app.use("/test", testRoutes);
 app.use("/feriados", feriadoRoutes);
 app.use("/notificaciones", notificacionRoutes);
 app.use("/pagos", pagosRoutes);
+app.use("/canjes", canjeRoutes);
 
 export default app;

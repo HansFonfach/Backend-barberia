@@ -1,6 +1,6 @@
 import suscripcionModel from "../models/suscripcion.model.js";
 import Usuario from "../models/usuario.model.js";
-import bcrypt from "bcrypt";
+
 
 //obtener todos los usuarios
 export const getUsuarios = async (req, res) => {

@@ -1,11 +1,11 @@
 import jwt from "jsonwebtoken";
 import { TOKEN_SECRET } from "../config.js";
-console.log("TOKEN_SECRET en generarToken:", TOKEN_SECRET)
+console.log("TOKEN_SECRET en generarToken:", TOKEN_SECRET);
 
 export const generarToken = (usuario) => {
   return jwt.sign(
     {
-      id: usuario._id, 
+      id: usuario._id,
       rut: usuario.rut,
       nombre: usuario.nombre,
       apellido: usuario.apellido,
@@ -13,6 +13,7 @@ export const generarToken = (usuario) => {
       rol: usuario.rol,
       suscrito: usuario.suscrito,
       telefono: usuario.telefono,
+      puntos: usuario.puntos,
     },
     TOKEN_SECRET,
     { expiresIn: "1h" } // configurable
