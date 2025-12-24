@@ -22,6 +22,8 @@ export const createServicio = async (req, res) => {
 
 export const updateServicio = async (req, res) => {
   const { id } = req.params;
+  const { descripcion, duracion, nombre, precio } = req.body;
+  console.log(descripcion, duracion, nombre, precio);
 
   try {
     const existeServicio = await Servicio.findById(id);
@@ -31,7 +33,13 @@ export const updateServicio = async (req, res) => {
         .status(400)
         .json({ message: "No hemos encontrado el servicio" });
 
-    await Servicio.findByIdAndUpdate(id);
+    await Servicio.findByIdAndUpdate(id, {
+      nombre,
+      precio,
+      duracion,
+      descripcion,
+    });
+
     res.json({
       message: "Servicio actualizado correctamente",
       existeServicio,

@@ -13,7 +13,6 @@ export const generarToken = (usuario) => {
       rol: usuario.rol,
       suscrito: usuario.suscrito,
       telefono: usuario.telefono,
-      puntos: usuario.puntos,
     },
     TOKEN_SECRET,
     { expiresIn: "1h" } // configurable

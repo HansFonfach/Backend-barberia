@@ -1,4 +1,5 @@
 import canjeModel from "../models/canje.model.js";
+import usuarioModel from "../models/usuario.model.js";
 
 export const createCanje = async (req, res) => {
   const { nombre, descripcion, puntos, categoria, stock } = req.body;
@@ -84,5 +85,49 @@ export const getAllCanje = async (req, res) => {
     });
   } catch (error) {
     res.status(400).json({ message: error.message });
+  }
+};
+export const canjear = async (req, res) => {
+  try {
+    const idUsuario = req.usuario.id;
+    const idCanje = req.params.idCanje;
+
+    const productoCanjeado = await canjeModel.findById(idCanje);
+    if (!productoCanjeado) {
+      return res.status(404).json({ message: "Canje no encontrado" });
+    }
+
+    if (productoCanjeado.stock <= 0) {
+      return res.status(400).json({
+        message: "Lo sentimos, el producto se encuentra sin stock",
+      });
+    }
+
+    const usuarioDB = await usuarioModel.findById(idUsuario);
+    if (!usuarioDB) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    if (usuarioDB.puntos < productoCanjeado.puntos) {
+      return res.status(400).json({
+        message: "Lo sentimos, aún no tienes puntos suficientes",
+      });
+    }
+
+    // ✅ Actualización atómica
+    await usuarioModel.findByIdAndUpdate(idUsuario, {
+      $inc: { puntos: -productoCanjeado.puntos },
+    });
+
+    await canjeModel.findByIdAndUpdate(idCanje, {
+      $inc: { stock: -1 },
+    });
+
+    return res.status(200).json({
+      message: "Canje realizado con éxito",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Error al realizar el canje" });
   }
 };

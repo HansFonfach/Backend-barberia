@@ -1,19 +1,23 @@
-// src/controllers/pagoController.js
 import { tx } from "../libs/webpay.js";
 import suscripcionModel from "../models/suscripcion.model.js";
 import transaccionModel from "../models/transaccion.model.js";
 import usuarioModel from "../models/usuario.model.js";
 import { sendSuscriptionActiveEmail } from "./mailController.js";
 
+const FRONT_URL = "http://localhost:3000";
+const RESULT_URL = `${FRONT_URL}/admin/suscripcion/resultado`;
+
+/* =====================================================
+   INICIAR PAGO
+===================================================== */
 export const iniciarPagoSuscripcion = async (req, res) => {
   try {
     const userId = req.usuario?.id;
-
     if (!userId) {
-      return res.status(400).json({ error: "Usuario no autenticado" });
+      return res.status(401).json({ error: "No autenticado" });
     }
 
-    // Verificar suscripción activa
+    // Validar suscripción activa
     const suscripcionActiva = await suscripcionModel.findOne({
       usuario: userId,
       activa: true,
@@ -24,144 +28,101 @@ export const iniciarPagoSuscripcion = async (req, res) => {
       return res.status(400).json({
         success: false,
         error: "Ya tienes una suscripción activa",
-        fechaFin: suscripcionActiva.fechaFin,
       });
     }
 
     const monto = 25000;
 
-    // Generar buyOrder (formato: ord-timestamp-userId)
-    const timestamp = Date.now().toString().slice(-9);
-    const userIdShort = userId.toString().slice(-6);
-    const buyOrder = `ord-${timestamp}-${userIdShort}`;
-
+    const buyOrder = `ord-${Date.now()}-${userId.toString().slice(-6)}`;
     const sessionId = `ses-${userId}`.substring(0, 61);
 
-    const returnUrl = `${
-      process.env.BACKEND_URL || "http://localhost:4000"
-    }/pagos/suscripcion/confirmar`;
+    const returnUrl = "http://localhost:4000/pagos/suscripcion/confirmar";
 
-    // Crear transacción en Transbank
     const response = await tx.create(buyOrder, sessionId, monto, returnUrl);
 
-    // Guardar transacción en nuestra BD
-    const nuevaTransaccion = await transaccionModel.create({
+    await transaccionModel.create({
       usuario: userId,
       buyOrder,
       sessionId,
       token: response.token,
       monto,
       estado: "iniciado",
-      metadata: {
-        tipoSuscripcion: "mensual",
-        serviciosIncluidos: 2,
-      },
-      ipCliente: req.ip,
-      userAgent: req.headers["user-agent"],
     });
 
     return res.json({
       success: true,
       token: response.token,
       url: response.url,
-      transaccionId: nuevaTransaccion._id,
-      buyOrder: buyOrder,
     });
   } catch (error) {
-    console.error("❌ Error iniciarPagoSuscripcion:", error.message);
-
-    if (error.message.includes("is too long")) {
-      return res.status(400).json({
-        success: false,
-        error: "Parámetros inválidos",
-        message: "Los datos exceden los límites permitidos por Transbank",
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      error: "Error al iniciar pago",
-      message: error.message,
-    });
+    console.error("❌ Error iniciarPagoSuscripcion:", error);
+    return res.status(500).json({ error: "Error iniciando pago" });
   }
 };
 
+/* =====================================================
+   CONFIRMAR PAGO (CALLBACK TRANSBANK)
+===================================================== */
 export const confirmarPagoSuscripcion = async (req, res) => {
+  let token;
+
   try {
-    console.log("=== ✅ TRANSBANK CALLBACK ===");
-    console.log("Método:", req.method);
-    console.log("Query params (GET):", req.query);
-    console.log("Body (POST):", req.body);
+    console.log("=== CALLBACK TRANSBANK ===");
+    console.log("Query:", req.query);
 
-    // Obtener token de diferentes maneras según el método
-    let token;
+    token = req.query.token_ws || req.body?.token_ws;
 
-    if (req.method === "GET") {
-      token = req.query.token_ws || req.query.TBK_TOKEN;
-    } else if (req.method === "POST") {
-      token = req.body.token_ws || req.body.TBK_TOKEN;
+    /* ===============================
+       CANCELADO POR USUARIO
+    =============================== */
+    if (req.query.TBK_TOKEN) {
+      await transaccionModel.findOneAndUpdate(
+        { token: req.query.TBK_TOKEN },
+        { estado: "cancelado" }
+      );
+
+      return res.redirect(`${RESULT_URL}?cancelado=true`);
     }
-
-    console.log("Token encontrado:", token);
 
     if (!token) {
-      console.log("⚠️ No se recibió token");
-
-      // Redirigir al frontend con error
-      const frontendUrl = `${
-        process.env.FRONTEND_URL || "http://localhost:3000"
-      }/suscripcion/resultado?error=true&message=No se recibió token de pago`;
-      return res.redirect(frontendUrl);
+      return res.redirect(`${RESULT_URL}?error=true`);
     }
 
-    // Si es TBK_TOKEN (pago cancelado)
-    if (req.query.TBK_TOKEN || req.body?.TBK_TOKEN) {
-      console.log("❌ Pago cancelado por el usuario");
-
-      const frontendUrl = `${
-        process.env.FRONTEND_URL || "http://localhost:3000"
-      }/suscripcion/resultado?cancelado=true`;
-      return res.redirect(frontendUrl);
-    }
-
-    // Confirmar pago con Transbank
-    console.log("🔐 Confirmando pago con Transbank...");
+    /* ===============================
+       COMMIT TRANSBANK
+    =============================== */
     const result = await tx.commit(token);
+    console.log("Resultado Transbank:", result.response_code);
 
-    console.log("Resultado Transbank:", {
-      response_code: result.response_code,
-      buy_order: result.buy_order,
-      session_id: result.session_id,
-    });
-
+    /* ===============================
+       PAGO RECHAZADO
+    =============================== */
     if (result.response_code !== 0) {
-      console.log("❌ Pago rechazado por Transbank");
+      await transaccionModel.findOneAndUpdate(
+        { buyOrder: result.buy_order },
+        {
+          estado: "rechazado",
+          respuestaTransbank: result,
+        }
+      );
 
-      const frontendUrl = `${
-        process.env.FRONTEND_URL || "http://localhost:3000"
-      }/suscripcion/resultado?error=true&message=Pago rechazado por Transbank`;
-      return res.redirect(frontendUrl);
+      return res.redirect(`${RESULT_URL}?rechazado=true`);
     }
 
-    // Extraer userId del session_id
+    /* ===============================
+       PAGO APROBADO
+    =============================== */
     const userId = result.session_id.replace("ses-", "");
-    console.log("✅ Usuario ID:", userId);
 
-    // Verificar si ya existe suscripción para esta transacción
-    const existingSuscripcion = await suscripcionModel.findOne({
+    // Evitar doble suscripción
+    const existente = await suscripcionModel.findOne({
       transaccionId: result.buy_order,
     });
 
-    if (existingSuscripcion) {
-      console.log("ℹ️ Suscripción ya existente, redirigiendo...");
-
-      const frontendUrl = `${
-        process.env.FRONTEND_URL || "http://localhost:3000"
-      }/admin/suscripcion/resultado?success=true&existe=true`;
-      return res.redirect(frontendUrl);
+    if (existente) {
+      return res.redirect(`${RESULT_URL}?success=true`);
     }
 
-    // Crear suscripción
     const fechaInicio = new Date();
     const fechaFin = new Date();
     fechaFin.setDate(fechaFin.getDate() + 31);
@@ -176,68 +137,54 @@ export const confirmarPagoSuscripcion = async (req, res) => {
       transaccionId: result.buy_order,
       montoPagado: result.amount,
       fechaPago: new Date(),
-      detallesTransbank: {
-        authorizationCode: result.authorization_code,
-        paymentTypeCode: result.payment_type_code,
-        responseCode: result.response_code,
-        cardNumber: result.card_detail?.card_number,
-      },
     });
 
-    console.log("✅ Suscripción creada:", nuevaSuscripcion._id);
-
-    // Actualizar transacción
     await transaccionModel.findOneAndUpdate(
       { buyOrder: result.buy_order },
       {
         estado: "aprobado",
-        fechaConfirmacion: new Date(),
-        respuestaTransbank: result,
         suscripcion: nuevaSuscripcion._id,
+        respuestaTransbank: result,
       }
     );
 
-    // Actualizar usuario como suscrito
-    const usuario = await usuarioModel.findByIdAndUpdate(userId, {
-      suscrito: true,
-      fechaSuscripcion: new Date(),
-    });
+    const usuario = await usuarioModel.findByIdAndUpdate(
+      userId,
+      {
+        suscrito: true,
+        fechaSuscripcion: new Date(),
+      },
+      { new: true }
+    );
 
+    // Email
     await sendSuscriptionActiveEmail(usuario.email, {
       nombreCliente: usuario.nombre,
       fechaInicio,
       fechaFin,
     });
 
-    console.log("hbola", sendSuscriptionActiveEmail);
-
-    console.log("✅ Usuario actualizado como suscrito");
-
-    // Redirigir al frontend con éxito
-    const fechaInicioStr = nuevaSuscripcion.fechaInicio.toISOString();
-    const fechaFinStr = nuevaSuscripcion.fechaFin.toISOString();
-
-    const frontendUrl = `${
-      process.env.FRONTEND_URL || "http://localhost:3000"
-    }/admin/suscripcion/resultado?success=true&suscripcionId=${
-      nuevaSuscripcion._id
-    }&fechaInicio=${encodeURIComponent(
-      fechaInicioStr
-    )}&fechaFin=${encodeURIComponent(fechaFinStr)}&nombre=${encodeURIComponent(
-      usuario.nombre
-    )}`;
-
-    console.log("🔗 Redirigiendo a frontend:", frontendUrl);
-    return res.redirect(frontendUrl);
+    /* ===============================
+       REDIRECT FINAL (SUCCESS)
+    =============================== */
+    return res.redirect(
+      `${RESULT_URL}` +
+        `?success=true` +
+        `&suscripcionId=${nuevaSuscripcion._id}` +
+        `&fechaInicio=${encodeURIComponent(fechaInicio.toISOString())}` +
+        `&fechaFin=${encodeURIComponent(fechaFin.toISOString())}` +
+        `&nombre=${encodeURIComponent(usuario.nombre)}`
+    );
   } catch (error) {
-    console.error("❌ Error confirmarPagoSuscripcion:", error);
+    console.error("❌ ERROR CALLBACK:", error);
 
-    // Redirigir al frontend con error
-    const frontendUrl = `${
-      process.env.FRONTEND_URL || "http://localhost:3000"
-    }/admin/suscripcion/resultado?error=true&message=${encodeURIComponent(
-      error.message
-    )}`;
-    return res.redirect(frontendUrl);
+    if (token) {
+      await transaccionModel.findOneAndUpdate(
+        { token },
+        { estado: "error", error: error.message }
+      );
+    }
+
+    return res.redirect(`${RESULT_URL}?error=true`);
   }
 };

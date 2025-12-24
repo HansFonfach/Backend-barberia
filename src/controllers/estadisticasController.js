@@ -337,15 +337,17 @@ export const proximaReserva = async (req, res) => {
         .status(400)
         .json({ message: "Aún no tienes reservas futuras" });
 
-    const fechaBonita = proximaReserva.fecha.toLocaleDateString("es-CL", {
+    const fechaBonita = new Date(proximaReserva.fecha).toLocaleString("es-CL", {
+      timeZone: "America/Santiago",
       day: "2-digit",
       month: "short",
       year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
-
     return res.json({
       ok: true,
-      fecha: fechaBonita, // uniforme para última y próxima
+      fecha: fechaBonita,
     });
   } catch (error) {
     console.error(error);
@@ -446,6 +448,7 @@ export const getHoraMasSolicitada = async (req, res) => {
     });
   }
 };
+
 export const getProximoCliente = async (req, res) => {
   try {
     const ahora = new Date();

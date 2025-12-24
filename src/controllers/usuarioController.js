@@ -1,6 +1,6 @@
 import suscripcionModel from "../models/suscripcion.model.js";
+import usuarioModel from "../models/usuario.model.js";
 import Usuario from "../models/usuario.model.js";
-
 
 //obtener todos los usuarios
 export const getUsuarios = async (req, res) => {
@@ -112,12 +112,14 @@ export const getAllUsersWithSuscripcion = async (req, res) => {
 
     const usuariosConSub = await Promise.all(
       usuarios.map(async (u) => {
-        const sus = await suscripcionModel.findOne({
-          usuario: u._id,
-          activa: true,
-          fechaInicio: { $lte: new Date() },
-          fechaFin: { $gte: new Date() },
-        }).lean();
+        const sus = await suscripcionModel
+          .findOne({
+            usuario: u._id,
+            activa: true,
+            fechaInicio: { $lte: new Date() },
+            fechaFin: { $gte: new Date() },
+          })
+          .lean();
         return { ...u, suscripcion: sus || null };
       })
     );
@@ -129,3 +131,21 @@ export const getAllUsersWithSuscripcion = async (req, res) => {
   }
 };
 
+export const verMisPuntos = async (req, res) => {
+  try {
+    const userId = req.usuario.id;
+
+    const user = await usuarioModel.findById(userId).select("puntos nombre");
+
+    if (!user) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    res.json({
+      puntos: user.puntos,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al obtener puntos" });
+  }
+};

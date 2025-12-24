@@ -2,75 +2,111 @@ import reservaModel from "../models/reserva.model.js";
 import { calcularPromedioDias } from "../helpers/calcularPromedios.js";
 import { generarMensajeEstado } from "../helpers/generarMensaje.js";
 
-const esCorte = (nombre = "") => nombre.toLowerCase().includes("pelo");
-const esBarba = (nombre = "") => nombre.toLowerCase().includes("barba");
+// Helpers de tipo de servicio
+const esCorte = (nombre = "") =>
+  nombre.toLowerCase().includes("pelo");
+
+const esBarba = (nombre = "") =>
+  nombre.toLowerCase().includes("barba");
+
+// Normaliza fechas (evita problemas de zona horaria)
+const normalizarFecha = fecha => {
+  const f = new Date(fecha);
+  f.setHours(0, 0, 0, 0);
+  return f;
+};
 
 export const obtenerEstadoLookCliente = async (req, res) => {
   try {
     const userId = req.usuario.id;
 
-    // Obtener reservas del cliente y popular el nombre del servicio
+    // Obtener TODAS las reservas del cliente
     const reservas = await reservaModel
       .find({ cliente: userId })
-      .sort({ fecha: 1 }) // Orden ascendente: más antiguo → más reciente
+      .sort({ fecha: 1 }) // antiguo → reciente
       .populate("servicio", "nombre");
 
-    if (reservas.length === 0) {
+    // Sin historial
+    if (!reservas.length) {
       return res.json({
         success: true,
         data: {
           corte: {
             promedio: 0,
             diasDesdeUltimo: null,
-            mensaje: "Sin historial suficiente para calcular tu frecuencia de corte.",
+            mensaje:
+              "Sin historial suficiente para calcular tu frecuencia de corte.",
           },
           barba: {
             promedio: 0,
             diasDesdeUltimo: null,
-            mensaje: "Sin historial suficiente para calcular tu frecuencia de perfilado.",
+            mensaje:
+              "Sin historial suficiente para calcular tu frecuencia de perfilado.",
           },
         },
       });
     }
 
-    // Separar y convertir fechas
-    const fechasCorte = reservas
+    // Fecha actual normalizada
+    const ahora = normalizarFecha(new Date());
+
+    // 🔥 SOLO reservas PASADAS (las futuras NO cuentan)
+    const reservasPasadas = reservas.filter(
+      r => normalizarFecha(r.fecha) <= ahora
+    );
+
+    // Fechas por tipo de servicio (solo pasado)
+    const fechasCorte = reservasPasadas
       .filter(r => esCorte(r.servicio?.nombre))
-      .map(r => new Date(r.fecha));
+      .map(r => normalizarFecha(r.fecha))
+      .sort((a, b) => a - b);
 
-    const fechasBarba = reservas
+    const fechasBarba = reservasPasadas
       .filter(r => esBarba(r.servicio?.nombre))
-      .map(r => new Date(r.fecha));
+      .map(r => normalizarFecha(r.fecha))
+      .sort((a, b) => a - b);
 
-    const ahora = new Date();
-
-    // Calcular promedios (0 si hay solo 1 fecha)
+    // Promedios
     const promedioCorte =
       fechasCorte.length > 1 ? calcularPromedioDias(fechasCorte) : 0;
+
     const promedioBarba =
       fechasBarba.length > 1 ? calcularPromedioDias(fechasBarba) : 0;
 
-    // Última fecha (más reciente)
-    const ultCorte = fechasCorte.length ? fechasCorte[fechasCorte.length - 1] : null;
-    const ultBarba = fechasBarba.length ? fechasBarba[fechasBarba.length - 1] : null;
+    // Últimas fechas reales (pasadas)
+    const ultCorte =
+      fechasCorte.length > 0
+        ? fechasCorte[fechasCorte.length - 1]
+        : null;
 
-    // Días desde última reserva
+    const ultBarba =
+      fechasBarba.length > 0
+        ? fechasBarba[fechasBarba.length - 1]
+        : null;
+
+    // Días desde última reserva REAL
     const diasDesdeCorte = ultCorte
-      ? Math.round((ahora - ultCorte) / (1000 * 60 * 60 * 24))
+      ? Math.floor((ahora - ultCorte) / (1000 * 60 * 60 * 24))
       : null;
 
     const diasDesdeBarba = ultBarba
-      ? Math.round((ahora - ultBarba) / (1000 * 60 * 60 * 24))
+      ? Math.floor((ahora - ultBarba) / (1000 * 60 * 60 * 24))
       : null;
 
-    // Generar mensajes personalizados
-    const mensajeCorte = ultCorte
-      ? generarMensajeEstado(diasDesdeCorte, promedioCorte, "corte")
-      : "Primero debes reservar un corte para empezar a calcular.";
+    // Mensajes personalizados
+    const mensajeCorte =
+      fechasCorte.length === 0
+        ? "Primero debes reservar un corte para empezar a calcular."
+        : fechasCorte.length === 1
+          ? "Aún no hay suficiente historial para calcular tu frecuencia de corte."
+          : generarMensajeEstado(diasDesdeCorte, promedioCorte, "corte");
 
-    const mensajeBarba = ultBarba
-      ? generarMensajeEstado(diasDesdeBarba, promedioBarba, "barba")
-      : "Primero debes reservar un perfilado para empezar a calcular.";
+    const mensajeBarba =
+      fechasBarba.length === 0
+        ? "Primero debes reservar un perfilado para empezar a calcular."
+        : fechasBarba.length === 1
+          ? "Aún no hay suficiente historial para calcular tu frecuencia de perfilado."
+          : generarMensajeEstado(diasDesdeBarba, promedioBarba, "barba");
 
     return res.json({
       success: true,
@@ -89,7 +125,7 @@ export const obtenerEstadoLookCliente = async (req, res) => {
     });
   } catch (error) {
     console.error("Error calculando estado del look:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Error interno del servidor",
     });
