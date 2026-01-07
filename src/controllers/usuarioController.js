@@ -27,24 +27,87 @@ export const getUsuarioById = async (req, res) => {
 };
 
 // controllers/usuarioController.js
+// controllers/usuario.controller.js
 export const getUsuarioByRut = async (req, res) => {
   const { rut } = req.params;
-  try {
-    const usuario = await Usuario.findOne({ rut });
-    if (!usuario)
-      return res
-        .status(404)
-        .json({ message: "No se ha encontrado el usuario" });
 
+  try {
+    console.log("🔍 Backend - Buscando usuario con RUT recibido:", rut);
+
+    if (!rut || rut.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "RUT no proporcionado",
+      });
+    }
+
+    // 1. Primero intentar buscar exactamente como viene
+    let usuario = await Usuario.findOne({ rut: rut });
+
+    // 2. Si no encuentra, buscar con RUT limpio
+    if (!usuario) {
+      console.log(
+        "⚠️ No encontrado con formato original, buscando con RUT limpio..."
+      );
+
+      // Función para limpiar RUT (quitar puntos y guión, convertir a mayúsculas)
+      const limpiarRut = (rutStr) => {
+        return rutStr.replace(/[\.\-]/g, "").toUpperCase();
+      };
+
+      const rutLimpioBuscado = limpiarRut(rut);
+      console.log("🔍 RUT limpio para búsqueda:", rutLimpioBuscado);
+
+      // Buscar todos los usuarios y comparar RUTs limpios
+      const todosUsuarios = await Usuario.find({});
+      usuario = todosUsuarios.find((u) => {
+        if (!u.rut) return false;
+
+        const rutBDLimpio = limpiarRut(u.rut);
+        const encontrado = rutBDLimpio === rutLimpioBuscado;
+
+        if (encontrado) {
+          console.log("✅ Coincidencia encontrada!");
+          console.log("   RUT en BD:", u.rut);
+          console.log("   RUT BD limpio:", rutBDLimpio);
+          console.log("   RUT buscado:", rut);
+          console.log("   RUT buscado limpio:", rutLimpioBuscado);
+        }
+
+        return encontrado;
+      });
+    }
+
+    if (!usuario) {
+      console.log("❌ Usuario NO encontrado");
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+        rutBuscado: rut,
+      });
+    }
+
+    console.log("✅ Usuario encontrado:", usuario.nombre, usuario.apellido);
     res.json({
-      _id: usuario._id, // ← CAMBIA id por _id
+      success: true,
+      _id: usuario._id,
+      id: usuario._id,
       nombre: usuario.nombre,
       apellido: usuario.apellido,
       email: usuario.email,
-      rut: usuario.rut, // ← Agrega el rut también
+      rut: usuario.rut,
+      telefono: usuario.telefono || "",
+      suscrito: usuario.suscrito || false,
+      rol: usuario.rol,
+      puntos: usuario.puntos || 0,
     });
   } catch (error) {
-    res.status(500).json({ mensaje: "Error del servidor" });
+    console.error("💥 Error en getUsuarioByRut:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error del servidor",
+      error: error.message,
+    });
   }
 };
 

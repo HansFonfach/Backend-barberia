@@ -1,238 +1,395 @@
 import Reserva from "../models/reserva.model.js";
 import excepcionHorarioModel from "../models/excepcionHorario.model.js";
 import usuarioModel from "../models/usuario.model.js";
-import { generarHoras, formatHora, crearFechasUTC } from "../utils/horas.js"; // 👈 faltaba esto
+import { formatHora } from "../utils/horas.js";
 import suscripcionModel from "../models/suscripcion.model.js";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
+import isSameOrBefore from "dayjs/plugin/isSameOrBefore.js";
+import isSameOrAfter from "dayjs/plugin/isSameOrAfter.js";
 import {
   sendReservationEmail,
   sendWaitlistNotificationEmail,
 } from "./mailController.js";
-import servicioModel from "../models/servicio.model.js";
 import notificacionModel from "../models/notificacion.Model.js";
+import barberoServicioModel from "../models/barberoServicio.model.js";
 
-// 🔹 Convierte "HH:mm" a minutos desde medianoche
-const horaAminutos = (hora) => {
-  const [h, m] = hora.split(":").map(Number);
-  return h * 60 + m;
-};
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.extend(isSameOrBefore);
+dayjs.extend(isSameOrAfter);
 
-// 🔹 Convierte Date a minutos UTC desde medianoche
-const dateAminutosUTC = (fecha) =>
-  fecha.getUTCHours() * 60 + fecha.getUTCMinutes();
-
-/**
- * Obtiene todas las horas disponibles para un barbero en una fecha determinada,
- * considerando sus horarios, excepciones y reservas existentes.
- */
-export const obtenerHorasDisponibles = async (
-  horariosDelDia,
-  excepciones,
-  barbero,
-  fecha
-) => {
-  // 1️⃣ Generar horas base del horario normal
-  const horasBase = horariosDelDia.flatMap((h) =>
-    h.bloques.flatMap(generarHoras)
+// 🔹 Función auxiliar: Calcular huecos disponibles (MISMA que en getHorasDisponibles)
+const calcularHuecosDisponibles = (reservasDelDia, diaCompleto) => {
+  // Ordenar reservas por hora de inicio
+  const reservasOrdenadas = [...reservasDelDia].sort((a, b) =>
+    dayjs(a.fecha).diff(dayjs(b.fecha))
   );
 
-  // 2️⃣ Procesar horas extra y bloqueadas
-  const horasExtra = excepciones
-    .filter((e) => e.tipo === "extra")
-    .map((e) => e.horaInicio);
+  const huecos = [];
+  let horaActual = diaCompleto.inicio;
 
-  const horasBloqueadas = excepciones
-    .filter((e) => e.tipo === "bloqueo")
-    .map((e) => e.horaInicio);
+  for (const reserva of reservasOrdenadas) {
+    const inicioReserva = dayjs(reserva.fecha);
+    const finReserva = inicioReserva.add(reserva.duracion, "minute");
 
-  // 3️⃣ Obtener reservas del barbero en esa fecha
-  const { startOfDay, endOfDay } = crearFechasUTC(fecha);
+    if (horaActual.isBefore(inicioReserva)) {
+      // Hay un hueco antes de esta reserva
+      const duracionHueco = inicioReserva.diff(horaActual, "minute");
+      if (duracionHueco > 0) {
+        huecos.push({
+          inicio: horaActual,
+          fin: inicioReserva,
+          duracion: duracionHueco,
+        });
+      }
+    }
 
-  const reservas = await Reserva.find({
-    barbero,
-    fecha: { $gte: startOfDay, $lte: endOfDay },
-  });
-
-  // 4️⃣ Filtrar horas extra ya reservadas usando minutos UTC
-  const horasExtraReservadas = reservas
-    .map((r) => dateAminutosUTC(r.fecha))
-    .filter((minUTC) => horasExtra.some((h) => horaAminutos(h) === minUTC))
-    .map((minUTC) => {
-      const h = String(Math.floor(minUTC / 60)).padStart(2, "0");
-      const m = String(minUTC % 60).padStart(2, "0");
-      return `${h}:${m}`;
-    });
-
-  // 5️⃣ Combinar y filtrar horas finales
-  const horasFinales = Array.from(new Set([...horasBase, ...horasExtra]))
-    .filter(
-      (h) => !horasBloqueadas.includes(h) && !horasExtraReservadas.includes(h)
-    )
-    .sort((a, b) => horaAminutos(a) - horaAminutos(b));
-
-  return horasFinales;
-};
-
-// 🔹 Validaciones básicas
-const validarCamposObligatorios = ({
-  barbero,
-  servicio,
-  fecha,
-  hora,
-  cliente,
-}) => {
-  if (!barbero || !servicio || !fecha || !hora || !cliente)
-    throw new Error("Todos los campos son obligatorios");
-};
-
-const validarSabadino = async (usuarioDoc, diaSemana) => {
-  // Solo aplica si es sábado
-  if (diaSemana !== 6) return;
-
-  const esBarbero = usuarioDoc.rol === "barbero";
-  const esSuscrito = usuarioDoc.suscrito;
-
-  // Busca si tiene una suscripción activa real en la BD
-  const suscripcionActiva = await suscripcionModel.findOne({
-    usuario: usuarioDoc._id,
-    activa: true,
-    fechaInicio: { $lte: new Date() },
-    fechaFin: { $gte: new Date() },
-  });
-
-  const tieneSuscripcionActiva = !!suscripcionActiva || esSuscrito;
-
-  if (!esBarbero && !tieneSuscripcionActiva) {
-    throw new Error(
-      "Las reservas de los sábados son solo para suscriptores activos o barberos"
-    );
+    // Avanzar al final de esta reserva (si es después de horaActual)
+    if (finReserva.isAfter(horaActual)) {
+      horaActual = finReserva;
+    }
   }
-};
 
-const verificarDisponibilidadHora = (horaReserva, horasDisponibles) => {
-  if (!horasDisponibles.includes(horaReserva))
-    throw new Error("Hora no disponible");
-};
-
-// 🔹 Verifica conflicto con reservas existentes
-const verificarReservaExistente = async (
-  barbero,
-  fechaObj,
-  horaReserva,
-  excepciones
-) => {
-  const esHoraExtra = excepciones.some(
-    (e) => e.tipo === "extra" && formatHora(e.horaInicio) === horaReserva
-  );
-  if (!esHoraExtra) {
-    const horaFinReserva = new Date(fechaObj);
-    horaFinReserva.setHours(horaFinReserva.getHours() + 1);
-    const reservaExistente = await Reserva.findOne({
-      barbero,
-      fecha: { $gte: fechaObj, $lt: horaFinReserva },
-    });
-    if (reservaExistente) throw new Error("Hora ya reservada");
+  // Agregar hueco final (si hay)
+  if (horaActual.isBefore(diaCompleto.fin)) {
+    const duracionHueco = diaCompleto.fin.diff(horaActual, "minute");
+    if (duracionHueco > 0) {
+      huecos.push({
+        inicio: horaActual,
+        fin: diaCompleto.fin,
+        duracion: duracionHueco,
+      });
+    }
   }
+
+  return huecos;
 };
 
-// 🔹 Controlador principal: Crear una nueva reserva CORREGIDO
+// 🔹 Controlador principal: Crear una nueva reserva - VERSIÓN CON HUECOS
 export const createReserva = async (req, res) => {
   try {
     const { barbero, servicio, fecha, hora, cliente } = req.body;
 
-    if (!barbero || !servicio || !fecha || !hora || !cliente)
-      throw new Error("Todos los campos son obligatorios");
+    if (!barbero || !servicio || !fecha || !hora || !cliente) {
+      return res
+        .status(400)
+        .json({ message: "Todos los campos son obligatorios" });
+    }
 
-    // ✅ CORRECCIÓN: Crear la fecha en hora de Chile explícitamente
+    console.log("🔄 createReserva INICIADO - NUEVA VERSIÓN CON HUECOS");
+    console.log("📥 Datos recibidos:", {
+      barbero,
+      servicio,
+      fecha,
+      hora,
+      cliente,
+    });
+
+    // ==============================
+    // FECHA EN CHILE
+    // ==============================
+    const ahoraChile = dayjs().tz("America/Santiago");
     const fechaCompletaChile = dayjs.tz(
       `${fecha} ${formatHora(hora)}`,
       "YYYY-MM-DD HH:mm",
       "America/Santiago"
     );
 
-    // Convertir a UTC para guardar en DB
+    if (!fechaCompletaChile.isValid()) {
+      return res.status(400).json({ message: "Fecha u hora inválida" });
+    }
+
     const fechaCompletaUTC = fechaCompletaChile.utc();
-
     const fechaObj = fechaCompletaUTC.toDate();
-
     const diaSemana = fechaCompletaChile.day();
 
-    // Cliente
+    console.log(
+      "📅 Fecha Chile:",
+      fechaCompletaChile.format("YYYY-MM-DD HH:mm")
+    );
+    console.log("📅 Día semana:", diaSemana, "(0=domingo, 1=lunes, etc.)");
+
+    // ==============================
+    // CLIENTE
+    // ==============================
     const clienteDoc = await usuarioModel.findById(cliente);
     if (!clienteDoc)
       return res.status(404).json({ message: "Cliente no encontrado" });
 
-    // ✅ Validar rango de días según plan y fecha de suscripción
-    const diasPermitidos = clienteDoc.suscrito ? 31 : 15;
-    let limite = dayjs().tz("America/Santiago").add(diasPermitidos, "day");
+    // ==============================
+    // VALIDAR SÁBADO
+    // ==============================
+    const esBarbero = clienteDoc.rol === "barbero";
+    const esSuscrito = clienteDoc.suscrito;
 
-    // Validación sábado
-    await validarSabadino(clienteDoc, diaSemana);
+    if (diaSemana === 6 && !esBarbero) {
+      const suscripcionActiva = await suscripcionModel.findOne({
+        usuario: cliente,
+        activa: true,
+        fechaInicio: { $lte: new Date() },
+        fechaFin: { $gte: new Date() },
+      });
 
-    // Barbero
+      if (!suscripcionActiva && !esSuscrito) {
+        return res.status(403).json({
+          message:
+            "Las reservas de los sábados son solo para suscriptores activos o barberos",
+        });
+      }
+    }
+
+    // ==============================
+    // BARBERO
+    // ==============================
     const barberoDoc = await usuarioModel
       .findById(barbero)
       .populate("horariosDisponibles");
     if (!barberoDoc)
       return res.status(404).json({ message: "Barbero no encontrado" });
 
-    // Horarios del día
-    const horariosDelDia = barberoDoc.horariosDisponibles.filter(
-      (h) => Number(h.dia) === diaSemana
+    console.log("💈 Barbero:", barberoDoc.nombre);
+
+    // ==============================
+    // SERVICIO + DURACIÓN REAL + INTERVALO MÍNIMO
+    // ==============================
+    const barberoServicio = await barberoServicioModel
+      .findOne({ barbero, servicio, activo: true })
+      .populate("servicio");
+
+    if (!barberoServicio) {
+      return res
+        .status(400)
+        .json({ message: "El servicio no está disponible para este barbero" });
+    }
+
+    const duracionServicio = barberoServicio.duracion;
+    const precioServicio = barberoServicio.precio;
+    const nombreServicio = barberoServicio.servicio.nombre;
+    // 🆕 NUEVO: Intervalo mínimo
+    const intervaloMinimo = barberoServicio.intervaloMinimo || 15;
+
+    console.log("⏱️ Duración del servicio:", duracionServicio, "minutos");
+    console.log("📐 Intervalo mínimo:", intervaloMinimo, "minutos");
+    console.log("💰 Precio:", precioServicio);
+    console.log("✂️ Servicio:", nombreServicio);
+
+    // ==============================
+    // HORARIOS DEL DÍA
+    // ==============================
+    let horariosDelDia = barberoDoc.horariosDisponibles.filter(
+      (h) => Number(h.diaSemana) === diaSemana
     );
 
-    // ✅ CORRECCIÓN: Usar las mismas fechas Chile para las búsquedas
-    const inicioDiaChile = fechaCompletaChile.startOf("day").toDate();
-    const finDiaChile = fechaCompletaChile.endOf("day").toDate();
+    console.log("📅 Horarios para este día:", horariosDelDia.length);
 
-    // Excepciones (bloqueos y horas extra)
+    // Si no encuentra con diaSemana, prueba con dia
+    if (horariosDelDia.length === 0) {
+      console.log("DEBUG - Probando con .dia en lugar de .diaSemana");
+      horariosDelDia = barberoDoc.horariosDisponibles.filter(
+        (h) => Number(h.dia) === diaSemana
+      );
+    }
+
+    if (horariosDelDia.length === 0) {
+      return res.status(400).json({
+        message: "El barbero no trabaja este día",
+        diaSemana: diaSemana,
+      });
+    }
+
+    // ==============================
+    // EXCEPCIONES
+    // ==============================
+    const inicioDiaUTC = fechaCompletaChile.startOf("day").utc().toDate();
+    const finDiaUTC = fechaCompletaChile.endOf("day").utc().toDate();
+
     const excepciones = await excepcionHorarioModel.find({
-      barbero,
-      fecha: { $gte: inicioDiaChile, $lte: finDiaChile },
+      barbero: barbero,
+      fecha: { $gte: inicioDiaUTC, $lt: finDiaUTC },
     });
 
-    // Horas disponibles
-    const horasDisponibles = await obtenerHorasDisponibles(
-      horariosDelDia,
-      excepciones,
-      barbero,
-      fecha
+    const horasBloqueadas = excepciones
+      .filter((e) => e.tipo === "bloqueo")
+      .map((e) => dayjs(e.fecha).tz("America/Santiago").format("HH:mm"));
+
+    console.log("🚫 Horas bloqueadas:", horasBloqueadas.length);
+
+    // ==============================
+    // RESERVAS EXISTENTES (EXCLUYENDO LA ACTUAL SI SE ESTÁ EDITANDO)
+    // ==============================
+    const reservasDelDia = await Reserva.find({
+      barbero: barbero,
+      fecha: {
+        $gte: fechaCompletaChile.startOf("day").toDate(),
+        $lt: fechaCompletaChile.endOf("day").toDate(),
+      },
+      estado: { $in: ["pendiente", "confirmada"] },
+      // Opcional: excluir la reserva actual si se está editando
+      // _id: { $ne: req.params.id }
+    });
+
+    console.log("📅 Reservas existentes:", reservasDelDia.length);
+
+    // ==============================
+    // NUEVA VALIDACIÓN: VERIFICAR SI LA HORA CABE EN ALGÚN HUECO
+    // ==============================
+    const horaFormateada = formatHora(hora);
+    console.log("🔍 Validando hora:", horaFormateada);
+
+    const inicioReserva = fechaCompletaChile;
+    const finReserva = fechaCompletaChile.add(duracionServicio, "minute");
+
+    console.log(
+      `🕒 Servicio: ${inicioReserva.format("HH:mm")} - ${finReserva.format(
+        "HH:mm"
+      )}`
     );
 
-    if (!horasDisponibles.includes(formatHora(hora))) {
-      throw new Error("Hora no disponible");
+    // 1. Verificar que no esté bloqueada
+    if (horasBloqueadas.includes(horaFormateada)) {
+      console.log("❌ Hora bloqueada por excepción");
+      return res.status(400).json({
+        message: "La hora está bloqueada por el barbero",
+        hora: horaFormateada,
+      });
     }
 
-    // Verificar conflicto con reservas existentes
-    const horaFinReserva = fechaCompletaChile.add(1, "hour").toDate();
-
-    const reservaExistente = await Reserva.findOne({
-      barbero,
-      fecha: { $gte: fechaObj, $lt: horaFinReserva },
-      estado: { $ne: "cancelada" },
-    });
-
-    if (reservaExistente) {
-      console.log("❌ Reserva existente encontrada:", reservaExistente);
-      throw new Error("Hora ya reservada");
+    // 2. Verificar que el inicio sea múltiplo del intervalo mínimo
+    const minutosHora = horaAminutos(horaFormateada);
+    if (minutosHora % intervaloMinimo !== 0) {
+      console.log(
+        `❌ Hora no es múltiplo del intervalo mínimo (${intervaloMinimo} min)`
+      );
+      return res.status(400).json({
+        message: `La hora debe ser múltiplo de ${intervaloMinimo} minutos`,
+        hora: horaFormateada,
+        intervaloMinimo: intervaloMinimo,
+      });
     }
 
-    const servicioDoc = await servicioModel.findById(servicio);
+    // 3. Verificar que el servicio completo quepa en algún horario del día
+    let cabeEnAlgunHorario = false;
+    let horarioValido = null;
 
-    if (!servicioDoc) {
-      return res.status(400).json({ message: "Servicio no existe" });
+    for (const horario of horariosDelDia) {
+      const horarioInicio = dayjs.tz(
+        `${fecha} ${horario.horaInicio}`,
+        "YYYY-MM-DD HH:mm",
+        "America/Santiago"
+      );
+      const horarioFin = dayjs.tz(
+        `${fecha} ${horario.horaFin}`,
+        "YYYY-MM-DD HH:mm",
+        "America/Santiago"
+      );
+
+      if (
+        inicioReserva.isSameOrAfter(horarioInicio) &&
+        finReserva.isSameOrBefore(horarioFin)
+      ) {
+        cabeEnAlgunHorario = true;
+        horarioValido = { inicio: horarioInicio, fin: horarioFin };
+        console.log(
+          `✅ Cabe en horario: ${horarioInicio.format(
+            "HH:mm"
+          )}-${horarioFin.format("HH:mm")}`
+        );
+        break;
+      }
     }
 
-    // Crear reserva
+    if (!cabeEnAlgunHorario) {
+      console.log("❌ No cabe en ningún horario del barbero");
+      return res.status(400).json({
+        message: "El servicio no cabe en el horario del barbero",
+        detalles: {
+          horaInicio: inicioReserva.format("HH:mm"),
+          horaFin: finReserva.format("HH:mm"),
+          duracion: duracionServicio,
+        },
+      });
+    }
+
+    // 4. Calcular huecos disponibles en el horario válido
+    const diaCompleto = {
+      inicio: horarioValido.inicio,
+      fin: horarioValido.fin,
+    };
+
+    const huecos = calcularHuecosDisponibles(reservasDelDia, diaCompleto);
+    console.log(`📊 Huecos disponibles: ${huecos.length}`);
+
+    // 5. Verificar si la reserva cabe en algún hueco
+    let cabeEnAlgunHueco = false;
+
+    for (const hueco of huecos) {
+      // Verificar si el servicio completo cabe en este hueco
+      const inicioCabe = inicioReserva.isSameOrAfter(hueco.inicio);
+      const finCabe = finReserva.isSameOrBefore(hueco.fin);
+
+      if (inicioCabe && finCabe) {
+        cabeEnAlgunHueco = true;
+        console.log(
+          `✅ Cabe en hueco: ${hueco.inicio.format("HH:mm")}-${hueco.fin.format(
+            "HH:mm"
+          )}`
+        );
+        break;
+      }
+    }
+
+    if (!cabeEnAlgunHueco) {
+      console.log("❌ No cabe en ningún hueco disponible");
+
+      // Mostrar información útil para debug
+      const huecosInfo = huecos.map((h) => ({
+        inicio: h.inicio.format("HH:mm"),
+        fin: h.fin.format("HH:mm"),
+        duracion: h.duracion,
+      }));
+
+      return res.status(400).json({
+        message: "No hay espacio disponible para esta reserva",
+        detalles: {
+          horaSolicitada: horaFormateada,
+          duracionServicio: duracionServicio,
+          huecosDisponibles: huecosInfo,
+        },
+      });
+    }
+
+    // 6. No permitir horas pasadas para hoy
+    if (fechaCompletaChile.isSame(ahoraChile, "day")) {
+      const buffer = ahoraChile.add(30, "minute");
+      if (inicioReserva.isBefore(buffer)) {
+        console.log("❌ Hora pasada o muy cercana");
+        return res.status(400).json({
+          message:
+            "No se pueden reservar horas pasadas o con menos de 30 minutos de anticipación",
+        });
+      }
+    }
+
+    console.log("✅ TODAS LAS VALIDACIONES PASADAS - Creando reserva...");
+
+    // ==============================
+    // CREAR RESERVA
+    // ==============================
     const nuevaReserva = await Reserva.create({
       cliente,
       barbero,
       servicio,
       fecha: fechaObj,
+      duracion: duracionServicio,
       estado: "pendiente",
+      precio: precioServicio,
     });
 
-    // 🔥 DESCONTAR SERVICIO SI TIENE SUSCRIPCIÓN ACTIVA
+    // ==============================
+    // ACTUALIZAR SUSCRIPCIÓN
+    // ==============================
     const suscripcion = await suscripcionModel.findOne({
       usuario: cliente,
       activa: true,
@@ -240,45 +397,72 @@ export const createReserva = async (req, res) => {
       fechaFin: { $gte: new Date() },
     });
 
-    if (suscripcion) {
-      // 👇 Se descuenta SOLO si todavía tiene servicios gratis disponibles
-      if (suscripcion.serviciosUsados < suscripcion.serviciosTotales) {
-        suscripcion.serviciosUsados += 1;
-        await suscripcion.save();
-      }
+    if (
+      suscripcion &&
+      suscripcion.serviciosUsados < suscripcion.serviciosTotales
+    ) {
+      suscripcion.serviciosUsados += 1;
+      await suscripcion.save();
+      console.log("✅ Suscripción actualizada");
     }
 
-    // 👌 Recién ahora mandamos la respuesta
-    res.status(201).json({
+    // ==============================
+    // RESPUESTA
+    // ==============================
+    const respuesta = {
       ...nuevaReserva.toObject(),
       fechaChile: fechaCompletaChile.format("YYYY-MM-DD HH:mm"),
-    });
+      duracion: duracionServicio,
+      precio: precioServicio,
+      nombreServicio: nombreServicio,
+      horaFin: finReserva.format("HH:mm"),
+      intervaloMinimo: intervaloMinimo,
+    };
 
-    const nombreServicio = servicioDoc.nombre;
+    console.log("✅ Reserva creada exitosamente:", respuesta._id);
+    res.status(201).json(respuesta);
 
-    await sendReservationEmail(clienteDoc.email, {
-      nombreCliente: clienteDoc.nombre,
-      nombreBarbero: barberoDoc.nombre,
-      fecha: fechaCompletaChile.format("YYYY-MM-DD"),
-      hora: formatHora(hora),
-      servicio: nombreServicio,
-    });
+    // ==============================
+    // EMAIL (en segundo plano)
+    // ==============================
+    try {
+      await sendReservationEmail(clienteDoc.email, {
+        nombreCliente: clienteDoc.nombre,
+        nombreBarbero: barberoDoc.nombre,
+        fecha: fechaCompletaChile.format("YYYY-MM-DD"),
+        hora: horaFormateada,
+        servicio: nombreServicio,
+        duracion: duracionServicio,
+        horaFin: finReserva.format("HH:mm"),
+        intervaloMinimo: intervaloMinimo,
+      });
+      console.log("✅ Email enviado");
+    } catch (emailError) {
+      console.error("⚠️ Error enviando email:", emailError);
+    }
   } catch (error) {
     console.error("❌ Error en createReserva:", error);
-    const statusCode = error.message.includes("no encontrado")
-      ? 404
-      : error.message.includes("sábado")
+    const statusCode = error.message?.includes("sábado")
       ? 403
-      : error.message.includes("disponible") ||
-        error.message.includes("reservada")
+      : error.message?.includes("disponible") ||
+        error.message?.includes("bloqueada") ||
+        error.message?.includes("cabe") ||
+        error.message?.includes("espacio") ||
+        error.message?.includes("múltiplo")
       ? 400
       : 500;
 
-    res
-      .status(statusCode)
-      .json({ message: error.message || "Error al crear la reserva" });
+    res.status(statusCode).json({
+      message: error.message || "Error al crear la reserva",
+    });
   }
 };
+
+// 🔹 Función auxiliar: Convertir HH:mm a minutos
+function horaAminutos(hora) {
+  const [h, m] = hora.split(":").map(Number);
+  return h * 60 + m;
+}
 
 export const getReservas = async (req, res) => {
   try {

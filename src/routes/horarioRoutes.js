@@ -4,17 +4,24 @@ import {
   getHorarioBasePorDia,
   getHorariosByBarbero,
   getHorasDisponibles,
+  getProximaHoraDisponible,
 } from "../controllers/horarioController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 
 const router = Router();
 
-// Rutas RESTful
+router.post("/", validarToken, createHorario);
 
-router.post("/", validarToken, createHorario); // Crear nuevo
-router.get("/:id/horarios-disponibles", validarToken, getHorasDisponibles);
+router.get("/barbero/:id/horas-disponibles", validarToken, getHorasDisponibles);
+
 router.get("/barbero/:barberoId", validarToken, getHorariosByBarbero);
-router.get("/barbero/:barberoId/horarioBase", validarToken, getHorarioBasePorDia);
+
+router.get(
+  "/barbero/:barberoId/horarioBase",
+  validarToken,
+  getHorarioBasePorDia
+);
+
+router.get("/proximaHoraDisponible", validarToken, getProximaHoraDisponible);
 
 export default router;
-  

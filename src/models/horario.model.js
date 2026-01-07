@@ -1,20 +1,31 @@
 import mongoose from "mongoose";
-const { Schema } = mongoose;
 
-const HorarioSchema = new Schema({
-  barbero: { type: Schema.Types.ObjectId, ref: "Usuario", required: true },
-  dia: {
-    type: Number, // 0 = domingo, 1 = lunes ... 6 = sábado
-    required: true,
-    min: 0,
-    max: 6,
-  },
-  bloques: [
-    {
-      horaInicio: { type: String, required: true }, // "08:00"
-      horaFin: { type: String, required: true },    // "14:00"
+const horarioSchema = new mongoose.Schema(
+  {
+    barbero: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
-  ],
-}, { timestamps: true });
+    diaSemana: {
+      type: Number, // 0 (domingo) → 6 (sábado)
+      required: true,
+    },
+    horaInicio: { type: String, required: true }, // "09:00"
+    horaFin: { type: String, required: true }, // "19:00"
 
-export default mongoose.model("Horario", HorarioSchema);
+    colacionInicio: { type: String },
+    colacionFin: { type: String },
+
+    duracionBloque: {
+      type: Number,
+      required: true,
+      default: 60, // 👈 MUY IMPORTANTE
+    },
+  },
+  { timestamps: true }
+);
+
+horarioSchema.index({ barbero: 1, diaSemana: 1 }, { unique: true });
+
+export default mongoose.model("Horario", horarioSchema);

@@ -1,21 +1,23 @@
+// utils/horas.js
 export const generarHoras = ({ horaInicio, horaFin }) => {
+  const horas = [];
+
   const [hIni, mIni] = horaInicio.split(":").map(Number);
   const [hFin, mFin] = horaFin.split(":").map(Number);
 
-  const horas = [];
-  const inicio = hIni * 60 + mIni;
+  let inicio = hIni * 60 + mIni;
   const fin = hFin * 60 + mFin;
 
-  for (let m = inicio; m < fin; m += 60) {
-    const h = String(Math.floor(m / 60)).padStart(2, "0");
-    const min = String(m % 60).padStart(2, "0");
-    horas.push(`${h}:${min}`);
-  }
-  horas.push(
-    `${String(hFin).padStart(2, "0")}:${String(mFin).padStart(2, "0")}`
-  );
+  if (inicio >= fin) return []; // seguridad
 
-  // añadir hora final manualmente
+  while (inicio < fin) {
+    const h = Math.floor(inicio / 60);
+    const m = inicio % 60;
+
+    horas.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+
+    inicio += 60; // 🔑 bloque base de 30 min
+  }
 
   return horas;
 };

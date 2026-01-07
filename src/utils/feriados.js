@@ -1,5 +1,5 @@
 // utils/feriados.js
-import Feriado from "../models/feriados.js"; // Asegúrate de importar el modelo
+import Feriado from "../models/feriados.js";
 import dayjs from "dayjs";
 import tz from "dayjs/plugin/timezone.js";
 import utc from "dayjs/plugin/utc.js";
@@ -7,7 +7,97 @@ import utc from "dayjs/plugin/utc.js";
 dayjs.extend(utc);
 dayjs.extend(tz);
 
-// utils/feriados.js - Modifica bloquearFeriado
+// Nueva función: verificar feriado con comportamiento - VERSIÓN CORREGIDA
+export const verificarFeriadoConComportamiento = async (fechaStr) => {
+  try {
+    // Validar que la fechaStr no esté vacía
+    if (!fechaStr || typeof fechaStr !== 'string') {
+      console.error("Fecha no válida recibida:", fechaStr);
+      return null;
+    }
+
+    // Validar formato básico YYYY-MM-DD
+    const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!fechaRegex.test(fechaStr)) {
+      console.error(`Formato de fecha inválido: ${fechaStr}. Se espera YYYY-MM-DD`);
+      return null;
+    }
+
+    // Parsear con dayjs directamente
+    const fechaDayjs = dayjs(fechaStr, "YYYY-MM-DD");
+    
+    if (!fechaDayjs.isValid()) {
+      console.error(`Fecha inválida después de parsear: ${fechaStr}`);
+      return null;
+    }
+
+    // Crear fechas para consulta
+    const inicioDia = fechaDayjs.startOf("day").toDate();
+    const finDia = fechaDayjs.endOf("day").toDate();
+
+    // Buscar feriado
+    const feriado = await Feriado.findOne({
+      fecha: {
+        $gte: inicioDia,
+        $lt: finDia,
+      },
+      activo: true,
+    });
+
+    if (!feriado) return null;
+
+    // Retornar objeto formateado
+    return {
+      _id: feriado._id,
+      nombre: feriado.nombre,
+      fecha: feriado.fecha,
+      fechaFormateada: dayjs(feriado.fecha).format("YYYY-MM-DD"),
+      comportamiento: feriado.comportamiento || "permitir_excepciones",
+      activo: feriado.activo,
+      // Asegurar que existe el campo
+      __comportamiento: feriado.comportamiento || "permitir_excepciones",
+    };
+  } catch (error) {
+    console.error("❌ Error en verificarFeriadoConComportamiento:", error);
+    console.error("Stack trace:", error.stack);
+    return null;
+  }
+};
+
+// OPCIONAL: Función de depuración para ver qué está pasando
+export const debugFeriadoConsulta = async (fechaStr) => {
+  console.log("🔍 DEBUG FERIADO - Inicio");
+  console.log("fechaStr recibida:", fechaStr);
+  console.log("tipo:", typeof fechaStr);
+  
+  const fechaDayjs = dayjs(fechaStr, "YYYY-MM-DD");
+  console.log("dayjs.isValid():", fechaDayjs.isValid());
+  console.log("dayjs.format():", fechaDayjs.format("YYYY-MM-DD"));
+  
+  const inicioDia = fechaDayjs.startOf("day").toDate();
+  const finDia = fechaDayjs.endOf("day").toDate();
+  
+  console.log("inicioDia (Date):", inicioDia);
+  console.log("finDia (Date):", finDia);
+  
+  try {
+    const feriado = await Feriado.findOne({
+      fecha: {
+        $gte: inicioDia,
+        $lt: finDia,
+      },
+      activo: true,
+    });
+    
+    console.log("Feriado encontrado:", feriado);
+    return feriado;
+  } catch (error) {
+    console.error("Error en consulta:", error);
+    return null;
+  }
+};
+
+// Resto de las funciones (sin cambios)
 export const bloquearFeriado = async (
   barbero,
   fechaConsulta,
@@ -51,40 +141,9 @@ export const bloquearFeriado = async (
     });
   });
 
-  // NO CREAR REGISTROS AUTOMÁTICOS
-  // Solo devolver las horas que deberían considerarse bloqueadas
   return horas;
 };
 
-// Nueva función: verificar feriado con comportamiento
-export const verificarFeriadoConComportamiento = async (fechaStr) => {
-  try {
-    const fecha = new Date(fechaStr);
-    const feriado = await Feriado.findOne({
-      fecha: {
-        $gte: dayjs(fecha).startOf("day").toDate(),
-        $lt: dayjs(fecha).endOf("day").toDate(),
-      },
-      activo: true,
-    });
-
-    if (!feriado) return null;
-
-    return {
-      _id: feriado._id,
-      nombre: feriado.nombre,
-      fecha: feriado.fecha,
-      fechaFormateada: dayjs(feriado.fecha).format("YYYY-MM-DD"),
-      comportamiento: feriado.comportamiento || "permitir_excepciones",
-      activo: feriado.activo,
-    };
-  } catch (error) {
-    console.error("❌ Error en verificarFeriadoConComportamiento:", error);
-    return null;
-  }
-};
-
-// Nueva función: determinar qué mostrar según feriado y usuario
 export const determinarVistaSegunFeriado = (
   feriado,
   usuario,
@@ -142,22 +201,20 @@ export const getHorasParaBarberoFeriado = (
     .map((e) => e.horaInicio);
 
   const horasDesbloqueadas = excepciones
-    .filter((e) => e.tipo === "desbloqueo") // ← ¡Desbloqueos, no bloqueos!
+    .filter((e) => e.tipo === "desbloqueo")
     .map((e) => e.horaInicio);
 
-  // Horas bloqueadas por feriado = todas las horas base EXCEPTO las desbloqueadas
   const horasBloqueadasPorFeriado = todasLasHoras.filter(
     (hora) => !horasDesbloqueadas.includes(hora)
   );
 
-  // Horas disponibles = las que están desbloqueadas
   const horasDisponibles = [...horasDesbloqueadas];
 
   return {
     horasExtra,
     horasBloqueadas: horasBloqueadasPorFeriado,
     horasDisponibles: horasDisponibles,
-    horasDesbloqueadas: horasDesbloqueadas, // Para debug
+    horasDesbloqueadas: horasDesbloqueadas,
     message: `FERIADO: ${feriado.nombre}. Las horas aparecen bloqueadas por defecto.`,
   };
 };

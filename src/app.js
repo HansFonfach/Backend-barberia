@@ -17,6 +17,7 @@ import RecordatoriosJob from "./jobs/recordatoriosJob.js";
 import notificacionRoutes from "./routes/notificacionRoutes.js";
 import pagosRoutes from "./routes/pagoRoutes.js";
 import canjeRoutes from "./routes/canjeRoutes.js";
+import barberoServicioRoutes from "./routes/barberoServicioRoutes.js";
 
 const app = express();
 app.use(cookieParser());
@@ -72,5 +73,6 @@ app.use("/feriados", feriadoRoutes);
 app.use("/notificaciones", notificacionRoutes);
 app.use("/pagos", pagosRoutes);
 app.use("/canjes", canjeRoutes);
+app.use("/barberoServicio", barberoServicioRoutes);
 
 export default app;

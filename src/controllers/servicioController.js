@@ -9,12 +9,15 @@ export const getServicios = async (req, res) => {
 
 export const createServicio = async (req, res) => {
   try {
-    const nuevoServicio = new Servicio(req.body);
-    const servicioCreado = await nuevoServicio.save();
-    res.status(201).json({
-      message: "Servicio creado correctamente",
-      servicioCreado,
+    const { nombre, descripcion, precio } = req.body;
+
+    const servicio = await Servicio.create({
+      nombre,
+      descripcion,
+      precio,
     });
+
+    res.status(201).json(servicio);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

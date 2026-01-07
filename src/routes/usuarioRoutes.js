@@ -17,6 +17,8 @@ router.get("/rut/:rut", validarToken, getUsuarioByRut);
 router.get("/todosLosUsuarios", validarToken, getAllUsersWithSuscripcion);
 router.get("/misPuntos", validarToken, verMisPuntos);
 
+
+
 // 📄 GENERALES
 router.get("/", validarToken, getUsuarios);
 
