@@ -20,7 +20,7 @@ dayjs.extend(timezone);
 dayjs.extend(isSameOrBefore);
 dayjs.extend(isSameOrAfter);
 
-// 🔹 Función auxiliar: Calcular huecos disponibles (MISMA que en getHorasDisponibles)
+// 🔹 Función auxiliar: Calcular huecos disponibles
 const calcularHuecosDisponibles = (reservasDelDia, diaCompleto) => {
   // Ordenar reservas por hora de inicio
   const reservasOrdenadas = [...reservasDelDia].sort((a, b) =>
@@ -31,11 +31,11 @@ const calcularHuecosDisponibles = (reservasDelDia, diaCompleto) => {
   let horaActual = diaCompleto.inicio;
 
   for (const reserva of reservasOrdenadas) {
-    const inicioReserva = dayjs(reserva.fecha);
+    // CORRECCIÓN: Convertir fecha UTC a Chile para comparar
+    const inicioReserva = dayjs(reserva.fecha).tz("America/Santiago");
     const finReserva = inicioReserva.add(reserva.duracion, "minute");
 
     if (horaActual.isBefore(inicioReserva)) {
-      // Hay un hueco antes de esta reserva
       const duracionHueco = inicioReserva.diff(horaActual, "minute");
       if (duracionHueco > 0) {
         huecos.push({
@@ -46,13 +46,11 @@ const calcularHuecosDisponibles = (reservasDelDia, diaCompleto) => {
       }
     }
 
-    // Avanzar al final de esta reserva (si es después de horaActual)
     if (finReserva.isAfter(horaActual)) {
       horaActual = finReserva;
     }
   }
 
-  // Agregar hueco final (si hay)
   if (horaActual.isBefore(diaCompleto.fin)) {
     const duracionHueco = diaCompleto.fin.diff(horaActual, "minute");
     if (duracionHueco > 0) {
@@ -67,7 +65,7 @@ const calcularHuecosDisponibles = (reservasDelDia, diaCompleto) => {
   return huecos;
 };
 
-// 🔹 Controlador principal: Crear una nueva reserva - VERSIÓN CORREGIDA
+// 🔹 Controlador principal: Versión corregida con zona horaria
 export const createReserva = async (req, res) => {
   try {
     const { barbero, servicio, fecha, hora, cliente } = req.body;
@@ -78,7 +76,7 @@ export const createReserva = async (req, res) => {
         .json({ message: "Todos los campos son obligatorios" });
     }
 
-    console.log("🔄 createReserva INICIADO");
+    console.log("🔄 createReserva - VERSIÓN CORREGIDA ZONA HORARIA");
     console.log("📥 Datos recibidos:", {
       barbero,
       servicio,
@@ -88,9 +86,12 @@ export const createReserva = async (req, res) => {
     });
 
     // ==============================
-    // FECHA EN CHILE
+    // FECHA EN CHILE (CORREGIDO)
     // ==============================
     const ahoraChile = dayjs().tz("America/Santiago");
+    console.log("🕐 Ahora en Chile:", ahoraChile.format("YYYY-MM-DD HH:mm"));
+
+    // Crear la fecha completa EN CHILE
     const fechaCompletaChile = dayjs.tz(
       `${fecha} ${formatHora(hora)}`,
       "YYYY-MM-DD HH:mm",
@@ -109,7 +110,8 @@ export const createReserva = async (req, res) => {
       "📅 Fecha Chile:",
       fechaCompletaChile.format("YYYY-MM-DD HH:mm")
     );
-    console.log("📅 Día semana:", diaSemana, "(0=domingo, 1=lunes, etc.)");
+    console.log("📅 Fecha UTC:", fechaCompletaUTC.format("YYYY-MM-DD HH:mm"));
+    console.log("📅 Día semana:", diaSemana);
 
     // ==============================
     // CLIENTE
@@ -152,7 +154,7 @@ export const createReserva = async (req, res) => {
     console.log("💈 Barbero:", barberoDoc.nombre);
 
     // ==============================
-    // SERVICIO + DURACIÓN REAL + INTERVALO MÍNIMO
+    // SERVICIO
     // ==============================
     const barberoServicio = await barberoServicioModel
       .findOne({ barbero, servicio, activo: true })
@@ -169,7 +171,7 @@ export const createReserva = async (req, res) => {
     const nombreServicio = barberoServicio.servicio.nombre;
     const intervaloMinimo = barberoServicio.intervaloMinimo || 15;
 
-    console.log("⏱️ Duración del servicio:", duracionServicio, "minutos");
+    console.log("⏱️ Duración:", duracionServicio, "minutos");
     console.log("📐 Intervalo mínimo:", intervaloMinimo, "minutos");
 
     // ==============================
@@ -179,11 +181,7 @@ export const createReserva = async (req, res) => {
       (h) => Number(h.diaSemana) === diaSemana
     );
 
-    console.log("📅 Horarios para este día:", horariosDelDia.length);
-
-    // Si no encuentra con diaSemana, prueba con dia
     if (horariosDelDia.length === 0) {
-      console.log("DEBUG - Probando con .dia en lugar de .diaSemana");
       horariosDelDia = barberoDoc.horariosDisponibles.filter(
         (h) => Number(h.dia) === diaSemana
       );
@@ -197,24 +195,36 @@ export const createReserva = async (req, res) => {
     }
 
     // ==============================
-    // EXCEPCIONES
+    // EXCEPCIONES (CORREGIDO)
     // ==============================
-    const inicioDiaUTC = fechaCompletaChile.startOf("day").utc().toDate();
-    const finDiaUTC = fechaCompletaChile.endOf("day").utc().toDate();
+    // Obtener límites del día EN CHILE primero
+    const inicioDiaChile = fechaCompletaChile.startOf("day");
+    const finDiaChile = fechaCompletaChile.endOf("day");
+
+    // Convertir a UTC para consulta MongoDB
+    const inicioDiaUTC = inicioDiaChile.utc().toDate();
+    const finDiaUTC = finDiaChile.utc().toDate();
+
+    console.log(
+      "🌅 Inicio día Chile:",
+      inicioDiaChile.format("YYYY-MM-DD HH:mm")
+    );
+    console.log("🌃 Fin día Chile:", finDiaChile.format("YYYY-MM-DD HH:mm"));
 
     const excepciones = await excepcionHorarioModel.find({
       barbero: barbero,
       fecha: { $gte: inicioDiaUTC, $lt: finDiaUTC },
     });
 
+    // CORRECCIÓN: Convertir fechas UTC a Chile para comparar
     const horasBloqueadas = excepciones
       .filter((e) => e.tipo === "bloqueo")
       .map((e) => dayjs(e.fecha).tz("America/Santiago").format("HH:mm"));
 
-    console.log("🚫 Horas bloqueadas:", horasBloqueadas.length);
+    console.log("🚫 Horas bloqueadas:", horasBloqueadas);
 
     // ==============================
-    // RESERVAS EXISTENTES
+    // RESERVAS EXISTENTES (CORREGIDO)
     // ==============================
     const reservasDelDia = await Reserva.find({
       barbero,
@@ -225,10 +235,10 @@ export const createReserva = async (req, res) => {
       estado: { $in: ["pendiente", "confirmada"] },
     });
 
-    console.log("📅 Reservas existentes:", reservasDelDia.length);
+    console.log("📅 Reservas existentes encontradas:", reservasDelDia.length);
 
     // ==============================
-    // VALIDACIÓN CORREGIDA: Verificar disponibilidad sin considerar reservas futuras
+    // VALIDACIÓN CORREGIDA CON ZONA HORARIA
     // ==============================
     const horaFormateada = formatHora(hora);
     console.log("🔍 Validando hora:", horaFormateada);
@@ -237,9 +247,9 @@ export const createReserva = async (req, res) => {
     const finReserva = fechaCompletaChile.add(duracionServicio, "minute");
 
     console.log(
-      `🕒 Servicio: ${inicioReserva.format("HH:mm")} - ${finReserva.format(
+      `🕒 Servicio solicitado: ${inicioReserva.format(
         "HH:mm"
-      )}`
+      )} - ${finReserva.format("HH:mm")} (${duracionServicio} min)`
     );
 
     // 1. Verificar que no esté bloqueada
@@ -251,12 +261,10 @@ export const createReserva = async (req, res) => {
       });
     }
 
-    // 2. Verificar que el inicio sea múltiplo del intervalo mínimo
+    // 2. Verificar intervalo mínimo
     const minutosHora = horaAminutos(horaFormateada);
     if (minutosHora % intervaloMinimo !== 0) {
-      console.log(
-        `❌ Hora no es múltiplo del intervalo mínimo (${intervaloMinimo} min)`
-      );
+      console.log(`❌ Hora no es múltiplo de ${intervaloMinimo} min`);
       return res.status(400).json({
         message: `La hora debe ser múltiplo de ${intervaloMinimo} minutos`,
         hora: horaFormateada,
@@ -264,9 +272,8 @@ export const createReserva = async (req, res) => {
       });
     }
 
-    // 3. Verificar que el servicio completo quepa en algún horario del día
+    // 3. Verificar horario del barbero
     let horarioValido = null;
-
     for (const horario of horariosDelDia) {
       const horarioInicio = dayjs.tz(
         `${fecha} ${horario.horaInicio}`,
@@ -294,7 +301,7 @@ export const createReserva = async (req, res) => {
     }
 
     if (!horarioValido) {
-      console.log("❌ No cabe en ningún horario del barbero");
+      console.log("❌ No cabe en horarios del barbero");
       return res.status(400).json({
         message: "El servicio no cabe en el horario del barbero",
         detalles: {
@@ -305,9 +312,24 @@ export const createReserva = async (req, res) => {
       });
     }
 
-    // 4. CORRECCIÓN PRINCIPAL: Validar colisiones solo con reservas existentes
-    // (no con la que estamos creando)
-    const hayColision = reservasDelDia.some((reservaExistente) => {
+    // 4. VALIDACIÓN DE COLISIONES CORREGIDA (con zona horaria)
+    let hayColision = false;
+
+    // Log para debug: mostrar todas las reservas existentes en Chile
+    console.log("🔍 Revisando colisiones con reservas existentes:");
+    reservasDelDia.forEach((reserva, index) => {
+      const inicioExistente = dayjs(reserva.fecha).tz("America/Santiago");
+      const finExistente = inicioExistente.add(reserva.duracion, "minute");
+
+      console.log(
+        `   Reserva ${index + 1}: ${inicioExistente.format(
+          "HH:mm"
+        )}-${finExistente.format("HH:mm")} (${reserva.duracion} min)`
+      );
+    });
+
+    for (const reservaExistente of reservasDelDia) {
+      // CORRECCIÓN CRÍTICA: Convertir fecha UTC a Chile
       const inicioExistente = dayjs(reservaExistente.fecha).tz(
         "America/Santiago"
       );
@@ -316,35 +338,47 @@ export const createReserva = async (req, res) => {
         "minute"
       );
 
-      // Verificar si hay solapamiento
+      // Verificar solapamiento
+      // Caso 1: Nueva reserva empieza DENTRO de una existente
+      // Caso 2: Nueva reserva termina DENTRO de una existente
+      // Caso 3: Nueva reserva envuelve a una existente
+      // Caso 4: Son exactamente iguales
+
       const seSolapan =
+        // Caso 1 y 2: Solapamiento parcial
         (inicioReserva.isBefore(finExistente) &&
           finReserva.isAfter(inicioExistente)) ||
-        inicioReserva.isSame(inicioExistente);
+        // Caso 3: Nueva reserva envuelve existente
+        (inicioReserva.isSameOrBefore(inicioExistente) &&
+          finReserva.isSameOrAfter(finExistente)) ||
+        // Caso 4: Son iguales
+        (inicioReserva.isSame(inicioExistente) &&
+          finReserva.isSame(finExistente));
 
       if (seSolapan) {
         console.log(
-          `⚠️ Colisión con reserva existente: ${inicioExistente.format(
+          `⚠️ COLISIÓN detectada: ${inicioExistente.format(
             "HH:mm"
           )}-${finExistente.format("HH:mm")}`
         );
+        hayColision = true;
+        break;
       }
-
-      return seSolapan;
-    });
+    }
 
     if (hayColision) {
-      console.log("❌ Colisión detectada con reserva existente");
+      console.log("❌ Colisión con reserva existente");
       return res.status(400).json({
-        message: "La hora ya está ocupada",
+        message: "La hora ya está ocupada o se solapa con otra reserva",
         detalles: {
           horaSolicitada: horaFormateada,
           duracionServicio: duracionServicio,
+          horaFin: finReserva.format("HH:mm"),
         },
       });
     }
 
-    // 5. No permitir horas pasadas para hoy
+    // 5. No permitir horas pasadas
     if (fechaCompletaChile.isSame(ahoraChile, "day")) {
       const buffer = ahoraChile.add(30, "minute");
       if (inicioReserva.isBefore(buffer)) {
@@ -354,6 +388,48 @@ export const createReserva = async (req, res) => {
             "No se pueden reservar horas pasadas o con menos de 30 minutos de anticipación",
         });
       }
+    }
+
+    // ==============================
+    // VALIDACIÓN CON HUECOS (OPCIONAL - para debug)
+    // ==============================
+    // Esto solo es para verificar, no para bloquear
+    const diaCompleto = {
+      inicio: horarioValido.inicio,
+      fin: horarioValido.fin,
+    };
+
+    const huecos = calcularHuecosDisponibles(reservasDelDia, diaCompleto);
+    console.log(`📊 Huecos disponibles: ${huecos.length}`);
+    huecos.forEach((hueco, i) => {
+      console.log(
+        `   Hueco ${i + 1}: ${hueco.inicio.format("HH:mm")}-${hueco.fin.format(
+          "HH:mm"
+        )} (${hueco.duracion} min)`
+      );
+    });
+
+    // Verificar si la nueva reserva debería caber en algún hueco
+    let cabeEnAlgunHueco = false;
+    for (const hueco of huecos) {
+      if (
+        inicioReserva.isSameOrAfter(hueco.inicio) &&
+        finReserva.isSameOrBefore(hueco.fin)
+      ) {
+        cabeEnAlgunHueco = true;
+        console.log(
+          `✅ Reserva cabe en hueco: ${hueco.inicio.format(
+            "HH:mm"
+          )}-${hueco.fin.format("HH:mm")}`
+        );
+        break;
+      }
+    }
+
+    if (!cabeEnAlgunHueco && huecos.length > 0) {
+      console.log(
+        "⚠️ ADVERTENCIA: La reserva no cabe en ningún hueco según cálculo de huecos"
+      );
     }
 
     console.log("✅ TODAS LAS VALIDACIONES PASADAS - Creando reserva...");
@@ -407,7 +483,7 @@ export const createReserva = async (req, res) => {
     res.status(201).json(respuesta);
 
     // ==============================
-    // EMAIL (en segundo plano)
+    // EMAIL
     // ==============================
     try {
       await sendReservationEmail(clienteDoc.email, {
@@ -442,7 +518,7 @@ export const createReserva = async (req, res) => {
   }
 };
 
-// Función auxiliar para convertir hora a minutos (si no la tienes)
+// Función auxiliar para convertir hora a minutos
 function horaAminutos(hora) {
   const [horas, minutos] = hora.split(":").map(Number);
   return horas * 60 + minutos;
