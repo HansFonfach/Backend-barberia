@@ -267,7 +267,7 @@ export const getHorasDisponibles = async (req, res) => {
 
                 if (
                   fechaConsulta.isSame(ahoraChile, "day") &&
-                  inicio.isBefore(ahoraChile.add(30, "minute"))
+                  inicio.isBefore(ahoraChile.add(60, "minute"))
                 ) {
                   continue;
                 }
