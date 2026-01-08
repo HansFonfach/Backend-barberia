@@ -21,6 +21,7 @@ dayjs.extend(isSameOrBefore);
 dayjs.extend(isSameOrAfter);
 
 // 🔹 Función auxiliar: Calcular huecos disponibles
+// 🔹 Función auxiliar: Calcular huecos disponibles - VERSIÓN CORREGIDA
 const calcularHuecosDisponibles = (reservasDelDia, diaCompleto) => {
   // Ordenar reservas por hora de inicio
   const reservasOrdenadas = [...reservasDelDia].sort((a, b) =>
@@ -31,23 +32,44 @@ const calcularHuecosDisponibles = (reservasDelDia, diaCompleto) => {
   let horaActual = diaCompleto.inicio;
 
   for (const reserva of reservasOrdenadas) {
-    // CORRECCIÓN: Convertir fecha UTC a Chile para comparar
+    // ✅ CORREGIDO: Convertir fecha UTC a Chile
     const inicioReserva = dayjs(reserva.fecha).tz("America/Santiago");
     const finReserva = inicioReserva.add(reserva.duracion, "minute");
 
-    if (horaActual.isBefore(inicioReserva)) {
-      const duracionHueco = inicioReserva.diff(horaActual, "minute");
+    console.log(
+      `  Procesando reserva: ${inicioReserva.format(
+        "HH:mm"
+      )} - ${finReserva.format("HH:mm")}`
+    );
+
+    // Solo considerar reservas que estén dentro del bloque actual
+    if (
+      finReserva.isBefore(diaCompleto.inicio) ||
+      inicioReserva.isAfter(diaCompleto.fin)
+    ) {
+      continue;
+    }
+
+    // Ajustar inicioReserva si está antes del bloque
+    const inicioReservaAjustado = inicioReserva.isBefore(diaCompleto.inicio)
+      ? diaCompleto.inicio
+      : inicioReserva;
+
+    if (horaActual.isBefore(inicioReservaAjustado)) {
+      const duracionHueco = inicioReservaAjustado.diff(horaActual, "minute");
       if (duracionHueco > 0) {
         huecos.push({
           inicio: horaActual,
-          fin: inicioReserva,
+          fin: inicioReservaAjustado,
           duracion: duracionHueco,
         });
       }
     }
 
     if (finReserva.isAfter(horaActual)) {
-      horaActual = finReserva;
+      horaActual = finReserva.isAfter(diaCompleto.fin)
+        ? diaCompleto.fin
+        : finReserva;
     }
   }
 
