@@ -23,7 +23,7 @@ dayjs.extend(isSameOrBefore);
 const calcularHuecosDisponibles = (reservasDelDia, bloque) => {
   const reservasFiltradas = reservasDelDia
     .map((r) => {
-      const inicio = dayjs(r.fecha);
+      const inicio = dayjs(r.fecha).tz("America/Santiago"); // ✅ FIX
       const fin = inicio.add(r.duracion, "minute");
       return { inicio, fin };
     })

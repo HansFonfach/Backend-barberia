@@ -20,8 +20,7 @@ dayjs.extend(timezone);
 dayjs.extend(isSameOrBefore);
 dayjs.extend(isSameOrAfter);
 
-// 🔹 Función auxiliar: Calcular huecos disponibles
-// 🔹 Función auxiliar: Calcular huecos disponibles - VERSIÓN CORREGIDA
+
 const calcularHuecosDisponibles = (reservasDelDia, diaCompleto) => {
   // Ordenar reservas por hora de inicio
   const reservasOrdenadas = [...reservasDelDia].sort((a, b) =>
