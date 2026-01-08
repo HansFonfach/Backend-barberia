@@ -67,7 +67,7 @@ const calcularHuecosDisponibles = (reservasDelDia, diaCompleto) => {
   return huecos;
 };
 
-// 🔹 Controlador principal: Crear una nueva reserva - VERSIÓN CON HUECOS
+// 🔹 Controlador principal: Crear una nueva reserva - VERSIÓN CORREGIDA
 export const createReserva = async (req, res) => {
   try {
     const { barbero, servicio, fecha, hora, cliente } = req.body;
@@ -78,7 +78,7 @@ export const createReserva = async (req, res) => {
         .json({ message: "Todos los campos son obligatorios" });
     }
 
-    console.log("🔄 createReserva INICIADO - NUEVA VERSIÓN CON HUECOS");
+    console.log("🔄 createReserva INICIADO");
     console.log("📥 Datos recibidos:", {
       barbero,
       servicio,
@@ -167,13 +167,10 @@ export const createReserva = async (req, res) => {
     const duracionServicio = barberoServicio.duracion;
     const precioServicio = barberoServicio.precio;
     const nombreServicio = barberoServicio.servicio.nombre;
-    // 🆕 NUEVO: Intervalo mínimo
     const intervaloMinimo = barberoServicio.intervaloMinimo || 15;
 
     console.log("⏱️ Duración del servicio:", duracionServicio, "minutos");
     console.log("📐 Intervalo mínimo:", intervaloMinimo, "minutos");
-    console.log("💰 Precio:", precioServicio);
-    console.log("✂️ Servicio:", nombreServicio);
 
     // ==============================
     // HORARIOS DEL DÍA
@@ -217,23 +214,21 @@ export const createReserva = async (req, res) => {
     console.log("🚫 Horas bloqueadas:", horasBloqueadas.length);
 
     // ==============================
-    // RESERVAS EXISTENTES (EXCLUYENDO LA ACTUAL SI SE ESTÁ EDITANDO)
+    // RESERVAS EXISTENTES
     // ==============================
     const reservasDelDia = await Reserva.find({
-      barbero: barbero,
+      barbero,
       fecha: {
-        $gte: fechaCompletaChile.startOf("day").toDate(),
-        $lt: fechaCompletaChile.endOf("day").toDate(),
+        $gte: inicioDiaUTC,
+        $lt: finDiaUTC,
       },
       estado: { $in: ["pendiente", "confirmada"] },
-      // Opcional: excluir la reserva actual si se está editando
-      // _id: { $ne: req.params.id }
     });
 
     console.log("📅 Reservas existentes:", reservasDelDia.length);
 
     // ==============================
-    // NUEVA VALIDACIÓN: VERIFICAR SI LA HORA CABE EN ALGÚN HUECO
+    // VALIDACIÓN CORREGIDA: Verificar disponibilidad sin considerar reservas futuras
     // ==============================
     const horaFormateada = formatHora(hora);
     console.log("🔍 Validando hora:", horaFormateada);
@@ -270,7 +265,6 @@ export const createReserva = async (req, res) => {
     }
 
     // 3. Verificar que el servicio completo quepa en algún horario del día
-    let cabeEnAlgunHorario = false;
     let horarioValido = null;
 
     for (const horario of horariosDelDia) {
@@ -289,7 +283,6 @@ export const createReserva = async (req, res) => {
         inicioReserva.isSameOrAfter(horarioInicio) &&
         finReserva.isSameOrBefore(horarioFin)
       ) {
-        cabeEnAlgunHorario = true;
         horarioValido = { inicio: horarioInicio, fin: horarioFin };
         console.log(
           `✅ Cabe en horario: ${horarioInicio.format(
@@ -300,7 +293,7 @@ export const createReserva = async (req, res) => {
       }
     }
 
-    if (!cabeEnAlgunHorario) {
+    if (!horarioValido) {
       console.log("❌ No cabe en ningún horario del barbero");
       return res.status(400).json({
         message: "El servicio no cabe en el horario del barbero",
@@ -312,55 +305,46 @@ export const createReserva = async (req, res) => {
       });
     }
 
-    // 4. Calcular huecos disponibles en el horario válido
-    const diaCompleto = {
-      inicio: horarioValido.inicio,
-      fin: horarioValido.fin,
-    };
+    // 4. CORRECCIÓN PRINCIPAL: Validar colisiones solo con reservas existentes
+    // (no con la que estamos creando)
+    const hayColision = reservasDelDia.some((reservaExistente) => {
+      const inicioExistente = dayjs(reservaExistente.fecha).tz(
+        "America/Santiago"
+      );
+      const finExistente = inicioExistente.add(
+        reservaExistente.duracion,
+        "minute"
+      );
 
-    const huecos = calcularHuecosDisponibles(reservasDelDia, diaCompleto);
-    console.log(`📊 Huecos disponibles: ${huecos.length}`);
+      // Verificar si hay solapamiento
+      const seSolapan =
+        (inicioReserva.isBefore(finExistente) &&
+          finReserva.isAfter(inicioExistente)) ||
+        inicioReserva.isSame(inicioExistente);
 
-    // 5. Verificar si la reserva cabe en algún hueco
-    let cabeEnAlgunHueco = false;
-
-    for (const hueco of huecos) {
-      // Verificar si el servicio completo cabe en este hueco
-      const inicioCabe = inicioReserva.isSameOrAfter(hueco.inicio);
-      const finCabe = finReserva.isSameOrBefore(hueco.fin);
-
-      if (inicioCabe && finCabe) {
-        cabeEnAlgunHueco = true;
+      if (seSolapan) {
         console.log(
-          `✅ Cabe en hueco: ${hueco.inicio.format("HH:mm")}-${hueco.fin.format(
+          `⚠️ Colisión con reserva existente: ${inicioExistente.format(
             "HH:mm"
-          )}`
+          )}-${finExistente.format("HH:mm")}`
         );
-        break;
       }
-    }
 
-    if (!cabeEnAlgunHueco) {
-      console.log("❌ No cabe en ningún hueco disponible");
+      return seSolapan;
+    });
 
-      // Mostrar información útil para debug
-      const huecosInfo = huecos.map((h) => ({
-        inicio: h.inicio.format("HH:mm"),
-        fin: h.fin.format("HH:mm"),
-        duracion: h.duracion,
-      }));
-
+    if (hayColision) {
+      console.log("❌ Colisión detectada con reserva existente");
       return res.status(400).json({
-        message: "No hay espacio disponible para esta reserva",
+        message: "La hora ya está ocupada",
         detalles: {
           horaSolicitada: horaFormateada,
           duracionServicio: duracionServicio,
-          huecosDisponibles: huecosInfo,
         },
       });
     }
 
-    // 6. No permitir horas pasadas para hoy
+    // 5. No permitir horas pasadas para hoy
     if (fechaCompletaChile.isSame(ahoraChile, "day")) {
       const buffer = ahoraChile.add(30, "minute");
       if (inicioReserva.isBefore(buffer)) {
@@ -458,10 +442,10 @@ export const createReserva = async (req, res) => {
   }
 };
 
-// 🔹 Función auxiliar: Convertir HH:mm a minutos
+// Función auxiliar para convertir hora a minutos (si no la tienes)
 function horaAminutos(hora) {
-  const [h, m] = hora.split(":").map(Number);
-  return h * 60 + m;
+  const [horas, minutos] = hora.split(":").map(Number);
+  return horas * 60 + minutos;
 }
 
 export const getReservas = async (req, res) => {
