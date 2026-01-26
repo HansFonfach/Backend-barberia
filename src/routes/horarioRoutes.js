@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   createHorario,
+  deleteHorarioBarberoDia,
   getHorarioBasePorDia,
   getHorariosByBarbero,
   getHorasDisponibles,
@@ -16,10 +17,16 @@ router.get("/barbero/:id/horas-disponibles", validarToken, getHorasDisponibles);
 
 router.get("/barbero/:barberoId", validarToken, getHorariosByBarbero);
 
+router.delete(
+  "/barbero/:barberoId/dia/:diaSemana",
+  validarToken,
+  deleteHorarioBarberoDia,
+);
+
 router.get(
   "/barbero/:barberoId/horarioBase",
   validarToken,
-  getHorarioBasePorDia
+  getHorarioBasePorDia,
 );
 
 router.get("/proximaHoraDisponible", validarToken, getProximaHoraDisponible);

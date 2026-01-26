@@ -11,6 +11,8 @@ export const createServicio = async (req, res) => {
   try {
     const { nombre, descripcion, precio } = req.body;
 
+    console.log(descripcion);
+
     const servicio = await Servicio.create({
       nombre,
       descripcion,

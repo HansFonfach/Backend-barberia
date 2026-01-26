@@ -645,7 +645,7 @@ export const postDeleteReserva = async (req, res) => {
 
     return res.status(200).json({
       message:
-        "Reserva eliminada, puntos actualizados y notificaciones enviadas",
+        "Reserva cancelada, te enviaremos un mail confirmando la cancelación de tu hora.",
       reserva: existeReserva,
       notificacionesEnviadas: notificaciones.length,
     });

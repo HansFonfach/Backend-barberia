@@ -11,6 +11,7 @@ import { verificarFeriadoConComportamiento } from "../utils/feriados.js";
 import { generarBloquesDesdeHorario } from "../utils/generarBloquesDesdeHorario.js";
 import barberoServicioModel from "../models/barberoServicio.model.js";
 import suscripcionModel from "../models/suscripcion.model.js";
+import horarioModel from "../models/horario.model.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -353,16 +354,6 @@ export const createHorario = async (req, res) => {
       duracionBloque,
     } = req.body;
 
-    console.log(
-      barbero,
-      diaSemana,
-      horaInicio,
-      horaFin,
-      colacionInicio,
-      colacionFin,
-      duracionBloque,
-    );
-
     if (
       !barbero ||
       diaSemana === undefined ||
@@ -422,13 +413,39 @@ export const createHorario = async (req, res) => {
 export const getHorariosByBarbero = async (req, res) => {
   try {
     const { barberoId } = req.params;
+
     const horarios = await horarioModel.find({ barbero: barberoId });
-    if (!horarios) {
-      return res
-        .status(404)
-        .json({ message: "El barbero aún no tiene un horario asignado" });
+
+    if (!horarios.length) {
+      return res.status(404).json({
+        message: "El barbero aún no tiene un horario asignado",
+      });
     }
+
     res.status(200).json(horarios);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const deleteHorarioBarberoDia = async (req, res) => {
+  try {
+    const { barberoId, diaSemana } = req.params;
+
+    if (!barberoId || diaSemana === undefined) {
+      return res
+        .status(400)
+        .json({ message: "barbero o dia de semana no encontrado" });
+    }
+
+    const eliminado = await horarioModel.findOneAndDelete({
+      barbero: barberoId,
+      diaSemana: Number(diaSemana),
+    });
+
+    return res.status(200).json({
+      message: eliminado ? "Horario eliminado" : "No existía horario",
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
