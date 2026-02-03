@@ -1,6 +1,7 @@
 import suscripcionModel from "../models/suscripcion.model.js";
 import usuarioModel from "../models/usuario.model.js";
 import Usuario from "../models/usuario.model.js";
+import bcrypt from "bcryptjs";
 
 //obtener todos los usuarios
 export const getUsuarios = async (req, res) => {
@@ -26,8 +27,8 @@ export const getUsuarioById = async (req, res) => {
   }
 };
 
-// controllers/usuarioController.js
-// controllers/usuario.controller.js
+
+
 export const getUsuarioByRut = async (req, res) => {
   const { rut } = req.params;
 
@@ -47,7 +48,7 @@ export const getUsuarioByRut = async (req, res) => {
     // 2. Si no encuentra, buscar con RUT limpio
     if (!usuario) {
       console.log(
-        "⚠️ No encontrado con formato original, buscando con RUT limpio..."
+        "⚠️ No encontrado con formato original, buscando con RUT limpio...",
       );
 
       // Función para limpiar RUT (quitar puntos y guión, convertir a mayúsculas)
@@ -184,7 +185,7 @@ export const getAllUsersWithSuscripcion = async (req, res) => {
           })
           .lean();
         return { ...u, suscripcion: sus || null };
-      })
+      }),
     );
 
     res.json({ usuarios: usuariosConSub }); // ← ESTE ES EL CORRECTO
@@ -210,5 +211,60 @@ export const verMisPuntos = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al obtener puntos" });
+  }
+};
+
+export const crearBarbero = async (req, res) => {
+  try {
+    const {
+      rut,
+      nombre,
+      apellido,
+      telefono,
+      email,
+      descripcion,
+      password,
+      confirmaPassword,
+    } = req.body;
+
+    if (!rut || !email || !password) {
+      return res.status(400).json({ message: "Campos obligatorios faltantes" });
+    }
+
+    if (password !== confirmaPassword) {
+      return res.status(400).json({ message: "Las contraseñas no coinciden" });
+    }
+
+    const existe = await Usuario.findOne({
+      $or: [{ rut }, { email }],
+    });
+
+    if (existe) {
+      return res
+        .status(409)
+        .json({ message: "Ya existe un usuario con ese rut o email" });
+    }
+
+    const telefonoCompleto = telefono?.startsWith("569")
+      ? telefono
+      : `569${telefono}`;
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const nuevoBarbero = await Usuario.create({
+      rut,
+      nombre,
+      apellido,
+      email,
+      telefono: telefonoCompleto,
+      descripcion,
+      rol: "barbero",
+      password: hashedPassword,
+    });
+
+    res.status(201).json(nuevoBarbero);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al crear el barbero" });
   }
 };

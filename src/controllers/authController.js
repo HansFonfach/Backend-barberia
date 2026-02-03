@@ -79,7 +79,6 @@ export const register = async (req, res) => {
     const { rut, nombre, apellido, email, telefono, password } = req.body;
 
     const telefonoCompleto = `569${telefono}`;
-    console.log(telefonoCompleto);
 
     const usuarioExistente = await Usuario.findOne({
       $or: [{ rut }, { email }],

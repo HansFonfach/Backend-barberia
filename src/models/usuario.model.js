@@ -32,10 +32,13 @@ const UsuarioSchema = new Schema(
       type: Number,
       default: 0,
     },
+    descripcion: {
+      type: String,
+    },
 
     horariosDisponibles: [{ type: Schema.Types.ObjectId, ref: "Horario" }], // solo aplica si es barbero
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 UsuarioSchema.index({ email: 1 }, { unique: true });
 export default model("Usuario", UsuarioSchema);
