@@ -8,23 +8,20 @@ import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
 import isSameOrBefore from "dayjs/plugin/isSameOrBefore.js";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter.js";
-import {
-  sendReservationEmail,
-  sendWaitlistNotificationEmail,
-} from "./mailController.js";
+import { sendReservationEmail } from "./mailController.js";
 import notificacionModel from "../models/notificacion.Model.js";
 import barberoServicioModel from "../models/barberoServicio.model.js";
+import WhatsAppService from "../services/WhatsAppService.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isSameOrBefore);
 dayjs.extend(isSameOrAfter);
 
-
 const calcularHuecosDisponibles = (reservasDelDia, diaCompleto) => {
   // Ordenar reservas por hora de inicio
   const reservasOrdenadas = [...reservasDelDia].sort((a, b) =>
-    dayjs(a.fecha).diff(dayjs(b.fecha))
+    dayjs(a.fecha).diff(dayjs(b.fecha)),
   );
 
   const huecos = [];
@@ -37,8 +34,8 @@ const calcularHuecosDisponibles = (reservasDelDia, diaCompleto) => {
 
     console.log(
       `  Procesando reserva: ${inicioReserva.format(
-        "HH:mm"
-      )} - ${finReserva.format("HH:mm")}`
+        "HH:mm",
+      )} - ${finReserva.format("HH:mm")}`,
     );
 
     // Solo considerar reservas que estén dentro del bloque actual
@@ -116,7 +113,7 @@ export const createReserva = async (req, res) => {
     const fechaCompletaChile = dayjs.tz(
       `${fecha} ${formatHora(hora)}`,
       "YYYY-MM-DD HH:mm",
-      "America/Santiago"
+      "America/Santiago",
     );
 
     if (!fechaCompletaChile.isValid()) {
@@ -129,7 +126,7 @@ export const createReserva = async (req, res) => {
 
     console.log(
       "📅 Fecha Chile:",
-      fechaCompletaChile.format("YYYY-MM-DD HH:mm")
+      fechaCompletaChile.format("YYYY-MM-DD HH:mm"),
     );
     console.log("📅 Fecha UTC:", fechaCompletaUTC.format("YYYY-MM-DD HH:mm"));
     console.log("📅 Día semana:", diaSemana);
@@ -199,12 +196,12 @@ export const createReserva = async (req, res) => {
     // HORARIOS DEL DÍA
     // ==============================
     let horariosDelDia = barberoDoc.horariosDisponibles.filter(
-      (h) => Number(h.diaSemana) === diaSemana
+      (h) => Number(h.diaSemana) === diaSemana,
     );
 
     if (horariosDelDia.length === 0) {
       horariosDelDia = barberoDoc.horariosDisponibles.filter(
-        (h) => Number(h.dia) === diaSemana
+        (h) => Number(h.dia) === diaSemana,
       );
     }
 
@@ -228,7 +225,7 @@ export const createReserva = async (req, res) => {
 
     console.log(
       "🌅 Inicio día Chile:",
-      inicioDiaChile.format("YYYY-MM-DD HH:mm")
+      inicioDiaChile.format("YYYY-MM-DD HH:mm"),
     );
     console.log("🌃 Fin día Chile:", finDiaChile.format("YYYY-MM-DD HH:mm"));
 
@@ -269,8 +266,8 @@ export const createReserva = async (req, res) => {
 
     console.log(
       `🕒 Servicio solicitado: ${inicioReserva.format(
-        "HH:mm"
-      )} - ${finReserva.format("HH:mm")} (${duracionServicio} min)`
+        "HH:mm",
+      )} - ${finReserva.format("HH:mm")} (${duracionServicio} min)`,
     );
 
     // 1. Verificar que no esté bloqueada
@@ -299,12 +296,12 @@ export const createReserva = async (req, res) => {
       const horarioInicio = dayjs.tz(
         `${fecha} ${horario.horaInicio}`,
         "YYYY-MM-DD HH:mm",
-        "America/Santiago"
+        "America/Santiago",
       );
       const horarioFin = dayjs.tz(
         `${fecha} ${horario.horaFin}`,
         "YYYY-MM-DD HH:mm",
-        "America/Santiago"
+        "America/Santiago",
       );
 
       if (
@@ -314,8 +311,8 @@ export const createReserva = async (req, res) => {
         horarioValido = { inicio: horarioInicio, fin: horarioFin };
         console.log(
           `✅ Cabe en horario: ${horarioInicio.format(
-            "HH:mm"
-          )}-${horarioFin.format("HH:mm")}`
+            "HH:mm",
+          )}-${horarioFin.format("HH:mm")}`,
         );
         break;
       }
@@ -344,19 +341,19 @@ export const createReserva = async (req, res) => {
 
       console.log(
         `   Reserva ${index + 1}: ${inicioExistente.format(
-          "HH:mm"
-        )}-${finExistente.format("HH:mm")} (${reserva.duracion} min)`
+          "HH:mm",
+        )}-${finExistente.format("HH:mm")} (${reserva.duracion} min)`,
       );
     });
 
     for (const reservaExistente of reservasDelDia) {
       // CORRECCIÓN CRÍTICA: Convertir fecha UTC a Chile
       const inicioExistente = dayjs(reservaExistente.fecha).tz(
-        "America/Santiago"
+        "America/Santiago",
       );
       const finExistente = inicioExistente.add(
         reservaExistente.duracion,
-        "minute"
+        "minute",
       );
 
       // Verificar solapamiento
@@ -379,8 +376,8 @@ export const createReserva = async (req, res) => {
       if (seSolapan) {
         console.log(
           `⚠️ COLISIÓN detectada: ${inicioExistente.format(
-            "HH:mm"
-          )}-${finExistente.format("HH:mm")}`
+            "HH:mm",
+          )}-${finExistente.format("HH:mm")}`,
         );
         hayColision = true;
         break;
@@ -425,8 +422,8 @@ export const createReserva = async (req, res) => {
     huecos.forEach((hueco, i) => {
       console.log(
         `   Hueco ${i + 1}: ${hueco.inicio.format("HH:mm")}-${hueco.fin.format(
-          "HH:mm"
-        )} (${hueco.duracion} min)`
+          "HH:mm",
+        )} (${hueco.duracion} min)`,
       );
     });
 
@@ -440,8 +437,8 @@ export const createReserva = async (req, res) => {
         cabeEnAlgunHueco = true;
         console.log(
           `✅ Reserva cabe en hueco: ${hueco.inicio.format(
-            "HH:mm"
-          )}-${hueco.fin.format("HH:mm")}`
+            "HH:mm",
+          )}-${hueco.fin.format("HH:mm")}`,
         );
         break;
       }
@@ -449,7 +446,7 @@ export const createReserva = async (req, res) => {
 
     if (!cabeEnAlgunHueco && huecos.length > 0) {
       console.log(
-        "⚠️ ADVERTENCIA: La reserva no cabe en ningún hueco según cálculo de huecos"
+        "⚠️ ADVERTENCIA: La reserva no cabe en ningún hueco según cálculo de huecos",
       );
     }
 
@@ -526,12 +523,12 @@ export const createReserva = async (req, res) => {
     const statusCode = error.message?.includes("sábado")
       ? 403
       : error.message?.includes("disponible") ||
-        error.message?.includes("bloqueada") ||
-        error.message?.includes("cabe") ||
-        error.message?.includes("espacio") ||
-        error.message?.includes("múltiplo")
-      ? 400
-      : 500;
+          error.message?.includes("bloqueada") ||
+          error.message?.includes("cabe") ||
+          error.message?.includes("espacio") ||
+          error.message?.includes("múltiplo")
+        ? 400
+        : 500;
 
     res.status(statusCode).json({
       message: error.message || "Error al crear la reserva",
@@ -627,20 +624,61 @@ export const postDeleteReserva = async (req, res) => {
 
     await Promise.all(
       notificaciones.map(async (noti) => {
-        if (noti.usuarioId?.email) {
-          await sendWaitlistNotificationEmail(noti.usuarioId.email, {
-            nombreCliente: noti.usuarioId.nombre,
-            nombreBarbero: "Nombre del Barbero",
-            fecha: noti.fecha.toLocaleDateString(),
-            hora: noti.fecha.toLocaleTimeString([], {
+        await Promise.all(
+          notificaciones.map(async (noti) => {
+            const usuario = noti.usuarioId;
+
+            if (!usuario?.telefono) {
+              console.log("⚠️ Usuario sin teléfono, se omite");
+              return;
+            }
+
+            const telefono = usuario.telefono.startsWith("+")
+              ? usuario.telefono
+              : `+${usuario.telefono}`;
+
+            const fecha = noti.fecha.toLocaleDateString("es-CL");
+            const hora = noti.fecha.toLocaleTimeString("es-CL", {
               hour: "2-digit",
               minute: "2-digit",
-            }),
-          });
-        }
+            });
+
+            const mensaje = `💈 *Hora liberada*\n
+Hola ${usuario.nombre} 👋
+
+Se liberó una hora que te interesaba:
+
+📅 *Fecha:* ${fecha}
+🕒 *Hora:* ${hora}
+
+👉 Entra ahora y resérvala antes que otro:
+${process.env.FRONTEND_URL}/reservar
+
+✂️ La Santa Barbería`;
+
+            try {
+              await WhatsAppService.client.messages.create({
+                from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+                to: `whatsapp:${telefono}`,
+                body: mensaje,
+              });
+
+              noti.enviado = true;
+              await noti.save();
+
+              console.log(`✅ WhatsApp enviado a ${usuario.nombre}`);
+            } catch (err) {
+              console.error(
+                `❌ Error enviando WhatsApp a ${usuario.nombre}:`,
+                err.message,
+              );
+            }
+          }),
+        );
+
         noti.enviado = true;
         await noti.save();
-      })
+      }),
     );
 
     return res.status(200).json({
@@ -736,7 +774,7 @@ export const getReservasPorFechaBarbero = async (req, res) => {
         // Posición EXACTA en la suscripción (1, 2, 3…)
         const posicion =
           reservasDelCliente.findIndex(
-            (r) => r._id.toString() === reserva._id.toString()
+            (r) => r._id.toString() === reserva._id.toString(),
           ) + 1;
 
         return {
@@ -746,7 +784,7 @@ export const getReservasPorFechaBarbero = async (req, res) => {
             limite: sus.serviciosTotales,
           },
         };
-      })
+      }),
     );
 
     res.json({ reservas: reservasConInfo });

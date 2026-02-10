@@ -2,29 +2,38 @@ import NotificacionHora from "../models/notificacion.Model.js";
 
 export const crearNotificacion = async (req, res) => {
   try {
-    const { fecha, horas, barberoId, usuarioId} = req.body
-    console.log(fecha, horas, barberoId, usuarioId);
+    const { fecha, hora, horas, barberoId, usuarioId } = req.body;
 
-    horas.forEach(async (hora) => {
-      const fechaHora = new Date(`${fecha}T${hora}:00`); // Combina fecha + hora
-      await NotificacionHora.create({
+    // Normalizamos a array
+    const horasFinales = horas || (hora ? [hora] : []);
+
+    if (!fecha || !barberoId || !usuarioId || horasFinales.length === 0) {
+      return res.status(400).json({
+        message: "Faltan datos para crear la notificación",
+      });
+    }
+
+    const notificaciones = [];
+
+    for (const h of horasFinales) {
+      const fechaHora = new Date(`${fecha}T${h}:00`);
+
+      const nueva = await NotificacionHora.create({
         usuarioId,
         barberoId,
-        fecha: fechaHora, // aquí ya tienes fecha+hora exacta
+        fecha: fechaHora,
         enviado: false,
       });
-    });
-    
 
-    const nueva = await NotificacionHora({
-      usuarioId,
-      barberoId,
-      fecha,
-      enviado: false,
+      notificaciones.push(nueva);
+    }
+
+    res.status(201).json({
+      message: "Notificación creada",
+      total: notificaciones.length,
     });
-    await nueva.save();
-    res.status(201).json({ message: "Notificación creada" });
   } catch (error) {
+    console.error("❌ Error crearNotificacion:", error);
     res.status(500).json({ message: error.message });
   }
 };
