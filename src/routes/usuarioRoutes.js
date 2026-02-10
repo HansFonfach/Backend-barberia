@@ -3,11 +3,11 @@ import {
   getUsuarios,
   getUsuarioById,
   updateUsuario,
-  deleteUsuario,
   getUsuarioByRut,
   getAllUsersWithSuscripcion,
   verMisPuntos,
   crearBarbero,
+  cambiarEstadoUsuario,
 } from "../controllers/usuarioController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 
@@ -25,6 +25,6 @@ router.get("/", validarToken, getUsuarios);
 router.post("/barbero/crearBarbero", validarToken, crearBarbero);
 router.get("/:id", validarToken, getUsuarioById);
 router.put("/:id", validarToken, updateUsuario);
-router.delete("/:id", validarToken, deleteUsuario);
+router.patch("/:id/estado", validarToken, cambiarEstadoUsuario);
 
 export default router;

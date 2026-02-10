@@ -86,7 +86,7 @@ export const register = async (req, res) => {
     if (usuarioExistente) {
       return res
         .status(400)
-        .json({ message: "El usuario ya existe (RUT o email)" });
+        .json({ message: "Ya existe una cuenta registrada con estos datos" });
     }
 
     const saltRounds = 10;

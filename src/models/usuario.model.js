@@ -35,6 +35,10 @@ const UsuarioSchema = new Schema(
     descripcion: {
       type: String,
     },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
 
     horariosDisponibles: [{ type: Schema.Types.ObjectId, ref: "Horario" }], // solo aplica si es barbero
   },

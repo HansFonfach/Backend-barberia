@@ -246,7 +246,7 @@ export const citasEsteMes = async (req, res) => {
     const inicioProximoMes = new Date(
       ahora.getFullYear(),
       ahora.getMonth() + 1,
-      1
+      1,
     );
 
     // Verificar si la reserva existe y su fecha
@@ -281,7 +281,7 @@ export const ultimaReserva = async (req, res) => {
     const userId = req.usuario.id;
 
     const ahoraChile = new Date(
-      new Date().toLocaleString("en-US", { timeZone: "America/Santiago" })
+      new Date().toLocaleString("en-US", { timeZone: "America/Santiago" }),
     );
 
     const ultimaReserva = await reservaModel
@@ -452,10 +452,14 @@ export const getHoraMasSolicitada = async (req, res) => {
 export const getProximoCliente = async (req, res) => {
   try {
     const ahora = new Date();
+    const barberoId = req.usuario.id;
 
     // Buscar próxima reserva
     const reserva = await reservaModel
-      .findOne({ fecha: { $gt: ahora } })
+      .findOne({
+        barbero: barberoId,
+        fecha: { $gt: ahora },
+      })
       .sort({ fecha: 1 })
       .populate("cliente", "nombre apellido")
       .lean();

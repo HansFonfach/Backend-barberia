@@ -27,8 +27,6 @@ export const getUsuarioById = async (req, res) => {
   }
 };
 
-
-
 export const getUsuarioByRut = async (req, res) => {
   const { rut } = req.params;
 
@@ -161,10 +159,22 @@ export const updateUsuario = async (req, res) => {
   }
 };
 
-//eliminar usuario
-export const deleteUsuario = async (req, res) => {
+export const cambiarEstadoUsuario = async (req, res) => {
   try {
-    res.json();
+    const { id } = req.params;
+    const { estado } = req.body; // "activo" | "inactivo"
+
+    const usuario = await Usuario.findByIdAndUpdate(
+      id,
+      { estado },
+      { new: true }
+    );
+
+    if (!usuario) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    res.json(usuario);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
