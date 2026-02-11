@@ -13,9 +13,9 @@ const router = Router();
 
 router.post("/", validarToken, createHorario);
 
-router.get("/barbero/:id/horas-disponibles", validarToken, getHorasDisponibles);
+router.get("/barbero/:id/horas-disponibles", getHorasDisponibles);
 
-router.get("/barbero/:barberoId", validarToken, getHorariosByBarbero);
+router.get("/barbero/:barberoId",  getHorariosByBarbero);
 
 router.delete(
   "/barbero/:barberoId/dia/:diaSemana",

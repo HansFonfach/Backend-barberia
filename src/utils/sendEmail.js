@@ -18,3 +18,28 @@ export default async function sendEmail({ to, subject, html }) {
     html,
   });
 }
+
+export async function sendReservationEmail({ to, nombre, fecha, servicio }) {
+  try {
+    const html = `
+      <h2>Reserva confirmada 💈</h2>
+      <p>Hola <b>${nombre}</b>,</p>
+      <p>Tu reserva fue creada exitosamente.</p>
+      <ul>
+        <li><b>Servicio:</b> ${servicio}</li>
+        <li><b>Fecha:</b> ${fecha}</li>
+      </ul>
+      <p>¡Te esperamos!</p>
+    `;
+
+    return await transporter.sendMail({
+      from: '"La Santa Barbería" <hans.fonfach@gmail.com>',
+      to,
+      subject: "Confirmación de reserva",
+      html,
+    });
+  } catch (error) {
+    console.error("❌ Error enviando email reserva:", error);
+    // ❗ NO lanzar error para no romper la reserva
+  }
+}

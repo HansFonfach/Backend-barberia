@@ -19,7 +19,7 @@ router.get("/todosLosUsuarios", validarToken, getAllUsersWithSuscripcion);
 router.get("/misPuntos", validarToken, verMisPuntos);
 
 // 📄 GENERALES
-router.get("/", validarToken, getUsuarios);
+router.get("/",  getUsuarios);
 
 // 🆔 DINÁMICAS AL FINAL
 router.post("/barbero/crearBarbero", validarToken, crearBarbero);

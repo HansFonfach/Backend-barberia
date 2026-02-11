@@ -4,7 +4,17 @@ const { Schema } = mongoose;
 
 const ReservaSchema = new Schema(
   {
-    cliente: { type: Schema.Types.ObjectId, ref: "Usuario", required: true },
+    cliente: {
+      type: Schema.Types.ObjectId,
+      ref: "Usuario",
+      required: false,
+    },
+    invitado: {
+      nombre: { type: String },
+      telefono: { type: String },
+      email: { type: String },
+      token: { type: String }, // UUID único para acceder/cancelar
+    },
     barbero: { type: Schema.Types.ObjectId, ref: "Usuario", required: true },
     servicio: { type: Schema.Types.ObjectId, ref: "Servicio", required: true },
 
@@ -27,8 +37,17 @@ const ReservaSchema = new Schema(
     fechaConfirmacion: { type: Date },
 
     motivoCancelacion: { type: String },
+    cancelToken: {
+      type: String,
+      default: null,
+    },
+    cancelTokenExpira: {
+      type: Date,
+    },
   },
-  { timestamps: true }
+
+  { timestamps: true },
 );
+ReservaSchema.index({ barbero: 1, fecha: 1, estado: 1 });
 
 export default mongoose.model("Reserva", ReservaSchema);

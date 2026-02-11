@@ -10,7 +10,7 @@ import { validarToken } from "../middlewares/validarToken.js";
 const router = Router();
 
 // Rutas RESTful
-router.get("/", validarToken, getServicios); // Listar todos
+router.get("/",  getServicios); // Listar todos
 router.post("/", validarToken, createServicio); // Crear nuevo
 router.put("/:id", validarToken, updateServicio);
 router.delete("/:id", validarToken, deleteServicio);

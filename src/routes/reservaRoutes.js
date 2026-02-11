@@ -9,12 +9,13 @@ import {
   getReservasPorFechaBarbero,
 } from "../controllers/reservaController.js";
 import { validarToken } from "../middlewares/validarToken.js";
+import { optionalAuth } from "../middlewares/optionalAuth.js";
 
 const router = Router();
 
 // Rutas RESTful
 
-router.post("/", validarToken, createReserva);
+router.post("/", optionalAuth, createReserva);
 router.get("/", validarToken, getReservas);
 router.get("/barbero", validarToken, getReservasByBarberId);
 router.get("/:id", validarToken, getReservasByUserId);

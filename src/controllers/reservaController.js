@@ -569,6 +569,7 @@ export const getReservasByUserId = async (req, res) => {
 export const getReservasByBarberId = async (req, res) => {
   try {
     const barberId = req.usuario.id;
+
     const hoy = new Date();
     const inicio = new Date(hoy.setHours(0, 0, 0, 0));
     const fin = new Date(hoy.setHours(23, 59, 59, 999));
@@ -577,13 +578,13 @@ export const getReservasByBarberId = async (req, res) => {
       barbero: barberId,
       fecha: { $gte: inicio, $lte: fin },
     })
-      .populate("cliente", "nombre apellido telefono") // Trae solo nombre y apellido del cliente
-      .populate("servicio", "nombre") // Trae solo nombre del servicio
-      .sort({ fecha: 1 }); // Ordena por fecha ascendente
-    console.log(reservas);
+      .populate("cliente", "nombre apellido telefono")
+      .populate("servicio", "nombre")
+      .sort({ fecha: 1 });
+
     return res.json({ reservas });
   } catch (error) {
-    console.error("Error al obtener reservas por barbero:", error);
+    console.error(error);
     return res.status(500).json({ message: "Error al obtener reservas" });
   }
 };
@@ -739,6 +740,7 @@ export const getReservasPorFechaBarbero = async (req, res) => {
     const reservas = await Reserva.find({
       barbero: barberoId,
       fecha: { $gte: inicioDia, $lte: finDia },
+      estado: { $ne: "cancelada" }, // 🔥 CLAVE
     })
       .populate("cliente", "nombre apellido telefono")
       .populate("servicio", "nombre")

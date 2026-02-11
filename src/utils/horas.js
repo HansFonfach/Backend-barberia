@@ -61,3 +61,11 @@ export const crearFechasUTC = (fecha) => {
 
   return { startOfDay, endOfDay };
 };
+export const horaAminutos = (hora) => {
+  if (!hora) return null;
+
+  const horaNormalizada = formatHora(hora);
+  const [h, m] = horaNormalizada.split(":").map(Number);
+
+  return h * 60 + m;
+};
