@@ -11,7 +11,7 @@ import isSameOrAfter from "dayjs/plugin/isSameOrAfter.js";
 import { sendReservationEmail } from "./mailController.js";
 import notificacionModel from "../models/notificacion.Model.js";
 import barberoServicioModel from "../models/barberoServicio.model.js";
-import WhatsAppService from "../services/WhatsAppService.js";
+import WhatsAppService from "../services/whatsappService.js";
 import crypto from 'crypto';
 
 dayjs.extend(utc);
