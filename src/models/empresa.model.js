@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 
 const EmpresaSchema = new mongoose.Schema({
+  rutEmpresa: {
+    type: String,
+    required: true,
+  },
   nombre: {
     type: String,
     required: true,
@@ -22,29 +26,14 @@ const EmpresaSchema = new mongoose.Schema({
   direccion: String,
   telefono: String,
   correo: String,
+  profesional: String,
   redes: {
     instagram: String,
     facebook: String,
     tiktok: String,
   },
-  horarios: {
-    // horarios por día
-    lunes: String,
-    martes: String,
-    miercoles: String,
-    jueves: String,
-    viernes: String,
-    sabado: String,
-    domingo: String,
-  },
-  servicios: [
-    // array de servicios con nombre y precio
-    {
-      nombre: String,
-      precio: Number,
-      duracionMinutos: Number, // opcional
-    },
-  ],
+  horarios: String,
+
   creadoEn: {
     type: Date,
     default: Date.now,

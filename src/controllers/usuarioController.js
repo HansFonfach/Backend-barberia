@@ -1,3 +1,4 @@
+import empresaModel from "../models/empresa.model.js";
 import suscripcionModel from "../models/suscripcion.model.js";
 import usuarioModel from "../models/usuario.model.js";
 import Usuario from "../models/usuario.model.js";
@@ -6,10 +7,45 @@ import bcrypt from "bcryptjs";
 //obtener todos los usuarios
 export const getUsuarios = async (req, res) => {
   try {
-    const usuarios = await Usuario.find();
+    const empresaId = req.usuario.empresaId; // viene del token
+    if (!empresaId) {
+      return res
+        .status(400)
+        .json({ message: "No se pudo identificar la empresa del usuario" });
+    }
+
+    const usuarios = await Usuario.find({ empresa: empresaId });
     res.json(usuarios);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+export const getBarberosPublicos = async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    // 1️⃣ Buscar empresa por slug
+    const empresa = await empresaModel.findOne({ slug });
+    if (!empresa) {
+      return res.status(404).json({ message: "Empresa no encontrada" });
+    }
+
+    // 2️⃣ Buscar barberos activos de esa empresa
+    const barberos = await usuarioModel
+      .find({
+        empresa: empresa._id,
+        rol: "barbero",
+        estado: "activo", // 🔹 Cambiado de activo: true a estado: "activo"
+      })
+      .select("_id nombre apellido")
+      .lean();
+
+    res.status(200).json(barberos);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error al obtener barberos", error: error.message });
   }
 };
 
@@ -167,7 +203,7 @@ export const cambiarEstadoUsuario = async (req, res) => {
     const usuario = await Usuario.findByIdAndUpdate(
       id,
       { estado },
-      { new: true }
+      { new: true },
     );
 
     if (!usuario) {
@@ -182,7 +218,15 @@ export const cambiarEstadoUsuario = async (req, res) => {
 
 export const getAllUsersWithSuscripcion = async (req, res) => {
   try {
-    const usuarios = await Usuario.find().lean();
+    // 🔹 Obtener empresaId del token
+    const empresaId = req.usuario.empresaId;
+    if (!empresaId)
+      return res
+        .status(400)
+        .json({ message: "No se pudo identificar la empresa del usuario" });
+
+    // 🔹 Filtrar usuarios por empresa
+    const usuarios = await Usuario.find({ empresa: empresaId }).lean();
 
     const usuariosConSub = await Promise.all(
       usuarios.map(async (u) => {
@@ -198,7 +242,7 @@ export const getAllUsersWithSuscripcion = async (req, res) => {
       }),
     );
 
-    res.json({ usuarios: usuariosConSub }); // ← ESTE ES EL CORRECTO
+    res.json({ usuarios: usuariosConSub });
   } catch (err) {
     console.error("❌ ERROR getAllUsersWithSuscripcion:", err);
     res.status(500).json({ message: "Error cargando usuarios" });

@@ -4,6 +4,11 @@ const { Schema } = mongoose;
 
 const ReservaSchema = new Schema(
   {
+    empresa: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Empresa",
+      required: true,
+    },
     cliente: {
       type: Schema.Types.ObjectId,
       ref: "Usuario",
@@ -49,5 +54,6 @@ const ReservaSchema = new Schema(
   { timestamps: true },
 );
 ReservaSchema.index({ barbero: 1, fecha: 1, estado: 1 });
+ReservaSchema.index({ empresa: 1, fecha: 1 });
 
 export default mongoose.model("Reserva", ReservaSchema);

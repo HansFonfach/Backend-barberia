@@ -19,6 +19,7 @@ import pagosRoutes from "./routes/pagoRoutes.js";
 import canjeRoutes from "./routes/canjeRoutes.js";
 import barberoServicioRoutes from "./routes/barberoServicioRoutes.js";
 import reservaInvitadoRoutes from "./routes/reservaInvitadoRoutes.js";
+import empresaRoutes from "./routes/empresaRoutes.js";
 
 const app = express();
 app.use(cookieParser());
@@ -76,5 +77,6 @@ app.use("/pagos", pagosRoutes);
 app.use("/canjes", canjeRoutes);
 app.use("/barberoServicio", barberoServicioRoutes);
 app.use("/reserva/invitado", reservaInvitadoRoutes);
+app.use("/empresa", empresaRoutes)
 
 export default app;

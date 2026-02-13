@@ -23,7 +23,7 @@ const horarioSchema = new mongoose.Schema(
       default: 60, // 👈 MUY IMPORTANTE
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 horarioSchema.index({ barbero: 1, diaSemana: 1 }, { unique: true });

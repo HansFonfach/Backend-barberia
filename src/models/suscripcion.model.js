@@ -3,6 +3,11 @@ import mongoose from "mongoose";
 
 const suscripcionSchema = new mongoose.Schema(
   {
+    empresa: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Empresa",
+      required: true,
+    },
     usuario: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Usuario",
@@ -45,7 +50,7 @@ const suscripcionSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // ✅ Índice compuesto normal (NO único)

@@ -13,8 +13,9 @@ export const generarToken = (usuario) => {
       rol: usuario.rol,
       suscrito: usuario.suscrito,
       telefono: usuario.telefono,
+      empresaId: usuario.empresa, // ✅
     },
     TOKEN_SECRET,
-    { expiresIn: "1h" } // configurable
+    { expiresIn: "1h" }, // configurable
   );
 };

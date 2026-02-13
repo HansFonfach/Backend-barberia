@@ -4,43 +4,40 @@ import { generarToken } from "../utils/generarToken.js";
 import crypto from "crypto";
 import sendEmail from "../utils/sendEmail.js";
 import suscripcionModel from "../models/suscripcion.model.js";
+import empresaModel from "../models/empresa.model.js";
+import Empresa from "../models/empresa.model.js";
 
 export const login = async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, slug } = req.body;
 
   try {
-    const usuario = await Usuario.findOne({ email });
+    /* =========================
+       1️⃣ VALIDAR EMPRESA
+    ========================= */
+    const empresa = await empresaModel.findOne({ slug });
+    if (!empresa) {
+      return res.status(404).json({
+        message: "Empresa no encontrada",
+      });
+    }
+
+    /* =========================
+       2️⃣ BUSCAR USUARIO EN ESA EMPRESA
+    ========================= */
+    const usuario = await Usuario.findOne({
+      email,
+      empresa: empresa._id,
+    });
+
     if (!usuario) {
       return res
         .status(400)
         .json({ message: "Usuario y/o contraseña incorrecta" });
     }
 
-    // 🔍 Revisar si el usuario tiene una suscripción activa
-    const suscripcionActiva = await suscripcionModel.findOne({
-      usuario: usuario._id,
-      activa: true,
-    });
-
-    // 🔥 Si existe suscripción activa, revisar si está vencida
-    if (suscripcionActiva) {
-      const hoy = new Date();
-      if (suscripcionActiva.fechaFin < hoy) {
-        // ⛔ Expiró → desactivar suscripción
-        suscripcionActiva.activa = false;
-        await suscripcionActiva.save();
-
-        usuario.suscrito = false;
-        usuario.plan = "gratis";
-        await usuario.save();
-      } else {
-        // Sigue activa (aseguramos usuario.suscrito)
-        usuario.suscrito = true;
-        usuario.plan = "premium";
-        await usuario.save();
-      }
-    }
-
+    /* =========================
+       3️⃣ VALIDAR PASSWORD
+    ========================= */
     const validPassword = await bcrypt.compare(password, usuario.password);
     if (!validPassword) {
       return res
@@ -48,25 +45,62 @@ export const login = async (req, res) => {
         .json({ message: "Usuario y/o contraseña incorrecta" });
     }
 
+    /* =========================
+       4️⃣ VALIDAR SUSCRIPCIÓN
+    ========================= */
+    const suscripcionActiva = await suscripcionModel.findOne({
+      usuario: usuario._id,
+      activa: true,
+    });
+
+    if (suscripcionActiva) {
+      const hoy = new Date();
+
+      if (suscripcionActiva.fechaFin < hoy) {
+        suscripcionActiva.activa = false;
+        await suscripcionActiva.save();
+
+        usuario.suscrito = false;
+        usuario.plan = "gratis";
+        await usuario.save();
+      } else {
+        usuario.suscrito = true;
+        usuario.plan = "premium";
+        await usuario.save();
+      }
+    }
+
+    /* =========================
+       5️⃣ GENERAR TOKEN (CLAVE)
+    ========================= */
+    const token = generarToken(usuario);
+
     const userData = usuario.toObject();
     delete userData.password;
-
-    const token = generarToken(usuario);
 
     const isProduction = process.env.NODE_ENV === "production";
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: isProduction, // ✅ HTTPS obligatorio en producción
-      sameSite: isProduction ? "none" : "lax", // ✅ Safari necesita 'none'
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
       maxAge: 24 * 60 * 60 * 1000,
       path: "/",
     });
-    // ✅ También enviar el token en la respuesta para móviles (fallback)
+
     return res.status(200).json({
       message: "Login exitoso",
-      user: userData,
-      token: token, // 👈 Fallback para dispositivos problemáticos
+      user: {
+        ...userData,
+
+        empresa: {
+          id: empresa._id,
+          nombre: empresa.nombre,
+          slug: empresa.slug,
+          tipo: empresa.tipo,
+        },
+      },
+      token,
     });
   } catch (error) {
     console.error("Error en login:", error);
@@ -76,11 +110,19 @@ export const login = async (req, res) => {
 
 export const register = async (req, res) => {
   try {
-    const { rut, nombre, apellido, email, telefono, password } = req.body;
+    const { rut, nombre, apellido, email, telefono, password, slug } = req.body;
+
+    const empresa = await empresaModel.findOne({ slug });
+    if (!empresa) {
+      return res.status(404).json({
+        message: "Empresa no encontrada",
+      });
+    }
 
     const telefonoCompleto = `569${telefono}`;
 
     const usuarioExistente = await Usuario.findOne({
+      empresa: empresa._id,
       $or: [{ rut }, { email }],
     });
     if (usuarioExistente) {
@@ -97,7 +139,8 @@ export const register = async (req, res) => {
       nombre,
       apellido,
       email,
-      telefono : telefonoCompleto,
+      empresa: empresa._id,
+      telefono: telefonoCompleto,
       password: hashedPassword,
     });
     await newUser.save();
@@ -121,6 +164,11 @@ export const register = async (req, res) => {
 
     res.status(201).json({
       user: userWithoutPassword,
+      empresa: {
+        id: empresa._id,
+        slug: empresa.slug,
+        nombre: empresa.nombre,
+      },
       message: "Usuario creado exitosamente!",
       token,
     });
@@ -190,4 +238,24 @@ export const logout = (req, res) => {
   });
 
   res.json({ message: "Logout exitoso" });
+};
+
+export const me = async (req, res) => {
+  try {
+    const empresa = await Empresa.findById(req.usuario.empresaId).select(
+      "_id nombre slug",
+    );
+
+    res.json({
+      id: req.usuario.id,
+      rut: req.usuario.rut,
+      nombre: req.usuario.nombre,
+      apellido: req.usuario.apellido,
+      email: req.usuario.email,
+      rol: req.usuario.rol,
+      empresa: empresa, // 👈 AQUÍ viene el slug
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error obteniendo usuario" });
+  }
 };

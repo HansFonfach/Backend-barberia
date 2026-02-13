@@ -11,7 +11,7 @@ const router = Router();
 router.post(
   "/barberos/:barberoId/servicios",
   validarToken,
-  asignarServiciosBarbero
+  asignarServiciosBarbero,
 );
 
 // (Opcional pero MUY necesario para el front)
