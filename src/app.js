@@ -26,11 +26,12 @@ app.use(cookieParser());
 
 // Dominios permitidos (frontend Render + localhost)
 const allowedOrigins = [
+  "https://www.agendafonfach.cl",
+  "https://agendafonfach.cl",
   "https://frontend-barberia-tcv6.onrender.com",
   "http://localhost:3000",
   "http://localhost:5173",
 ];
-
 app.use(
   cors({
     origin: function (origin, callback) {
