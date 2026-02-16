@@ -242,46 +242,20 @@ export const logout = (req, res) => {
 
 export const me = async (req, res) => {
   try {
-    if (!req.usuario?.id) {
-      return res.status(401).json({ message: "Usuario no autenticado" });
-    }
+    const empresa = await Empresa.findById(req.usuario.empresaId).select(
+      "_id nombre slug",
+    );
 
-    // 🔥 Obtener usuario FRESCO de la BD
-    const usuario = await Usuario.findById(req.usuario.id)
-      .select("-password") // Excluir password
-      .lean();
-
-    if (!usuario) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
-    }
-
-    // Buscar empresa
-    let empresa = null;
-    if (usuario.empresa) {
-      empresa = await Empresa.findById(usuario.empresa)
-        .select("_id nombre slug")
-        .lean();
-    }
-
-    // Responder con datos frescos
     res.json({
-      _id: usuario._id,
-      rut: usuario.rut,
-      nombre: usuario.nombre,
-      apellido: usuario.apellido,
-      email: usuario.email,
-      rol: usuario.rol,
-      telefono: usuario.telefono,
-      suscrito: usuario.suscrito,
-      empresa: empresa,
-      createdAt: usuario.createdAt,
-      updatedAt: usuario.updatedAt,
+      id: req.usuario.id,
+      rut: req.usuario.rut,
+      nombre: req.usuario.nombre,
+      apellido: req.usuario.apellido,
+      email: req.usuario.email,
+      rol: req.usuario.rol,
+      empresa: empresa, // 👈 AQUÍ viene el slug
     });
   } catch (error) {
-    console.error("Error en me:", error);
-    res.status(500).json({
-      message: "Error obteniendo usuario",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
+    res.status(500).json({ message: "Error obteniendo usuario" });
   }
 };
