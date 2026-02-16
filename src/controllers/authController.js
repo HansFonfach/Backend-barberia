@@ -240,24 +240,48 @@ export const logout = (req, res) => {
   res.json({ message: "Logout exitoso" });
 };
 
-export const authRequired = (req, res, next) => {
+export const me = async (req, res) => {
   try {
-    const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
-
-    if (!token) {
-      return res.status(401).json({ message: "No token provided" });
+    if (!req.usuario?.id) {
+      return res.status(401).json({ message: "Usuario no autenticado" });
     }
 
-    const decoded = jwt.verify(token, TOKEN_SECRET);
+    // 🔥 Obtener usuario FRESCO de la BD
+    const usuario = await Usuario.findById(req.usuario.id)
+      .select("-password") // Excluir password
+      .lean();
 
-    // Asegurarse de que el id esté disponible
-    req.usuario = {
-      id: decoded.id,
-      ...decoded,
-    };
+    if (!usuario) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
 
-    next();
+    // Buscar empresa
+    let empresa = null;
+    if (usuario.empresa) {
+      empresa = await Empresa.findById(usuario.empresa)
+        .select("_id nombre slug")
+        .lean();
+    }
+
+    // Responder con datos frescos
+    res.json({
+      _id: usuario._id,
+      rut: usuario.rut,
+      nombre: usuario.nombre,
+      apellido: usuario.apellido,
+      email: usuario.email,
+      rol: usuario.rol,
+      telefono: usuario.telefono,
+      suscrito: usuario.suscrito,
+      empresa: empresa,
+      createdAt: usuario.createdAt,
+      updatedAt: usuario.updatedAt,
+    });
   } catch (error) {
-    return res.status(401).json({ message: "Invalid token" });
+    console.error("Error en me:", error);
+    res.status(500).json({
+      message: "Error obteniendo usuario",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
   }
 };
