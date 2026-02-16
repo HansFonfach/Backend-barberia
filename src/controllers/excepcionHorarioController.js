@@ -11,7 +11,7 @@ const fechaChileToUTC = (fechaChileStr) => {
   const fechaChile = dayjs.tz(
     `${fechaChileStr} 00:00`,
     "YYYY-MM-DD HH:mm",
-    "America/Santiago"
+    "America/Santiago",
   );
   return fechaChile.utc().toDate();
 };
@@ -34,13 +34,13 @@ export const toggleHora = async (req, res) => {
     if (bloqueoExistente) {
       // Si EXISTE → eliminarlo (REACTIVAR la hora)
       await excepcionHorario.findByIdAndDelete(bloqueoExistente._id);
-      
+
       return res.status(200).json({
         message: "Hora reactivada correctamente",
         accion: "reactivada",
         fechaOriginal: fecha,
         hora: horaInicio,
-        barbero
+        barbero,
       });
     } else {
       // Si NO existe → crearlo (CANCELAR la hora)
@@ -58,14 +58,14 @@ export const toggleHora = async (req, res) => {
         fechaOriginal: fecha,
         hora: horaInicio,
         barbero,
-        bloqueo: nuevoBloqueo
+        bloqueo: nuevoBloqueo,
       });
     }
   } catch (error) {
     console.error("❌ Error en toggleHora:", error);
-    res.status(500).json({ 
-      message: "Error al modificar la hora", 
-      error: error.message 
+    res.status(500).json({
+      message: "Error al modificar la hora",
+      error: error.message,
     });
   }
 };
@@ -132,12 +132,12 @@ export const obtenerExcepcionesPorDia = async (req, res) => {
     const inicioDiaChile = dayjs.tz(
       `${fecha} 00:00`,
       "YYYY-MM-DD HH:mm",
-      "America/Santiago"
+      "America/Santiago",
     );
     const finDiaChile = dayjs.tz(
       `${fecha} 23:59:59.999`,
       "YYYY-MM-DD HH:mm:ss.SSS",
-      "America/Santiago"
+      "America/Santiago",
     );
 
     const inicioUTC = inicioDiaChile.utc().toDate();
@@ -155,7 +155,9 @@ export const obtenerExcepcionesPorDia = async (req, res) => {
       const fechaChile = fechaUTC.tz("America/Santiago");
 
       return {
-        ...excepcion._doc,
+        id: excepcion._id,
+        hora: excepcion.horaInicio, // 👈 CONTRATO ÚNICO
+        tipo: excepcion.tipo,
         fechaChile: fechaChile.format("YYYY-MM-DD"),
       };
     });

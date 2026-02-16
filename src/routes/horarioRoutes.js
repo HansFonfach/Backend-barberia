@@ -24,8 +24,7 @@ router.delete(
 );
 
 router.get(
-  "/barbero/:barberoId/horarioBase",
-  validarToken,
+  "/barbero/:barberoId/horarioBase", validarToken,
   getHorarioBasePorDia,
 );
 

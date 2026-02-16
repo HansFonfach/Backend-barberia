@@ -96,14 +96,12 @@ export const getHorasDisponibles = async (req, res) => {
       return res.status(400).json({ message: "Fecha y servicio requeridos" });
     }
 
-    const ahoraChile = dayjs().tz("America/Santiago");
+    const ahora = dayjs().tz("America/Santiago");
     const fechaConsulta = dayjs.tz(fecha, "YYYY-MM-DD", "America/Santiago");
 
     if (!fechaConsulta.isValid()) {
       return res.status(400).json({ message: "Fecha inválida" });
     }
-
-    const diaSemana = fechaConsulta.day();
 
     /* ================= SERVICIO ================= */
     const barberoServicio = await barberoServicioModel
@@ -125,7 +123,7 @@ export const getHorasDisponibles = async (req, res) => {
     /* ================= FERIADOS ================= */
     const feriado = await verificarFeriadoConComportamiento(fecha);
 
-    if (feriado && feriado.comportamiento === "cerrado") {
+    if (feriado?.comportamiento === "cerrado") {
       return res.json({
         fecha,
         horas: [],
@@ -148,7 +146,7 @@ export const getHorasDisponibles = async (req, res) => {
 
     if (
       !suscripcionActiva &&
-      fechaConsulta.isAfter(ahoraChile.add(15, "day"), "day")
+      fechaConsulta.isAfter(ahora.add(15, "day"), "day")
     ) {
       return res.status(400).json({
         message: "No puedes reservar con más de 15 días de anticipación",
@@ -164,11 +162,13 @@ export const getHorasDisponibles = async (req, res) => {
       return res.status(404).json({ message: "Barbero no encontrado" });
     }
 
+    const diaSemana = fechaConsulta.day();
+
     const horariosDelDia = barbero.horariosDisponibles.filter(
       (h) => Number(h.diaSemana) === diaSemana,
     );
 
-    if (horariosDelDia.length === 0) {
+    if (!horariosDelDia.length) {
       return res.json({
         fecha,
         horas: [],
@@ -177,7 +177,7 @@ export const getHorasDisponibles = async (req, res) => {
     }
 
     /* ================= RESERVAS ================= */
-    const reservasDelDia = await Reserva.find({
+    const reservas = await Reserva.find({
       barbero: barberoId,
       fecha: {
         $gte: fechaConsulta.startOf("day").toDate(),
@@ -186,7 +186,7 @@ export const getHorasDisponibles = async (req, res) => {
       estado: { $in: ["pendiente", "confirmada"] },
     });
 
-    const horasReservadas = reservasDelDia.map((r) =>
+    const horasReservadas = reservas.map((r) =>
       dayjs(r.fecha).tz("America/Santiago").format("HH:mm"),
     );
 
@@ -201,80 +201,15 @@ export const getHorasDisponibles = async (req, res) => {
 
     const horasBloqueadas = excepciones
       .filter((e) => e.tipo === "bloqueo")
-      .map((e) => dayjs(e.fecha).tz("America/Santiago").format("HH:mm"));
+      .map((e) => e.horaInicio);
 
-    /* ================= HORAS DISPONIBLES (TU LÓGICA ORIGINAL) ================= */
-    const todasHorasDisponibles = [];
+    const horasExtra = excepciones
+      .filter((e) => e.tipo === "extra")
+      .map((e) => e.horaInicio);
 
-    for (const horario of horariosDelDia) {
-      const intervaloAgenda = Number(horario.duracionBloque);
-
-      const bloquesTrabajo = [];
-
-      if (horario.colacionInicio && horario.colacionFin) {
-        bloquesTrabajo.push({
-          inicio: dayjs.tz(
-            `${fecha} ${horario.horaInicio}`,
-            "YYYY-MM-DD HH:mm",
-            "America/Santiago",
-          ),
-          fin: dayjs.tz(
-            `${fecha} ${horario.colacionInicio}`,
-            "YYYY-MM-DD HH:mm",
-            "America/Santiago",
-          ),
-        });
-
-        bloquesTrabajo.push({
-          inicio: dayjs.tz(
-            `${fecha} ${horario.colacionFin}`,
-            "YYYY-MM-DD HH:mm",
-            "America/Santiago",
-          ),
-          fin: dayjs.tz(
-            `${fecha} ${horario.horaFin}`,
-            "YYYY-MM-DD HH:mm",
-            "America/Santiago",
-          ),
-        });
-      } else {
-        bloquesTrabajo.push({
-          inicio: dayjs.tz(
-            `${fecha} ${horario.horaInicio}`,
-            "YYYY-MM-DD HH:mm",
-            "America/Santiago",
-          ),
-          fin: dayjs.tz(
-            `${fecha} ${horario.horaFin}`,
-            "YYYY-MM-DD HH:mm",
-            "America/Santiago",
-          ),
-        });
-      }
-
-      for (const bloque of bloquesTrabajo) {
-        const huecos = calcularHuecosDisponibles(reservasDelDia, bloque);
-
-        for (const hueco of huecos) {
-          if (hueco.duracion >= duracionServicio) {
-            const inicios = generarIniciosEnHueco(
-              hueco,
-              intervaloAgenda,
-              duracionServicio,
-            );
-
-            for (const hora of inicios) {
-              if (!horasBloqueadas.includes(hora)) {
-                todasHorasDisponibles.push(hora);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    /* ================= TODAS LAS HORAS BASE DEL DÍA ================= */
-    const todasLasHorasBase = [];
+    /* ================= HORAS DISPONIBLES ================= */
+    const horasDisponibles = new Set();
+    const horasBase = new Set();
 
     for (const horario of horariosDelDia) {
       const intervalo = Number(horario.duracionBloque);
@@ -292,41 +227,99 @@ export const getHorasDisponibles = async (req, res) => {
       );
 
       while (cursor.isBefore(fin)) {
-        todasLasHorasBase.push(cursor.format("HH:mm"));
+        horasBase.add(cursor.format("HH:mm"));
         cursor = cursor.add(intervalo, "minute");
       }
+
+      const bloquesTrabajo = horario.colacionInicio
+        ? [
+            {
+              inicio: dayjs.tz(
+                `${fecha} ${horario.horaInicio}`,
+                "YYYY-MM-DD HH:mm",
+                "America/Santiago",
+              ),
+              fin: dayjs.tz(
+                `${fecha} ${horario.colacionInicio}`,
+                "YYYY-MM-DD HH:mm",
+                "America/Santiago",
+              ),
+            },
+            {
+              inicio: dayjs.tz(
+                `${fecha} ${horario.colacionFin}`,
+                "YYYY-MM-DD HH:mm",
+                "America/Santiago",
+              ),
+              fin: dayjs.tz(
+                `${fecha} ${horario.horaFin}`,
+                "YYYY-MM-DD HH:mm",
+                "America/Santiago",
+              ),
+            },
+          ]
+        : [
+            {
+              inicio: dayjs.tz(
+                `${fecha} ${horario.horaInicio}`,
+                "YYYY-MM-DD HH:mm",
+                "America/Santiago",
+              ),
+              fin: dayjs.tz(
+                `${fecha} ${horario.horaFin}`,
+                "YYYY-MM-DD HH:mm",
+                "America/Santiago",
+              ),
+            },
+          ];
+
+      for (const bloque of bloquesTrabajo) {
+        const huecos = calcularHuecosDisponibles(reservas, bloque);
+
+        for (const hueco of huecos) {
+          if (hueco.duracion >= duracionServicio) {
+            generarIniciosEnHueco(
+              hueco,
+              intervalo,
+              duracionServicio,
+            ).forEach((hora) => {
+              if (!horasBloqueadas.includes(hora)) {
+                horasDisponibles.add(hora);
+              }
+            });
+          }
+        }
+      }
     }
 
-    /* ================= ESTADO FINAL DE CADA HORA ================= */
-    const horas = [];
+    horasExtra.forEach((h) => horasBase.add(h));
 
-    for (const hora of [...new Set(todasLasHorasBase)].sort()) {
-      const inicio = dayjs.tz(
-        `${fecha} ${hora}`,
-        "YYYY-MM-DD HH:mm",
-        "America/Santiago",
-      );
+    /* ================= RESPUESTA FINAL ================= */
+    const horas = [...horasBase]
+      .sort()
+      .reduce((acc, hora) => {
+        const inicio = dayjs.tz(
+          `${fecha} ${hora}`,
+          "YYYY-MM-DD HH:mm",
+          "America/Santiago",
+        );
 
-      // ❌ No mostrar horas pasadas
-      if (
-        fechaConsulta.isSame(ahoraChile, "day") &&
-        inicio.isBefore(ahoraChile)
-      ) {
-        continue;
-      }
+        if (
+          fechaConsulta.isSame(ahora, "day") &&
+          inicio.isBefore(ahora)
+        )
+          return acc;
 
-      // ❌ No mostrar bloqueadas
-      if (horasBloqueadas.includes(hora)) continue;
+        if (horasBloqueadas.includes(hora)) return acc;
 
-      if (horasReservadas.includes(hora)) {
-        horas.push({ hora, estado: "reservada" });
-        continue;
-      }
+        if (horasReservadas.includes(hora)) {
+          acc.push({ hora, estado: "reservada" });
+        } else if (horasDisponibles.has(hora) || horasExtra.includes(hora)) {
+          acc.push({ hora, estado: "disponible" });
+        }
 
-      if (todasHorasDisponibles.includes(hora)) {
-        horas.push({ hora, estado: "disponible" });
-      }
-    }
+        return acc;
+      }, []);
 
     return res.json({
       fecha,
@@ -340,6 +333,7 @@ export const getHorasDisponibles = async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 };
+
 
 /** Crear horario y asignarlo al barbero */
 export const createHorario = async (req, res) => {
@@ -465,18 +459,21 @@ export const getHorarioBasePorDia = async (req, res) => {
       });
     }
 
-    // 📅 Parse seguro de fecha
-    const [year, month, day] = fecha.split("-").map(Number);
-    const fechaUTC = new Date(Date.UTC(year, month - 1, day));
+    // 🇨🇱 FECHA EN CHILE
+    const fechaChile = dayjs.tz(
+      `${fecha} 12:00`,
+      "YYYY-MM-DD HH:mm",
+      "America/Santiago",
+    );
 
-    if (isNaN(fechaUTC.getTime())) {
+    if (!fechaChile.isValid()) {
       return res.status(400).json({
         message: "Fecha inválida",
         bloques: [],
       });
     }
 
-    const diaSemana = fechaUTC.getUTCDay(); // 0 domingo - 6 sábado
+    const diaSemana = fechaChile.day(); // 0 domingo - 6 sábado (CHILE)
 
     console.log("📅 Horario base request:", {
       barberoId,
@@ -496,12 +493,9 @@ export const getHorarioBasePorDia = async (req, res) => {
       });
     }
 
-    // 🧠 Generar bloques dinámicamente
     const bloques = generarBloquesDesdeHorario(horario);
 
-    return res.status(200).json({
-      bloques,
-    });
+    return res.status(200).json({ bloques });
   } catch (error) {
     console.error("❌ ERROR getHorarioBasePorDia:", error);
     return res.status(500).json({
