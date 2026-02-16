@@ -240,22 +240,24 @@ export const logout = (req, res) => {
   res.json({ message: "Logout exitoso" });
 };
 
-export const me = async (req, res) => {
+export const authRequired = (req, res, next) => {
   try {
-    const empresa = await Empresa.findById(req.usuario.empresaId).select(
-      "_id nombre slug",
-    );
+    const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
 
-    res.json({
-      id: req.usuario.id,
-      rut: req.usuario.rut,
-      nombre: req.usuario.nombre,
-      apellido: req.usuario.apellido,
-      email: req.usuario.email,
-      rol: req.usuario.rol,
-      empresa: empresa, // 👈 AQUÍ viene el slug
-    });
+    if (!token) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const decoded = jwt.verify(token, TOKEN_SECRET);
+
+    // Asegurarse de que el id esté disponible
+    req.usuario = {
+      id: decoded.id,
+      ...decoded,
+    };
+
+    next();
   } catch (error) {
-    res.status(500).json({ message: "Error obteniendo usuario" });
+    return res.status(401).json({ message: "Invalid token" });
   }
 };
