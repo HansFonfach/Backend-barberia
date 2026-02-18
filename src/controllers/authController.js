@@ -89,8 +89,6 @@ export const login = async (req, res) => {
       // NO usar domain a menos que tengas subdominios
     });
 
-
-    
     // 🟢 SÍ enviamos el token para el frontend
     return res.status(200).json({
       message: "Login exitoso",
@@ -256,7 +254,8 @@ export const me = async (req, res) => {
       apellido: req.usuario.apellido,
       email: req.usuario.email,
       rol: req.usuario.rol,
-      empresa: empresa, // 👈 AQUÍ viene el slug
+      empresaId: req.usuario.empresaId, // 👈 CLAVE
+      empresa, // objeto completo
     });
   } catch (error) {
     res.status(500).json({ message: "Error obteniendo usuario" });
