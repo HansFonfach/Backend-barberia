@@ -15,7 +15,7 @@ const router = Router();
 
 // Rutas RESTful
 
-router.post("/", optionalAuth, createReserva);
+router.post("/", validarToken, createReserva);
 router.get("/", validarToken, getReservas);
 router.get("/barbero", validarToken, getReservasByBarberId);
 router.get("/:id", validarToken, getReservasByUserId);
