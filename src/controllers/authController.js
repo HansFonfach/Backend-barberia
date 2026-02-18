@@ -89,6 +89,8 @@ export const login = async (req, res) => {
       // NO usar domain a menos que tengas subdominios
     });
 
+
+    
     // 🟢 SÍ enviamos el token para el frontend
     return res.status(200).json({
       message: "Login exitoso",
