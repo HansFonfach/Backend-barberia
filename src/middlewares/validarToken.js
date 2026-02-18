@@ -2,27 +2,22 @@ import jwt from "jsonwebtoken";
 import { TOKEN_SECRET } from "../config.js";
 
 export const validarToken = (req, res, next) => {
-  // 1️⃣ Buscar token en diferentes lugares
-  let token = req.cookies.token; // Cookie primero
+  const authHeader = req.headers.authorization;
 
-  // 2️⃣ Si no hay cookie, buscar en header Authorization
-  if (!token) {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.split(" ")[1];
-    }
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "No autorizado" });
   }
 
-  if (!token) {
-    return res.status(401).json({ message: "No autorizado. No hay token." });
-  }
+  const token = authHeader.split(" ")[1];
 
   jwt.verify(token, TOKEN_SECRET, (err, usuario) => {
     if (err) {
+      if (err.name === "TokenExpiredError") {
+        return res.status(401).json({ message: "Token expirado" });
+      }
       return res.status(403).json({ message: "Token inválido" });
     }
 
-    console.log("USUARIO DEL TOKEN:", usuario); // 👈 CLAVE
     req.usuario = usuario;
     next();
   });
