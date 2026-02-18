@@ -74,26 +74,25 @@ export const login = async (req, res) => {
        5️⃣ GENERAR TOKEN (CLAVE)
     ========================= */
     const token = generarToken(usuario);
+
     const userData = usuario.toObject();
     delete userData.password;
 
     const isProduction = process.env.NODE_ENV === "production";
 
-    // 🟢 COOKIE MEJORADA PARA MÓVILES
     res.cookie("token", token, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: "lax", // Cambiado de "none" a "lax" para móviles
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 24 * 60 * 60 * 1000,
       path: "/",
-      // NO usar domain a menos que tengas subdominios
     });
 
-    // 🟢 SÍ enviamos el token para el frontend
     return res.status(200).json({
       message: "Login exitoso",
       user: {
         ...userData,
+
         empresa: {
           id: empresa._id,
           nombre: empresa.nombre,
@@ -101,7 +100,7 @@ export const login = async (req, res) => {
           tipo: empresa.tipo,
         },
       },
-      token, // ✅ MANTENEMOS EL TOKEN
+      token,
     });
   } catch (error) {
     console.error("Error en login:", error);
@@ -254,8 +253,7 @@ export const me = async (req, res) => {
       apellido: req.usuario.apellido,
       email: req.usuario.email,
       rol: req.usuario.rol,
-      empresaId: req.usuario.empresaId, // 👈 CLAVE
-      empresa, // objeto completo
+      empresa: empresa, // 👈 AQUÍ viene el slug
     });
   } catch (error) {
     res.status(500).json({ message: "Error obteniendo usuario" });
