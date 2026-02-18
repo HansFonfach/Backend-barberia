@@ -69,7 +69,7 @@ app.use(
 
 // 🟢 4. MIDDLEWARE PARA LOGGING (opcional, útil para debug)
 app.use((req, res, next) => {
-  console.log(`📱 [${new Date().toISOString()}] ${req.method} ${req.path}`);
+
   next();
 });
 
@@ -85,7 +85,7 @@ app.get("/", (req, res) => {
   res.send("API Barbería funcionando 🚀");
 });
 
-console.log("🕐 Hora backend:", new Date());
+
 
 // 🟢 8. RUTAS DE LA API
 app.use("/usuarios", usuarioRoutes);

@@ -76,6 +76,8 @@ export const createReserva = async (req, res) => {
       return res.status(400).json({ message: "Datos incompletos" });
     }
 
+    console.log(empresa, cliente, barbero, servicio, fecha, hora );
+
     /* =============================
        VALIDAR EMPRESA
     ============================== */
@@ -307,6 +309,8 @@ export const createReserva = async (req, res) => {
       precio: precioServicio,
       estado: "pendiente",
     });
+    
+
 
     res.status(201).json({
       ...reserva.toObject(),
