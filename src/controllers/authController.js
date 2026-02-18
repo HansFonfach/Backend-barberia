@@ -74,25 +74,26 @@ export const login = async (req, res) => {
        5️⃣ GENERAR TOKEN (CLAVE)
     ========================= */
     const token = generarToken(usuario);
-
     const userData = usuario.toObject();
     delete userData.password;
 
     const isProduction = process.env.NODE_ENV === "production";
 
+    // 🟢 COOKIE MEJORADA PARA MÓVILES
     res.cookie("token", token, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
-      maxAge: 24 * 60 * 60 * 1000,
+      sameSite: "lax", // Cambiado de "none" a "lax" para móviles
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
       path: "/",
+      // NO usar domain a menos que tengas subdominios
     });
 
+    // 🟢 SÍ enviamos el token para el frontend
     return res.status(200).json({
       message: "Login exitoso",
       user: {
         ...userData,
-
         empresa: {
           id: empresa._id,
           nombre: empresa.nombre,
@@ -100,7 +101,7 @@ export const login = async (req, res) => {
           tipo: empresa.tipo,
         },
       },
-      token,
+      token, // ✅ MANTENEMOS EL TOKEN
     });
   } catch (error) {
     console.error("Error en login:", error);
