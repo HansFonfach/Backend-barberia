@@ -72,11 +72,11 @@ export const createReserva = async (req, res) => {
     const { barbero, servicio, fecha, hora } = req.body;
     const cliente = req.usuario?.id;
 
+    console.log(empresa, barbero, servicio, fecha, hora);
+
     if (!empresa || !barbero || !servicio || !fecha || !hora) {
       return res.status(400).json({ message: "Datos incompletos" });
     }
-
-    console.log(empresa, barbero, servicio, fecha, hora);
 
     /* =============================
        VALIDAR EMPRESA
