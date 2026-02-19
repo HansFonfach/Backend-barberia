@@ -94,9 +94,10 @@ export const cancelarReservaPorLink = async (req, res) => {
 
     const horasDiff = inicioReservaChile.diff(ahoraChile, "hour", true);
 
-    if (horasDiff < 3) {
+    if (horasDiff < 0) {
+      // 👈 solo bloquea si la reserva ya pasó
       return res.status(403).json({
-        message: "No puedes cancelar con menos de 3 horas de anticipación",
+        message: "No puedes cancelar una reserva que ya pasó",
       });
     }
 

@@ -318,7 +318,7 @@ export const createReserva = async (req, res) => {
         empresa: empresa, // 👈 agregar esto
         token: cancelToken,
         tipo: "reserva",
-        expiraEn: inicioReservaUTC.subtract(3, "hour").toDate(),
+        expiraEn: inicioReservaUTC.add(1, "year").toDate(),
       });
     }
 
