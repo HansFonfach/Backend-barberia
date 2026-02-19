@@ -1,4 +1,3 @@
-// routes/reservaInvitadoRoutes.js
 import { Router } from "express";
 import {
   cancelarReservaPorLink,
@@ -8,18 +7,8 @@ import {
 
 const router = Router();
 
-// Crear reserva como invitado
 router.post("/:slug", reservarComoInvitado);
-// api
-export const getInfoReservaInvitado = (token) => {
-  return axiosPublic.get(`/reserva/invitado/info-por-token?token=${token}`);
-};
-
-export const postCancelarHoraInvitado = (token) => {
-  return axiosPublic.post("/reserva/invitado/cancelar-reserva-invitado", {
-    token,
-  });
-};
-
+router.post("/cancelar-reserva-invitado", cancelarReservaPorLink);
+router.get("/info-por-token", getReservaInfoPorToken);
 
 export default router;
