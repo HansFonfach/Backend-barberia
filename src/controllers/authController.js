@@ -253,6 +253,7 @@ export const me = async (req, res) => {
       apellido: req.usuario.apellido,
       email: req.usuario.email,
       telefono: req.usuario.telefono,
+      suscrito: req.usuario.suscrito,
       rol: req.usuario.rol,
       empresa: empresa, // 👈 AQUÍ viene el slug
     });

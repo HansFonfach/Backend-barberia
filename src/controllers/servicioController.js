@@ -13,7 +13,9 @@ export const getServicios = async (req, res) => {
         .json({ message: "No se pudo identificar la empresa del usuario" });
     }
 
-    const servicios = await Servicio.find({ empresa: empresaId });
+    const servicios = await Servicio.find({ empresa: empresaId }).sort({
+      precio: 1,
+    }); // 👈 ASC
     res.json(servicios);
   } catch (error) {
     console.error("Error al obtener servicios:", error);
@@ -112,7 +114,6 @@ export const getServiciosPublicos = async (req, res) => {
     // 1️⃣ Buscar empresa por slug
     const empresa = await empresaModel.findOne({ slug });
 
-
     if (!empresa) {
       return res.status(404).json({
         message: "Empresa no encontrada",
@@ -122,7 +123,6 @@ export const getServiciosPublicos = async (req, res) => {
     // 2️⃣ Buscar servicios por ID de empresa
     const servicios = await Servicio.find({
       empresa: empresa._id,
-      
     });
     console.log("SERVICIOS PULICOS", servicios);
 
