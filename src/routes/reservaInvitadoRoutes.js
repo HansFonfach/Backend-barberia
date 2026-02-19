@@ -7,8 +7,11 @@ import {
 
 const router = Router();
 
-router.post("/:slug", reservarComoInvitado);
+// 👇 Primero las rutas fijas
 router.post("/cancelar-reserva-invitado", cancelarReservaPorLink);
 router.get("/info-por-token", getReservaInfoPorToken);
+
+// 👇 Al final la dinámica
+router.post("/:slug", reservarComoInvitado);
 
 export default router;
