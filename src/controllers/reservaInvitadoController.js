@@ -131,44 +131,30 @@ export const getReservaInfoPorToken = async (req, res) => {
     const { token } = req.query;
 
     if (!token) {
-      return res.status(400).json({
-        message: "Token requerido",
-      });
+      return res.status(400).json({ message: "Token requerido" });
     }
 
-    const accessToken = await AccessToken.findOne({ token });
+    const accessToken = await accesTokenModel.findOne({ token }); // 👈
 
     if (!accessToken) {
-      return res.status(404).json({
-        message: "Link inválido",
-        code: "INVALID",
-      });
-    }
-
-    if (accessToken.usado) {
-      return res.status(410).json({
-        message: "Este link ya fue utilizado",
-        code: "USED",
-      });
+      return res
+        .status(404)
+        .json({ message: "Link inválido", code: "INVALID" });
     }
 
     if (accessToken.expiraEn < new Date()) {
-      return res.status(410).json({
-        message: "Este link ha expirado",
-        code: "EXPIRED",
-      });
+      return res
+        .status(410)
+        .json({ message: "Este link ha expirado", code: "EXPIRED" });
     }
 
-    const reserva = await reservaModel
-      .findById(accessToken.reserva)
+    const reserva = await Reserva.findById(accessToken.reserva) // 👈
       .populate("empresa", "nombre")
       .populate("servicio", "nombre duracion")
       .populate("barbero", "nombre apellido");
 
     if (!reserva) {
-      return res.status(404).json({
-        message: "Reserva no encontrada",
-      });
+      return res.status(404).json({ message: "Reserva no encontrada" });
     }
 
     if (["cancelada", "atendida"].includes(reserva.estado)) {
@@ -181,15 +167,14 @@ export const getReservaInfoPorToken = async (req, res) => {
     return res.json({
       empresa: reserva.empresa.nombre,
       fecha: reserva.fecha,
-      hora: reserva.hora,
       servicio: reserva.servicio.nombre,
       duracion: reserva.servicio.duracion,
       barbero: `${reserva.barbero.nombre} ${reserva.barbero.apellido}`,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      message: "Error al obtener información de la reserva",
-    });
+    res
+      .status(500)
+      .json({ message: "Error al obtener información de la reserva" });
   }
 };
