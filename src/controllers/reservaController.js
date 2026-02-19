@@ -347,7 +347,7 @@ export const createReserva = async (req, res) => {
         servicio: nombreServicio,
         duracion: duracionServicio,
         horaFin: finReservaChile.format("HH:mm"),
-        cancelUrl: `${process.env.FRONT_URL}/${empresaDoc.slug}/cancelar-reserva?token=${cancelToken}`,
+        cancelUrl: `${process.env.FRONT_URL}/${empresaDoc.slug}/cancelar-reserva-invitado?token=${cancelToken}`,
       }).catch(console.error);
     } else {
       // 👉 USUARIO REGISTRADO
