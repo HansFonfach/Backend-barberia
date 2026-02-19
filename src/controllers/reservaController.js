@@ -5,7 +5,12 @@ import suscripcionModel from "../models/suscripcion.model.js";
 import barberoServicioModel from "../models/barberoServicio.model.js";
 import empresaModel from "../models/empresa.model.js";
 import { formatHora } from "../utils/horas.js";
-import { sendReservationEmail } from "./mailController.js";
+import {
+  sendGuestReservationEmail,
+  sendReservationEmail,
+} from "./mailController.js";
+import accesTokenModel from "../models/accesToken.model.js";
+import crypto from "crypto";
 
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
@@ -71,8 +76,6 @@ export const createReserva = async (req, res) => {
 
     const { barbero, servicio, fecha, hora } = req.body;
     const cliente = req.usuario?.id;
-
-    console.log(empresa, barbero, servicio, fecha, hora);
 
     if (!empresa || !barbero || !servicio || !fecha || !hora) {
       return res.status(400).json({ message: "Datos incompletos" });
@@ -157,7 +160,7 @@ export const createReserva = async (req, res) => {
     }
 
     /* =============================
-       SERVICIO DEL BARBERO
+       SERVICIO
     ============================== */
     const barberoServicio = await barberoServicioModel
       .findOne({ barbero, servicio, activo: true })
@@ -179,7 +182,7 @@ export const createReserva = async (req, res) => {
     const finReservaChile = inicioReservaChile.add(duracionServicio, "minute");
 
     /* =============================
-       HORARIOS DEL BARBERO
+       HORARIOS
     ============================== */
     const horariosDelDia = barberoDoc.horariosDisponibles.filter(
       (h) => Number(h.diaSemana) === diaSemana,
@@ -288,15 +291,6 @@ export const createReserva = async (req, res) => {
     }
 
     /* =============================
-       DEBUG HUECOS
-    ============================== */
-    const huecos = calcularHuecosDisponibles(reservasDelDia, bloqueValido);
-    console.log(
-      "Huecos:",
-      huecos.map((h) => `${h.inicio.format("HH:mm")}-${h.fin.format("HH:mm")}`),
-    );
-
-    /* =============================
        CREAR RESERVA
     ============================== */
     const reserva = await Reserva.create({
@@ -310,26 +304,63 @@ export const createReserva = async (req, res) => {
       estado: "pendiente",
     });
 
+    /* =============================
+       TOKEN INVITADO
+    ============================== */
+    let cancelToken = null;
+
+    if (req.crearTokenCancelacion) {
+      cancelToken = crypto.randomBytes(32).toString("hex");
+
+      await accesTokenModel.create({
+        usuario: cliente,
+        reserva: reserva._id,
+        empresa: empresa, // 👈 agregar esto
+        token: cancelToken,
+        tipo: "reserva",
+        expiraEn: inicioReservaUTC.subtract(3, "hour").toDate(),
+      });
+    }
+
+    /* =============================
+       RESPUESTA
+    ============================== */
     res.status(201).json({
       ...reserva.toObject(),
       fechaChile: inicioReservaChile.format("YYYY-MM-DD HH:mm"),
       horaFin: finReservaChile.format("HH:mm"),
       nombreServicio,
       intervaloMinimo,
+      cancelToken,
     });
 
     /* =============================
-       EMAIL
+       EMAIL (CLAVE)
     ============================== */
-    sendReservationEmail(clienteDoc.email, {
-      nombreCliente: clienteDoc.nombre,
-      nombreBarbero: barberoDoc.nombre,
-      fecha,
-      hora: horaFormateada,
-      servicio: nombreServicio,
-      duracion: duracionServicio,
-      horaFin: finReservaChile.format("HH:mm"),
-    }).catch(console.error);
+    if (req.crearTokenCancelacion && cancelToken) {
+      // 👉 INVITADO
+      sendGuestReservationEmail(clienteDoc.email, {
+        nombreCliente: clienteDoc.nombre,
+        nombreBarbero: barberoDoc.nombre,
+        fecha,
+        hora: horaFormateada,
+        servicio: nombreServicio,
+        duracion: duracionServicio,
+        horaFin: finReservaChile.format("HH:mm"),
+        cancelUrl: `${process.env.FRONT_URL}/${empresaDoc.slug}/cancelar-reserva?token=${cancelToken}`,
+      }).catch(console.error);
+    } else {
+      // 👉 USUARIO REGISTRADO
+      sendReservationEmail(clienteDoc.email, {
+        nombreCliente: clienteDoc.nombre,
+        nombreBarbero: barberoDoc.nombre,
+        fecha,
+        hora: horaFormateada,
+        servicio: nombreServicio,
+        duracion: duracionServicio,
+        horaFin: finReservaChile.format("HH:mm"),
+      }).catch(console.error);
+    }
   } catch (error) {
     console.error("❌ Error createReserva:", error);
     res.status(500).json({ message: "Error al crear la reserva" });

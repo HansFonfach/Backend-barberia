@@ -16,6 +16,6 @@ export const generarToken = (usuario) => {
       empresaId: usuario.empresa, // ✅
     },
     TOKEN_SECRET,
-    { expiresIn: "1h" }, // configurable
+    { expiresIn: "1d" }, // configurable
   );
 };

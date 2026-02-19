@@ -18,8 +18,5 @@ router.post("/forgot-password", forgotPassword);
 router.post("/change-password/:id", validarToken, updateUsuarioPassword);
 router.get("/me", validarToken, me);
 
-router.get("/verify", validarToken, (req, res) => {
-  res.json({ usuario: req.usuario });
-});
 
 export default router;

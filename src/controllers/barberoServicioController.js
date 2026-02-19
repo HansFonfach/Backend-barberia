@@ -70,7 +70,7 @@ export const obtenerServiciosDeBarbero = async (req, res) => {
         barbero: barberoId,
         activo: true,
       })
-      .populate("servicio", "nombre, descripcion");
+      .populate("servicio", "nombre descripcion");
 
     const response = servicios.map((s) => ({
       id: s._id,

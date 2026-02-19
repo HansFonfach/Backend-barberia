@@ -67,18 +67,30 @@ export const sendGuestReservationEmail = async (to, data) => {
     </p>
 
     <p>
-      <a href="${cancelUrl}" target="_blank">
-        Cancelar mi reserva
-      </a>
+<a 
+  href="${cancelUrl}" 
+  target="_blank"
+  style="
+    display:inline-block;
+    padding:12px 18px;
+    background:#dc3545;
+    color:#fff;
+    text-decoration:none;
+    border-radius:6px;
+    font-weight:bold;
+  "
+>
+  ❌ Cancelar mi reserva
+</a>
     </p>
 
     <p style="color:#555">
   ⏰ Puedes cancelar esta reserva hasta <b>30 minutos antes</b> del horario agendado.
 </p>
 
-    <small>
-      Este enlace es personal y expira automáticamente.
-    </small>
+<small>
+  Este enlace es personal y expira automáticamente.
+</small>
   `;
 
   return await sendBaseEmail({
