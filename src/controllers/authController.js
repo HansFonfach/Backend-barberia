@@ -144,7 +144,7 @@ export const register = async (req, res) => {
       password: hashedPassword,
     });
     await newUser.save();
-    console.log(newUser);
+ 
 
     const token = generarToken(newUser);
 

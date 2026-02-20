@@ -10,17 +10,13 @@ const __dirname = path.dirname(__filename);
 const envPath = path.resolve(__dirname, "..", "..", ".env");
 dotenv.config({ path: envPath });
 
-console.log("🔧 WhatsAppService - Variables:");
-console.log(
-  "TWILIO_ACCOUNT_SID:",
-  process.env.TWILIO_ACCOUNT_SID ? "✅" : "❌"
-);
+
 
 import twilio from "twilio";
 
 class WhatsAppService {
   constructor() {
-    console.log("🔧 Inicializando Twilio en servicio...");
+   
 
     // Verificar credenciales
     if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {

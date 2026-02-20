@@ -25,7 +25,7 @@ export const validarToken = (req, res, next) => {
       }
       return res.status(403).json({ message: "Token inválido o manipulado." });
     }
-    //console.log("🔍 Payload del token:", usuario); // 👈 agrega esto
+   
     req.usuario = usuario;
     next();
   });

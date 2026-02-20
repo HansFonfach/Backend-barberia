@@ -475,11 +475,7 @@ export const getHorarioBasePorDia = async (req, res) => {
 
     const diaSemana = fechaChile.day(); // 0 domingo - 6 sábado (CHILE)
 
-    console.log("📅 Horario base request:", {
-      barberoId,
-      fecha,
-      diaSemana,
-    });
+ 
 
     const horario = await Horario.findOne({
       barbero: barberoId,
@@ -536,20 +532,17 @@ export const limpiarDatosCorruptos = async (req, res) => {
 
 export const getProximaHoraDisponible = async (req, res) => {
   try {
-    console.log("🚀 Buscando próxima hora disponible (slots individuales)");
-
+   
     const DIAS_A_BUSCAR = 14;
     // Ahora en Chile
     const ahora = dayjs().tz("America/Santiago");
-    console.log("🕐 Ahora en Chile:", ahora.format("YYYY-MM-DD HH:mm"));
-
+    
     let mejorSlot = null;
 
     // Obtener todos los horarios con la información del barbero
     const horarios = await Horario.find().populate("barbero", "nombre");
 
-    console.log("📅 Horarios encontrados:", horarios.length);
-
+    
     // Ordenar horarios por prioridad (podrías ordenar por algún criterio)
     horarios.sort((a, b) => {
       // Priorizar barberos con más disponibilidad, o algún otro criterio
@@ -564,25 +557,18 @@ export const getProximaHoraDisponible = async (req, res) => {
         .startOf("day");
       const diaSemanaActual = diaActual.day(); // 0=domingo, 6=sábado
 
-      console.log(
-        `\n📅 Día ${d}: ${diaActual.format(
-          "YYYY-MM-DD",
-        )} (día semana: ${diaSemanaActual})`,
-      );
-
+ 
       // Buscar horarios que apliquen para este día de la semana
       const horariosDelDia = horarios.filter((h) => h.dia === diaSemanaActual);
 
       if (horariosDelDia.length === 0) {
-        console.log("⏭ No hay horarios para este día de la semana");
+      
         continue;
       }
 
       // Para cada barbero con horario este día
       for (const horario of horariosDelDia) {
-        console.log(
-          `\n💈 Barbero: ${horario.barbero?.nombre || horario.barbero}`,
-        );
+      
 
         // Rango del día completo en UTC para consultas
         const inicioDiaUTC = diaActual.utc().startOf("day").toDate();
@@ -600,7 +586,7 @@ export const getProximaHoraDisponible = async (req, res) => {
           dayjs(r.fecha).tz("America/Santiago").format("HH:mm"),
         );
 
-        console.log(`📊 Horas ocupadas: ${horasOcupadas.length}`);
+     
 
         // Verificar excepciones de horario (bloqueos/extra)
         const excepciones = await ExcepcionHorarioModel.find({
@@ -625,7 +611,7 @@ export const getProximaHoraDisponible = async (req, res) => {
 
         // Procesar cada bloque del horario
         for (const bloque of horario.bloques) {
-          console.log(`⏱ Bloque: ${bloque.horaInicio} - ${bloque.horaFin}`);
+        
 
           // Generar horas para este bloque
           const horasGeneradas = generarHoras(bloque);
@@ -644,24 +630,24 @@ export const getProximaHoraDisponible = async (req, res) => {
 
             // Verificar si el slot es en el futuro
             if (slotUTC.isBefore(ahoraUTC)) {
-              console.log(`⏩ Slot pasado: ${horaStr}`);
+            
               continue;
             }
 
             // Verificar si está bloqueado por excepción
             if (horasBloqueadas.includes(horaStr)) {
-              console.log(`🚫 Slot bloqueado: ${horaStr}`);
+             
               continue;
             }
 
             // Verificar si ya está reservado
             if (horasOcupadas.includes(horaStr)) {
-              console.log(`📌 Slot ocupado: ${horaStr}`);
+            
               continue;
             }
 
             // Slot disponible encontrado!
-            console.log(`✅ Slot disponible encontrado: ${horaStr}`);
+           
 
             // Es el primer slot disponible o es más temprano que el anterior?
             if (!mejorSlot || slotUTC.isBefore(mejorSlot.fechaUTC)) {
@@ -698,7 +684,7 @@ export const getProximaHoraDisponible = async (req, res) => {
     }
 
     if (!mejorSlot) {
-      console.log("🚫 No se encontró ningún slot disponible");
+     
       return res.status(404).json({
         message: "No hay horas disponibles en los próximos días",
         busquedaHasta: dayjs()
@@ -708,13 +694,7 @@ export const getProximaHoraDisponible = async (req, res) => {
       });
     }
 
-    console.log("🎉 Mejor slot encontrado:", {
-      fechaChile: dayjs(mejorSlot.fechaChile)
-        .tz("America/Santiago")
-        .format("YYYY-MM-DD HH:mm"),
-      barbero: mejorSlot.barbero.nombre,
-      dia: mejorSlot.diaNombre,
-    });
+
 
     // Formatear respuesta con hora chilena
     const fechaChileFormateada = dayjs(mejorSlot.fechaChile)

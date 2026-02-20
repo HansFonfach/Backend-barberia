@@ -66,19 +66,14 @@ export const verificarFeriadoConComportamiento = async (fechaStr) => {
 
 // OPCIONAL: Función de depuración para ver qué está pasando
 export const debugFeriadoConsulta = async (fechaStr) => {
-  console.log("🔍 DEBUG FERIADO - Inicio");
-  console.log("fechaStr recibida:", fechaStr);
-  console.log("tipo:", typeof fechaStr);
+ 
   
   const fechaDayjs = dayjs(fechaStr, "YYYY-MM-DD");
-  console.log("dayjs.isValid():", fechaDayjs.isValid());
-  console.log("dayjs.format():", fechaDayjs.format("YYYY-MM-DD"));
+ 
   
   const inicioDia = fechaDayjs.startOf("day").toDate();
   const finDia = fechaDayjs.endOf("day").toDate();
-  
-  console.log("inicioDia (Date):", inicioDia);
-  console.log("finDia (Date):", finDia);
+ 
   
   try {
     const feriado = await Feriado.findOne({
@@ -89,7 +84,7 @@ export const debugFeriadoConsulta = async (fechaStr) => {
       activo: true,
     });
     
-    console.log("Feriado encontrado:", feriado);
+   
     return feriado;
   } catch (error) {
     console.error("Error en consulta:", error);

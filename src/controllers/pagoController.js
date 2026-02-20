@@ -67,8 +67,7 @@ export const confirmarPagoSuscripcion = async (req, res) => {
   let token;
 
   try {
-    console.log("=== CALLBACK TRANSBANK ===");
-    console.log("Query:", req.query);
+  
 
     token = req.query.token_ws || req.body?.token_ws;
 
@@ -92,7 +91,7 @@ export const confirmarPagoSuscripcion = async (req, res) => {
        COMMIT TRANSBANK
     =============================== */
     const result = await tx.commit(token);
-    console.log("Resultado Transbank:", result.response_code);
+ 
 
     /* ===============================
        PAGO RECHAZADO

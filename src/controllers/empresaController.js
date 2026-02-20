@@ -52,8 +52,7 @@ export const getEmpresaPorSlug = async (req, res) => {
   try {
     const { slug } = req.params;
     const empresa = await empresaModel.findOne({ slug });
-    console.log(slug);
-
+  
     if (!empresa) {
       return res.status(404).json({ message: "Empresa no encontrada" });
     }

@@ -124,7 +124,7 @@ export const getServiciosPublicos = async (req, res) => {
     const servicios = await Servicio.find({
       empresa: empresa._id,
     });
-    console.log("SERVICIOS PULICOS", servicios);
+   
 
     res.json({
       servicios,

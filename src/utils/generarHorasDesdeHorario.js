@@ -6,7 +6,7 @@ dayjs.extend(isSameOrBefore);
 
 // generarHorasDesdeHorario.js - VERSIÓN SIN DAYJS (más simple)
 export const generarHorasDesdeHorario = (horario) => {
-  console.log("🎯 VERSIÓN SIN DAYJS - usando lógica pura");
+
 
   if (!horario || !horario.horaInicio || !horario.horaFin) {
     console.error("Horario inválido");
@@ -40,7 +40,6 @@ export const generarHorasDesdeHorario = (horario) => {
     : null;
   const intervaloMinimo = horario.intervaloMinimo || 60; // Mínimo de 15 minutos
 
-  console.log("📊 Intervalo mínimo:", intervaloMinimo, "minutos");
 
   // Generar horas
   for (let time = startMinutes; time < endMinutes; time += intervaloMinimo) {
@@ -55,12 +54,12 @@ export const generarHorasDesdeHorario = (horario) => {
 
     if (!enColacion) {
       horasInicio.push(horaStr);
-      console.log(`✅ ${horaStr}`);
+    
     } else {
-      console.log(`🍽️ ${horaStr} en colación`);
+     
     }
   }
 
-  console.log(`📋 Total: ${horasInicio.length} horas`);
+
   return horasInicio;
 };

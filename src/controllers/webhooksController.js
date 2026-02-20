@@ -13,13 +13,13 @@ export const enviarMensaje = async (req, res) => {
     const numeroUsuario = From.replace("whatsapp:", "");
     const mensajeUsuario = Body.trim().toLowerCase();
 
-    console.log(`📩 WhatsApp de ${numeroUsuario}: "${mensajeUsuario}"`);
+   
 
     // Buscar usuario por teléfono en la base de datos
     const usuario = await Usuario.findOne({ telefono: numeroUsuario });
 
     if (!usuario) {
-      console.log(`❌ Usuario no encontrado con teléfono: ${numeroUsuario}`);
+    
       return res.type("text/xml").send(`
         <Response>
           <Message>Lo sentimos, no encontramos tus reservas. Contacta a la barbería.</Message>
@@ -39,7 +39,7 @@ export const enviarMensaje = async (req, res) => {
     .populate("barbero", "nombre");
 
     if (!reserva) {
-      console.log(`❌ No hay reservas activas para ${usuario.nombre}`);
+    
       await WhatsAppService.client.messages.create({
         body: "No encontramos reservas activas para hoy. Si crees que es un error, contacta a la barbería.",
         from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
@@ -68,7 +68,7 @@ export const enviarMensaje = async (req, res) => {
       
       mensajeRespuesta = `¡Gracias por confirmar, ${usuario.nombre}! 💈✂️\n\nTe esperamos hoy a las ${reserva.hora} con ${reserva.barbero.nombre}.`;
       
-      console.log(`✅ ${usuario.nombre} confirmó reserva ${reserva._id}`);
+    
       
     } else if (mensajeUsuario.includes("❌") || mensajeUsuario.includes("no")) {
       respuesta = "cancelar";
@@ -80,7 +80,7 @@ export const enviarMensaje = async (req, res) => {
       
       mensajeRespuesta = `Entendido, ${usuario.nombre}. Hemos cancelado tu reserva de hoy a las ${reserva.hora}.\n\n¡Esperamos verte pronto en la barbería! 💈`;
       
-      console.log(`❌ ${usuario.nombre} canceló reserva ${reserva._id}`);
+     
       
     } else {
       respuesta = "indeterminada";
@@ -103,7 +103,7 @@ export const enviarMensaje = async (req, res) => {
       reservaId: reserva._id
     });
 
-    console.log(`📊 Respuesta procesada: ${respuesta} de ${usuario.nombre}`);
+   
 
     // Twilio espera este formato de respuesta
     res.type("text/xml");

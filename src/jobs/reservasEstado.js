@@ -5,8 +5,6 @@ import usuarioModel from "../models/usuario.model.js";
 export const iniciarJobReservas = () => {
   // Cada 5 minutos
   cron.schedule("*/5 * * * *", async () => {
-    console.log("⏰ Job reservas ejecutándose...");
-
     try {
       const ahora = new Date();
 
@@ -16,7 +14,6 @@ export const iniciarJobReservas = () => {
       });
 
       if (!reservas.length) {
-        console.log("✔️ No hay reservas pendientes");
         return;
       }
 
@@ -28,17 +25,13 @@ export const iniciarJobReservas = () => {
         if (!reserva.puntosSumados) {
           await usuarioModel.updateOne(
             { _id: reserva.cliente },
-            { $inc: { puntos: reserva.puntosOtorgados } }
+            { $inc: { puntos: reserva.puntosOtorgados } },
           );
 
           reserva.puntosSumados = true;
         }
 
         await reserva.save();
-
-        console.log(
-          `✅ Reserva ${reserva._id} completada → +${reserva.puntosOtorgados} puntos`
-        );
       }
     } catch (error) {
       console.error("❌ Error en job de reservas:", error);

@@ -67,8 +67,6 @@ export const getUsuarioByRut = async (req, res) => {
   const { rut } = req.params;
 
   try {
-    console.log("🔍 Backend - Buscando usuario con RUT recibido:", rut);
-
     if (!rut || rut.trim() === "") {
       return res.status(400).json({
         success: false,
@@ -81,17 +79,12 @@ export const getUsuarioByRut = async (req, res) => {
 
     // 2. Si no encuentra, buscar con RUT limpio
     if (!usuario) {
-      console.log(
-        "⚠️ No encontrado con formato original, buscando con RUT limpio...",
-      );
-
       // Función para limpiar RUT (quitar puntos y guión, convertir a mayúsculas)
       const limpiarRut = (rutStr) => {
         return rutStr.replace(/[\.\-]/g, "").toUpperCase();
       };
 
       const rutLimpioBuscado = limpiarRut(rut);
-      console.log("🔍 RUT limpio para búsqueda:", rutLimpioBuscado);
 
       // Buscar todos los usuarios y comparar RUTs limpios
       const todosUsuarios = await Usuario.find({});
@@ -102,11 +95,6 @@ export const getUsuarioByRut = async (req, res) => {
         const encontrado = rutBDLimpio === rutLimpioBuscado;
 
         if (encontrado) {
-          console.log("✅ Coincidencia encontrada!");
-          console.log("   RUT en BD:", u.rut);
-          console.log("   RUT BD limpio:", rutBDLimpio);
-          console.log("   RUT buscado:", rut);
-          console.log("   RUT buscado limpio:", rutLimpioBuscado);
         }
 
         return encontrado;
@@ -114,7 +102,7 @@ export const getUsuarioByRut = async (req, res) => {
     }
 
     if (!usuario) {
-      console.log("❌ Usuario NO encontrado");
+     
       return res.status(404).json({
         success: false,
         message: "Usuario no encontrado",
@@ -122,7 +110,7 @@ export const getUsuarioByRut = async (req, res) => {
       });
     }
 
-    console.log("✅ Usuario encontrado:", usuario.nombre, usuario.apellido);
+   
     res.json({
       success: true,
       _id: usuario._id,
