@@ -17,6 +17,7 @@ import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
 import isSameOrBefore from "dayjs/plugin/isSameOrBefore.js";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter.js";
+import notificacionModel from "../models/notificacion.Model.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -425,7 +426,8 @@ export const getReservasByBarberId = async (req, res) => {
 export const postDeleteReserva = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log("📌 Cancelando reserva con ID:", id);
+
+    const {motivo} = req.body;
 
     const existeReserva = await Reserva.findById(id);
     if (!existeReserva) {
@@ -434,16 +436,11 @@ export const postDeleteReserva = async (req, res) => {
       });
     }
 
-    console.log("✅ Reserva encontrada:", existeReserva);
-
-    console.log("🔻 Puntos restados al usuario");
-
     // Eliminar la reserva
     await Reserva.findByIdAndUpdate(id, {
       estado: "cancelada",
-      motivoCancelacion: "Cancelada por el usuario",
+      motivoCancelacion: motivo || "Cancelada por el usuario",
     });
-    console.log("✅ Reserva eliminada");
 
     // ────────────────────────────────
     // Notificaciones
@@ -463,7 +460,6 @@ export const postDeleteReserva = async (req, res) => {
             const usuario = noti.usuarioId;
 
             if (!usuario?.telefono) {
-              console.log("⚠️ Usuario sin teléfono, se omite");
               return;
             }
 
@@ -499,8 +495,6 @@ ${process.env.FRONTEND_URL}/reservar
 
               noti.enviado = true;
               await noti.save();
-
-              console.log(`✅ WhatsApp enviado a ${usuario.nombre}`);
             } catch (err) {
               console.error(
                 `❌ Error enviando WhatsApp a ${usuario.nombre}:`,
@@ -626,5 +620,35 @@ export const getReservasPorFechaBarbero = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Error al obtener reservas por fecha" });
+  }
+};
+
+export const updateMarcarNoAsistioReserva = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const reservaActualizada = await Reserva.findByIdAndUpdate(
+      id,
+      { estado: "no_asistio" },
+      { new: true },
+    );
+
+    if (!reservaActualizada) {
+      return res.status(404).json({
+        message: "No se ha encontrado la reserva.",
+      });
+    }
+
+ 
+
+    return res.status(200).json({
+      message: "Reserva marcada como no asistió.",
+      reserva: reservaActualizada,
+    });
+  } catch (error) {
+    console.error("❌ Error al actualizar estado de reserva", error);
+    return res.status(500).json({
+      message: "Error del servidor al actualizar la reserva.",
+    });
   }
 };

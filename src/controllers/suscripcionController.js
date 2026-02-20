@@ -10,40 +10,61 @@ export const crearSuscripcion = async (req, res) => {
   try {
     const { id } = req.params; // usuarioId
 
-    // Límite global de suscripciones activas (si lo quieres usar)
-    const count = await Suscripcion.countDocuments({ activa: true });
-    if (count >= 20) {
-      return res.status(400).json({
-        message: "Ya se alcanzó el límite máximo de suscripciones activas.",
-      });
-    }
-
+    // 1️⃣ Usuario
     const usuario = await Usuario.findById(id);
     if (!usuario) {
       return res.status(404).json({
         success: false,
-        message: "Usuario no encontrado.",
+        message: "Usuario no encontrado",
       });
     }
 
+    if (!usuario.empresa) {
+      return res.status(400).json({
+        success: false,
+        message: "El usuario no tiene empresa asociada",
+      });
+    }
+
+    // 2️⃣ Suscripción activa del usuario en esta empresa
     const suscripcionActiva = await Suscripcion.findOne({
-      usuario: id,
+      usuario: usuario._id,
+      empresa: usuario.empresa,
       activa: true,
     });
 
     if (suscripcionActiva) {
       return res.status(409).json({
         success: false,
-        message: "El usuario ya tiene una suscripción activa.",
+        message: "El usuario ya tiene una suscripción activa",
       });
     }
 
+    // 3️⃣ 🔥 LÍMITE POR EMPRESA (AQUÍ VA)
+    const limiteEmpresa = 20;
+
+    const totalActivasEmpresa = await Suscripcion.countDocuments({
+      empresa: usuario.empresa,
+      activa: true,
+    });
+
+    if (totalActivasEmpresa >= limiteEmpresa) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Esta barbería alcanzó el límite máximo de suscripciones activas",
+      });
+    }
+
+    // 4️⃣ Fechas
     const fechaInicio = new Date();
     const fechaFin = new Date(fechaInicio);
     fechaFin.setDate(fechaFin.getDate() + 30);
 
+    // 5️⃣ Crear
     const nueva = await Suscripcion.create({
-      usuario: id,
+      usuario: usuario._id,
+      empresa: usuario.empresa,
       activa: true,
       fechaInicio,
       fechaFin,
@@ -52,31 +73,22 @@ export const crearSuscripcion = async (req, res) => {
       serviciosUsados: 0,
     });
 
-    await Usuario.findByIdAndUpdate(id, { suscrito: true });
+    // 6️⃣ Marcar usuario (opcional)
+    await Usuario.findByIdAndUpdate(usuario._id, { suscrito: true });
 
     return res.status(201).json({
       success: true,
-      message: "Suscripción creada correctamente.",
-      data: { suscripcion: nueva },
+      message: "Suscripción creada correctamente",
+      data: nueva,
     });
   } catch (error) {
     console.error("Error al crear suscripción:", error);
-
-    if (error.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message:
-          "Ya existe una suscripción activa para este usuario (error índice).",
-      });
-    }
-
     return res.status(500).json({
       success: false,
-      message: "Error interno del servidor al crear la suscripción.",
+      message: "Error interno del servidor",
     });
   }
 };
-
 /* =======================================================
    🔴 Cancelar Suscripción
 ======================================================= */

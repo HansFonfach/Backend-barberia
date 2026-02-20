@@ -28,7 +28,7 @@ const ReservaSchema = new Schema(
 
     estado: {
       type: String,
-      enum: ["pendiente", "confirmada", "cancelada", "completada"],
+      enum: ["pendiente", "confirmada", "cancelada", "completada" ,"no_asistio"],
       default: "pendiente",
     },
 

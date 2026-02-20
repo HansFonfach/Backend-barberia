@@ -54,7 +54,7 @@ const suscripcionSchema = new mongoose.Schema(
 );
 
 // ✅ Índice compuesto normal (NO único)
-suscripcionSchema.index({ usuario: 1, activa: 1 });
+suscripcionSchema.index({ usuario: 1, empresa: 1, activa: 1 });
 
 // ❌ NO uses índice único parcial - eso causa el problema
 // suscripcionSchema.index(

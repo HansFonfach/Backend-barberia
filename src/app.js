@@ -60,7 +60,7 @@ app.get("/", (req, res) => {
   res.send("API Barbería funcionando 🚀");
 });
 
-console.log("Hora backend:", new Date());
+
 
 app.use("/usuarios", usuarioRoutes);
 app.use("/horarios", horarioRoutes);
