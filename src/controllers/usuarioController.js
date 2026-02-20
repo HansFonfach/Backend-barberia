@@ -102,7 +102,6 @@ export const getUsuarioByRut = async (req, res) => {
     }
 
     if (!usuario) {
-     
       return res.status(404).json({
         success: false,
         message: "Usuario no encontrado",
@@ -110,7 +109,6 @@ export const getUsuarioByRut = async (req, res) => {
       });
     }
 
-   
     res.json({
       success: true,
       _id: usuario._id,
@@ -134,6 +132,49 @@ export const getUsuarioByRut = async (req, res) => {
   }
 };
 
+export const updatePerfil = async (req, res) => {
+  try {
+    const id = req.usuario.id; // 🔥 viene del token
+
+    const { email, telefono, nombre, apellido } = req.body;
+
+    const data = {};
+    if (nombre !== undefined) data.nombre = nombre;
+    if (apellido !== undefined) data.apellido = apellido;
+    if (email !== undefined) data.email = email;
+    if (telefono !== undefined) data.telefono = telefono;
+
+    if (!Object.keys(data).length) {
+      return res.status(400).json({
+        message: "No hay datos válidos para actualizar",
+      });
+    }
+
+    const emailExiste = await Usuario.findOne({
+      email,
+      _id: { $ne: id },
+    });
+
+    if (emailExiste) {
+      return res.status(400).json({
+        message: "El email ya está en uso",
+      });
+    }
+
+    const usuarioActualizado = await Usuario.findByIdAndUpdate(id, data, {
+      new: true,
+      runValidators: true,
+    });
+
+    res.json({
+      message: "Perfil actualizado correctamente",
+      usuario: usuarioActualizado,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
 export const updateUsuario = async (req, res) => {
   try {
     const { id } = req.params;
