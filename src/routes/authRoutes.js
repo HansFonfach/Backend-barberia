@@ -6,6 +6,7 @@ import {
   me,
   register,
   updateUsuarioPassword,
+  verifyClaim,
 } from "../controllers/authController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 
@@ -17,6 +18,6 @@ router.post("/:slug/register", register);
 router.post("/forgot-password", forgotPassword);
 router.post("/change-password/:id", validarToken, updateUsuarioPassword);
 router.get("/me", validarToken, me);
-
+router.get("/verify-claim", verifyClaim);
 
 export default router;

@@ -13,10 +13,7 @@ const UsuarioSchema = new Schema(
     email: { type: String, unique: true, required: true },
     telefono: { type: String, required: true },
     suscrito: { type: Boolean, default: false },
-    password: {
-      type: String,
-      default: null,
-    },
+    password: { type: String, default: null },
     estado: {
       type: String,
       enum: ["activo", "inactivo"],
@@ -32,26 +29,21 @@ const UsuarioSchema = new Schema(
       enum: ["gratis", "premium"],
       default: "gratis",
     },
-    maxReservas: {
-      type: Number,
-      default: 2,
-    },
-    puntos: {
-      type: Number,
-      default: 0,
-    },
-    descripcion: {
-      type: String,
-    },
-    deletedAt: {
-      type: Date,
-      default: null,
-    },
+    maxReservas: { type: Number, default: 2 },
+    puntos: { type: Number, default: 0 },
+    descripcion: { type: String },
+    deletedAt: { type: Date, default: null },
+    horariosDisponibles: [{ type: Schema.Types.ObjectId, ref: "Horario" }],
 
-    horariosDisponibles: [{ type: Schema.Types.ObjectId, ref: "Horario" }], // solo aplica si es barbero
+    // ✅ Verificación de cuenta (account claiming)
+    verificationToken: { type: String, default: null },
+    verificationTokenExpires: { type: Date, default: null },
+    pendingPassword: { type: String, default: null }, // password hasheado en espera
   },
-  { timestamps: true },
+  { timestamps: true }
 );
+
 UsuarioSchema.index({ empresa: 1, rol: 1 });
 UsuarioSchema.index({ email: 1 }, { unique: true });
+
 export default model("Usuario", UsuarioSchema);

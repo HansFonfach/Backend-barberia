@@ -132,3 +132,28 @@ export const sendSuscriptionActiveEmail = async (to, data) => {
     html,
   });
 };
+
+export const sendClaimAccountEmail = async (to, data) => {
+  const { nombreCliente, claimUrl } = data;
+
+  const html = `
+    <h2>Activa tu cuenta 🔐</h2>
+    <p>Hola <strong>${nombreCliente}</strong>,</p>
+    <p>Recibimos una solicitud para crear una cuenta con tu RUT.</p>
+    <p>Si fuiste tú, haz clic en el botón para activar tu cuenta y conservar tu historial de reservas:</p>
+    <p>
+      <a href="${claimUrl}" target="_blank" style="display:inline-block;padding:12px 18px;background:#28a745;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">
+        ✅ Activar mi cuenta
+      </a>
+    </p>
+    <p style="color:#555">⏰ Este enlace expira en <b>1 hora</b>.</p>
+    <p>Si no fuiste tú, ignora este correo. Tu cuenta de invitado no será modificada.</p>
+    <small>Este enlace es personal e intransferible.</small>
+  `;
+
+  return await sendBaseEmail({
+    to,
+    subject: "🔐 Activa tu cuenta – Agenda Fonfach",
+    html,
+  });
+};

@@ -319,7 +319,7 @@ export const ultimaReserva = async (req, res) => {
 export const proximaReserva = async (req, res) => {
   try {
     const clienteId = req.usuario.id;
-   
+
     const ahora = new Date();
 
     // buscamos reservas con fecha mayor a ahora (futuras)
@@ -452,11 +452,13 @@ export const getProximoCliente = async (req, res) => {
   try {
     const ahora = new Date();
     const barberoId = req.usuario.id;
+    const empresaId = req.usuario.empresaId; // 🔐 CLAVE
 
-    // Buscar próxima reserva
     const reserva = await reservaModel
       .findOne({
+        empresa: empresaId,
         barbero: barberoId,
+        estado: "pendiente",
         fecha: { $gt: ahora },
       })
       .sort({ fecha: 1 })
@@ -466,21 +468,17 @@ export const getProximoCliente = async (req, res) => {
     if (!reserva) {
       return res.status(200).json({
         success: false,
-        message: "No hay próximas reservas",
+        message: "No hay próximas reservas pendientes",
       });
     }
 
-    // Convertir UTC → Hora Chile
     const fechaChile = dayjs(reserva.fecha).tz("America/Santiago");
-
-    const fecha = fechaChile.format("YYYY-MM-DD"); // 2025-12-04
-    const hora = fechaChile.format("HH:mm"); // 19:00
 
     return res.status(200).json({
       success: true,
       data: {
-        fecha,
-        hora,
+        fecha: fechaChile.format("YYYY-MM-DD"),
+        hora: fechaChile.format("HH:mm"),
         cliente: {
           nombreCompleto: `${reserva.cliente?.nombre || ""} ${
             reserva.cliente?.apellido || ""
@@ -490,8 +488,9 @@ export const getProximoCliente = async (req, res) => {
     });
   } catch (error) {
     console.error("Error obteniendo próxima reserva:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Error interno del servidor" });
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 };

@@ -6,6 +6,7 @@ import sendEmail from "../utils/sendEmail.js";
 import suscripcionModel from "../models/suscripcion.model.js";
 import empresaModel from "../models/empresa.model.js";
 import Empresa from "../models/empresa.model.js";
+import { sendClaimAccountEmail } from "./mailController.js";
 
 export const login = async (req, res) => {
   const { email, password, slug } = req.body;
@@ -114,9 +115,7 @@ export const register = async (req, res) => {
 
     const empresa = await empresaModel.findOne({ slug });
     if (!empresa) {
-      return res.status(404).json({
-        message: "Empresa no encontrada",
-      });
+      return res.status(404).json({ message: "Empresa no encontrada" });
     }
 
     const telefonoCompleto = `569${telefono}`;
@@ -125,12 +124,43 @@ export const register = async (req, res) => {
       empresa: empresa._id,
       $or: [{ rut }, { email }],
     });
+
+    // ✅ NUEVO: Si existe pero es invitado, convertimos su cuenta
     if (usuarioExistente) {
+      if (usuarioExistente.rol === "invitado") {
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+        const verificationToken = crypto.randomBytes(32).toString("hex");
+        const verificationTokenExpires = new Date(Date.now() + 60 * 60 * 1000);
+
+        usuarioExistente.pendingPassword = hashedPassword;
+        usuarioExistente.verificationToken = verificationToken;
+        usuarioExistente.verificationTokenExpires = verificationTokenExpires;
+
+        await usuarioExistente.save();
+
+        const claimUrl = `${process.env.FRONTEND_URL}/${slug}/verificar-cuenta?token=${verificationToken}`;
+
+        await sendClaimAccountEmail(usuarioExistente.email, {
+          nombreCliente: usuarioExistente.nombre,
+          claimUrl,
+        });
+
+        return res.status(200).json({
+          message:
+            "Te enviamos un correo al email con el que reservaste para verificar tu identidad.",
+          requiresVerification: true,
+        });
+      }
+
+      // Si existe pero NO es invitado, rechazamos
       return res
         .status(400)
         .json({ message: "Ya existe una cuenta registrada con estos datos" });
     }
 
+    // Flujo normal de registro
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
@@ -144,21 +174,18 @@ export const register = async (req, res) => {
       password: hashedPassword,
     });
     await newUser.save();
- 
 
     const token = generarToken(newUser);
-
-    // ✅ CONFIGURACIÓN MEJORADA PARA MÓVILES
     const isProduction = process.env.NODE_ENV === "production";
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: isProduction, // ✅ HTTPS obligatorio en producción
-      sameSite: isProduction ? "none" : "lax", // ✅ Safari necesita 'none'
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
       maxAge: 24 * 60 * 60 * 1000,
       path: "/",
     });
-    // Ocultar password en la respuesta
+
     const userWithoutPassword = newUser.toObject();
     delete userWithoutPassword.password;
 
@@ -259,5 +286,57 @@ export const me = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: "Error obteniendo usuario" });
+  }
+};
+
+export const verifyClaim = async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    const usuario = await Usuario.findOne({
+      verificationToken: token,
+      verificationTokenExpires: { $gt: new Date() }, // que no haya expirado
+      rol: "invitado",
+    });
+
+    if (!usuario) {
+      return res.status(400).json({
+        message: "El enlace de verificación es inválido o ha expirado.",
+      });
+    }
+
+    // ✅ Activamos la cuenta
+    usuario.password = usuario.pendingPassword;
+    usuario.rol = "cliente";
+    usuario.pendingPassword = null;
+    usuario.verificationToken = null;
+    usuario.verificationTokenExpires = null;
+
+    await usuario.save();
+
+    // ✅ Logueamos al usuario directamente
+    const jwtToken = generarToken(usuario);
+    const isProduction = process.env.NODE_ENV === "production";
+
+    res.cookie("token", jwtToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 24 * 60 * 60 * 1000,
+      path: "/",
+    });
+
+    const userWithoutPassword = usuario.toObject();
+    delete userWithoutPassword.password;
+
+    return res.status(200).json({
+      user: userWithoutPassword,
+      token: jwtToken,
+      accountClaimed: true,
+      message: "¡Cuenta activada exitosamente!",
+    });
+  } catch (error) {
+    console.error("Error en verifyClaim:", error);
+    res.status(500).json({ message: error.message });
   }
 };
