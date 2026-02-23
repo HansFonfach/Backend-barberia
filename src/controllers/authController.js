@@ -140,7 +140,7 @@ export const register = async (req, res) => {
 
         await usuarioExistente.save();
 
-        const claimUrl = `${process.env.FRONTEND_URL}/${slug}/verificar-cuenta?token=${verificationToken}`;
+        const claimUrl = `www.agendafonfach.cl/${slug}/verificar-cuenta?token=${verificationToken}`;
 
         await sendClaimAccountEmail(usuarioExistente.email, {
           nombreCliente: usuarioExistente.nombre,
