@@ -86,7 +86,13 @@ export const crearSuscripcion = async (req, res) => {
       },
     );
 
-    console.log("PUNTOS DESPUÉS:", actualizado.puntos);
+    sendSuscriptionActiveEmail(usuario.email, {
+      nombreCliente: usuario.nombre,
+      fechaInicio: fechaInicio.toLocaleDateString("es-CL"),
+      fechaFin: fechaFin.toLocaleDateString("es-CL"),
+    }).catch((err) => {
+      console.error("Error enviando correo de suscripción:", err);
+    });
 
     return res.status(201).json({
       success: true,
