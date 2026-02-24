@@ -261,12 +261,20 @@ export const createReserva = async (req, res) => {
     /* =============================
        EXCEPCIONES
     ============================== */
-    const inicioDiaUTC = inicioReservaChile.startOf("day").utc().toDate();
-    const finDiaUTC = inicioReservaChile.endOf("day").utc().toDate();
+    const inicioBusqueda = inicioReservaChile
+      .startOf("day")
+      .subtract(4, "hour")
+      .utc()
+      .toDate();
+    const finBusqueda = inicioReservaChile
+      .endOf("day")
+      .add(4, "hour")
+      .utc()
+      .toDate();
 
     const excepciones = await excepcionHorarioModel.find({
       barbero,
-      fecha: { $gte: inicioDiaUTC, $lt: finDiaUTC },
+      fecha: { $gte: inicioBusqueda, $lt: finBusqueda }, // ✅
       tipo: "bloqueo",
     });
 
@@ -297,7 +305,7 @@ export const createReserva = async (req, res) => {
     const reservasDelDia = await Reserva.find({
       empresa,
       barbero,
-      fecha: { $gte: inicioDiaUTC, $lt: finDiaUTC },
+      fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
       estado: { $in: ["pendiente", "confirmada"] },
     });
 

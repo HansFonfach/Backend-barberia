@@ -111,8 +111,9 @@ export const login = async (req, res) => {
 
 export const register = async (req, res) => {
   try {
-    const { rut, nombre, apellido, email, telefono, password, slug } = req.body;
-
+    const { slug } = req.params;
+    const { rut, nombre, apellido, email, telefono, password } = req.body;
+   
     const empresa = await empresaModel.findOne({ slug });
     if (!empresa) {
       return res.status(404).json({ message: "Empresa no encontrada" });
@@ -271,7 +272,7 @@ export const me = async (req, res) => {
   try {
     // 1️⃣ Usuario
     const usuario = await Usuario.findById(req.usuario.id).select(
-      "rut nombre apellido email telefono rol suscrito empresa"
+      "rut nombre apellido email telefono rol suscrito empresa",
     );
 
     if (!usuario) {
@@ -280,15 +281,17 @@ export const me = async (req, res) => {
 
     // 2️⃣ Empresa
     const empresa = await Empresa.findById(usuario.empresa).select(
-      "_id nombre slug"
+      "_id nombre slug",
     );
 
     // 3️⃣ Suscripción activa
-    const suscripcionActiva = await suscripcionModel.findOne({
-      usuario: usuario._id,
-      empresa: usuario.empresa,
-      activa: true,
-    }).select("fechaInicio fechaFin serviciosTotales serviciosUsados");
+    const suscripcionActiva = await suscripcionModel
+      .findOne({
+        usuario: usuario._id,
+        empresa: usuario.empresa,
+        activa: true,
+      })
+      .select("fechaInicio fechaFin serviciosTotales serviciosUsados");
 
     res.json({
       id: usuario._id,
