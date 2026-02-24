@@ -575,13 +575,24 @@ export const getProximaHoraDisponible = async (req, res) => {
       // Para cada barbero con horario este día
       for (const horario of horariosDelDia) {
         // Rango del día completo en UTC para consultas
-        const inicioDiaUTC = diaActual.utc().startOf("day").toDate();
-        const finDiaUTC = diaActual.utc().endOf("day").toDate();
+        const inicioBusqueda = fechaConsulta
+          .startOf("day")
+          .subtract(4, "hour")
+          .utc()
+          .toDate();
+        const finBusqueda = fechaConsulta
+          .endOf("day")
+          .add(4, "hour")
+          .utc()
+          .toDate();
 
         // Obtener reservas del barbero para este día
         const reservas = await Reserva.find({
-          barbero: horario.barbero._id,
-          fecha: { $gte: inicioDiaUTC, $lte: finDiaUTC },
+          barbero: barberoId,
+          fecha: {
+            $gte: inicioBusqueda,
+            $lt: finBusqueda,
+          },
           estado: { $in: ["pendiente", "confirmada"] },
         });
 
@@ -592,8 +603,11 @@ export const getProximaHoraDisponible = async (req, res) => {
 
         // Verificar excepciones de horario (bloqueos/extra)
         const excepciones = await ExcepcionHorarioModel.find({
-          barbero: horario.barbero._id,
-          fecha: { $gte: inicioDiaUTC, $lt: finDiaUTC },
+          barbero: barberoId,
+          fecha: {
+            $gte: inicioBusqueda, // reusar las mismas variables
+            $lt: finBusqueda,
+          },
         });
 
         // Filtrar excepciones válidas
