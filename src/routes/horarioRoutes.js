@@ -8,12 +8,13 @@ import {
   getProximaHoraDisponible,
 } from "../controllers/horarioController.js";
 import { validarToken } from "../middlewares/validarToken.js";
+import { validarTokenOpcional } from "../middlewares/validarTokenOpcional.js";
 
 const router = Router();
 
 router.post("/", validarToken, createHorario);
 
-router.get("/barbero/:id/horas-disponibles", getHorasDisponibles);
+router.get("/barbero/:id/horas-disponibles", validarTokenOpcional, getHorasDisponibles);
 
 router.get("/barbero/:barberoId",  getHorariosByBarbero);
 

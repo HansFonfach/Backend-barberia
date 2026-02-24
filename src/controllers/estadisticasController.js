@@ -3,6 +3,7 @@ import usuarioModel from "../models/usuario.model.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
+import suscripcionModel from "../models/suscripcion.model.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -67,42 +68,146 @@ export const reservasTotales = async (req, res) => {
 };
 
 export const ingresoMensual = async (req, res) => {
-  const hoy = new Date();
+  const empresa = req.usuario?.empresaId;
 
-  // Inicio del mes actual
+  if (!empresa) {
+    return res.status(400).json({ message: "Empresa no identificada" });
+  }
+
+  const hoy = new Date();
   const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
   inicioMes.setHours(0, 0, 0, 0);
-
-  // Fin del mes actual
   const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
   finMes.setHours(23, 59, 59, 999);
 
+  const PRECIO_SUSCRIPCION = 25000;
+
   try {
-    const reservasMes = await reservaModel
+    /* =============================
+       1. RESERVAS COMPLETADAS
+    ============================== */
+    const reservasPasadas = await reservaModel
       .find({
-        fecha: { $gte: inicioMes, $lte: finMes },
+        empresa,
+        fecha: { $gte: inicioMes, $lte: hoy },
+        estado: { $nin: ["cancelada", "no_asistio"] },
       })
-      .populate("servicio"); // para traer el precio del servicio
+      .populate("servicio", "precio");
 
-    let ingresoTotal = 0;
+    let ingresoReservas = 0;
 
-    reservasMes.forEach((reserva) => {
-      if (reserva.servicio && reserva.servicio.precio) {
-        ingresoTotal += reserva.servicio.precio;
+    for (const reserva of reservasPasadas) {
+      const precio = reserva.precio || reserva.servicio?.precio || 0;
+
+      const sus = await suscripcionModel.findOne({
+        usuario: reserva.cliente,
+        empresa,
+        fechaInicio: { $lte: reserva.fecha },
+        fechaFin: { $gte: reserva.fecha },
+      });
+
+      if (!sus) {
+        ingresoReservas += precio;
+        continue;
       }
+
+      const reservasAnteriores = await reservaModel
+        .find({
+          empresa,
+          cliente: reserva.cliente,
+          fecha: { $gte: sus.fechaInicio, $lte: reserva.fecha },
+          estado: { $nin: ["cancelada", "no_asistio"] },
+        })
+        .sort({ fecha: 1 });
+
+      let serviciosAcumulados = 0;
+      for (const r of reservasAnteriores) {
+        const peso = r.duracion >= 120 ? 2 : 1;
+        serviciosAcumulados += peso;
+        if (r._id.toString() === reserva._id.toString()) break;
+      }
+
+      if (serviciosAcumulados > sus.serviciosTotales) {
+        ingresoReservas += precio;
+      }
+    }
+
+    /* =============================
+       2. SUSCRIPCIONES DEL MES
+    ============================== */
+    const suscripcionesMes = await suscripcionModel.countDocuments({
+      empresa,
+      fechaInicio: { $gte: inicioMes, $lte: finMes },
     });
 
+    const ingresoSuscripciones = suscripcionesMes * PRECIO_SUSCRIPCION;
+
+    /* =============================
+       3. POSIBLE INGRESO (reservas futuras)
+    ============================== */
+    const reservasFuturas = await reservaModel
+      .find({
+        empresa,
+        fecha: { $gt: hoy, $lte: finMes },
+        estado: { $nin: ["cancelada", "no_asistio"] },
+      })
+      .populate("servicio", "precio");
+
+    let posibleIngreso = 0;
+
+    for (const reserva of reservasFuturas) {
+      const precio = reserva.precio || reserva.servicio?.precio || 0;
+
+      const sus = await suscripcionModel.findOne({
+        usuario: reserva.cliente,
+        empresa,
+        fechaInicio: { $lte: reserva.fecha },
+        fechaFin: { $gte: reserva.fecha },
+      });
+
+      if (!sus) {
+        posibleIngreso += precio;
+        continue;
+      }
+
+      const reservasAnteriores = await reservaModel
+        .find({
+          empresa,
+          cliente: reserva.cliente,
+          fecha: { $gte: sus.fechaInicio, $lte: reserva.fecha },
+          estado: { $nin: ["cancelada", "no_asistio"] },
+        })
+        .sort({ fecha: 1 });
+
+      let serviciosAcumulados = 0;
+      for (const r of reservasAnteriores) {
+        const peso = r.duracion >= 120 ? 2 : 1;
+        serviciosAcumulados += peso;
+        if (r._id.toString() === reserva._id.toString()) break;
+      }
+
+      if (serviciosAcumulados > sus.serviciosTotales) {
+        posibleIngreso += precio;
+      }
+    }
+
+    /* =============================
+       4. RESPUESTA
+    ============================== */
     res.json({
-      ingresoTotal,
+      ingresoTotal: ingresoReservas + ingresoSuscripciones,
+      detalle: {
+        ingresoReservas,
+        ingresoSuscripciones,
+        suscripcionesNuevas: suscripcionesMes,
+        posibleIngreso: ingresoReservas + ingresoSuscripciones + posibleIngreso,
+      },
     });
   } catch (error) {
-    console.error(error);
-    return res
-      .status(500)
-      .json({ message: "Error al obtener Ingreso Mensual" });
+    console.error("❌ Error ingresoMensual:", error);
+    return res.status(500).json({ message: "Error al obtener Ingreso Mensual" });
   }
 };
-
 export const ingresoPorFecha = (req, res) => {};
 
 export const getTop5Clientes = async (req, res) => {

@@ -142,6 +142,40 @@ export const createReserva = async (req, res) => {
     const diaSemana = inicioReservaChile.day();
 
     /* =============================
+   LÍMITE DE DÍAS CALENDARIO
+============================== */
+    if (rolUsuario !== "barbero") {
+      const limiteNormal = ahoraChile.add(15, "day").endOf("day");
+      let limiteDias = limiteNormal;
+
+      const suscripcionCliente = await suscripcionModel.findOne({
+        usuario: cliente,
+        activa: true,
+        fechaInicio: { $lte: new Date() },
+        fechaFin: { $gte: new Date() },
+      });
+
+      if (suscripcionCliente) {
+        const limiteSuscripcion = dayjs(suscripcionCliente.fechaInicio)
+          .tz("America/Santiago")
+          .add(31, "day")
+          .endOf("day");
+
+        limiteDias = limiteSuscripcion.isAfter(limiteNormal)
+          ? limiteSuscripcion
+          : limiteNormal;
+      }
+
+      if (inicioReservaChile.isAfter(limiteDias)) {
+        return res.status(400).json({
+          message: suscripcionCliente
+            ? "No puedes reservar más allá de los 31 días de tu suscripción"
+            : "Solo puedes reservar hasta 15 días desde hoy",
+        });
+      }
+    }
+
+    /* =============================
        SÁBADOS / SUSCRIPCIÓN
     ============================== */
     if (diaSemana === 6 && rolUsuario !== "barbero") {
@@ -427,7 +461,7 @@ export const postDeleteReserva = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const {motivo} = req.body;
+    const { motivo } = req.body;
 
     const existeReserva = await Reserva.findById(id);
     if (!existeReserva) {
@@ -567,10 +601,10 @@ export const getReservasPorFechaBarbero = async (req, res) => {
     const reservas = await Reserva.find({
       barbero: barberoId,
       fecha: { $gte: inicioDia, $lte: finDia },
-      estado: { $ne: "cancelada" }, // 🔥 CLAVE
+      estado: { $ne: "cancelada" },
     })
       .populate("cliente", "nombre apellido telefono")
-      .populate("servicio", "nombre")
+      .populate("servicio", "nombre duracion")
       .sort({ fecha: 1 });
 
     // 2. Procesar cada reserva para incluir posición dentro de la suscripción
@@ -594,23 +628,29 @@ export const getReservasPorFechaBarbero = async (req, res) => {
           };
         }
 
-        // Reservas que el cliente ha hecho dentro del periodo de la suscripción
+        // Reservas del cliente dentro del periodo de suscripción
+        // hasta e incluyendo la reserva actual, sin canceladas
         const reservasDelCliente = await Reserva.find({
           cliente: clienteId,
           fecha: { $gte: sus.fechaInicio, $lte: reserva.fecha },
+          estado: { $ne: "cancelada" },
         }).sort({ fecha: 1 });
 
-        // Posición EXACTA en la suscripción (1, 2, 3…)
-        const posicion =
-          reservasDelCliente.findIndex(
-            (r) => r._id.toString() === reserva._id.toString(),
-          ) + 1;
+        // Acumular servicios usados hasta esta reserva (inclusive)
+        // 120 min = corte + barba = 2 servicios, resto = 1 servicio
+        let serviciosAcumulados = 0;
+        for (const r of reservasDelCliente) {
+          const peso = r.duracion >= 120 ? 2 : 1;
+          serviciosAcumulados += peso;
+          if (r._id.toString() === reserva._id.toString()) break;
+        }
 
         return {
           ...reserva.toObject(),
           suscripcion: {
-            posicion,
+            posicion: serviciosAcumulados,
             limite: sus.serviciosTotales,
+            esDobleServicio: reserva.duracion >= 120,
           },
         };
       }),
@@ -639,7 +679,10 @@ export const updateMarcarNoAsistioReserva = async (req, res) => {
       });
     }
 
- 
+    // ✅ Restar 10 puntos al cliente (mínimo 0)
+    await usuarioModel.findByIdAndUpdate(reservaActualizada.cliente, {
+      $inc: { puntos: -10 },
+    });
 
     return res.status(200).json({
       message: "Reserva marcada como no asistió.",
