@@ -20,6 +20,7 @@ export const totalReservasHoyBarbero = async (req, res) => {
     const total = await reservaModel.countDocuments({
       barbero: userId, // asegúrate de que sea el campo correcto en tu modelo
       fecha: { $gte: inicio, $lte: fin },
+      estado: { $ne: "cancelada" },
     });
 
     return res.json({ total });
@@ -205,7 +206,9 @@ export const ingresoMensual = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error ingresoMensual:", error);
-    return res.status(500).json({ message: "Error al obtener Ingreso Mensual" });
+    return res
+      .status(500)
+      .json({ message: "Error al obtener Ingreso Mensual" });
   }
 };
 export const ingresoPorFecha = (req, res) => {};
