@@ -73,8 +73,20 @@ export const crearSuscripcion = async (req, res) => {
       serviciosUsados: 0,
     });
 
-    // 6️⃣ Marcar usuario (opcional)
-    await Usuario.findByIdAndUpdate(usuario._id, { suscrito: true });
+    // 6️⃣ Marcar usuario + sumar 50 puntos
+    const actualizado = await Usuario.findByIdAndUpdate(
+      usuario._id,
+      {
+        $inc: { puntos: 50 },
+        $set: { suscrito: true },
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
+
+    console.log("PUNTOS DESPUÉS:", actualizado.puntos);
 
     return res.status(201).json({
       success: true,

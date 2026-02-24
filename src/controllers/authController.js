@@ -269,22 +269,49 @@ export const logout = (req, res) => {
 
 export const me = async (req, res) => {
   try {
-    const empresa = await Empresa.findById(req.usuario.empresaId).select(
-      "_id nombre slug",
+    // 1️⃣ Usuario
+    const usuario = await Usuario.findById(req.usuario.id).select(
+      "rut nombre apellido email telefono rol suscrito empresa"
     );
 
+    if (!usuario) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    // 2️⃣ Empresa
+    const empresa = await Empresa.findById(usuario.empresa).select(
+      "_id nombre slug"
+    );
+
+    // 3️⃣ Suscripción activa
+    const suscripcionActiva = await suscripcionModel.findOne({
+      usuario: usuario._id,
+      empresa: usuario.empresa,
+      activa: true,
+    }).select("fechaInicio fechaFin serviciosTotales serviciosUsados");
+
     res.json({
-      id: req.usuario.id,
-      rut: req.usuario.rut,
-      nombre: req.usuario.nombre,
-      apellido: req.usuario.apellido,
-      email: req.usuario.email,
-      telefono: req.usuario.telefono,
-      suscrito: req.usuario.suscrito,
-      rol: req.usuario.rol,
-      empresa: empresa, // 👈 AQUÍ viene el slug
+      id: usuario._id,
+      rut: usuario.rut,
+      nombre: usuario.nombre,
+      apellido: usuario.apellido,
+      email: usuario.email,
+      telefono: usuario.telefono,
+      rol: usuario.rol,
+      suscrito: usuario.suscrito,
+
+      // ✅ FECHAS VIENEN DE SUSCRIPCIÓN
+      fechaInicioSuscripcion: suscripcionActiva?.fechaInicio || null,
+      fechaFinSuscripcion: suscripcionActiva?.fechaFin || null,
+
+      // 🔥 EXTRA (por si después lo usas)
+      serviciosTotales: suscripcionActiva?.serviciosTotales || 0,
+      serviciosUsados: suscripcionActiva?.serviciosUsados || 0,
+
+      empresa,
     });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Error obteniendo usuario" });
   }
 };
