@@ -10,7 +10,12 @@ export const iniciarJobReservas = () => {
 
       const reservas = await Reserva.find({
         estado: "pendiente",
-        fecha: { $lte: ahora },
+        $expr: {
+          $lte: [
+            { $add: ["$fecha", { $multiply: ["$duracion", 60000] }] }, // duracion en ms
+            ahora,
+          ],
+        },
       });
 
       if (!reservas.length) {
