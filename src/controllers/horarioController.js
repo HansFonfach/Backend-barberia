@@ -192,14 +192,43 @@ export const getHorasDisponibles = async (req, res) => {
     }
 
     /* ================= RESERVAS ================= */
+    const inicioBusqueda = fechaConsulta
+      .startOf("day")
+      .subtract(4, "hour")
+      .utc()
+      .toDate();
+    const finBusqueda = fechaConsulta
+      .endOf("day")
+      .add(4, "hour")
+      .utc()
+      .toDate();
+
     const reservas = await Reserva.find({
       barbero: barberoId,
       fecha: {
-        $gte: fechaConsulta.startOf("day").toDate(),
-        $lt: fechaConsulta.endOf("day").toDate(),
+        $gte: inicioBusqueda,
+        $lt: finBusqueda,
       },
       estado: { $in: ["pendiente", "confirmada"] },
     });
+
+    // 🔍 DEBUG TEMPORAL
+    console.log("=== DEBUG RESERVAS ===");
+    console.log("Fecha consultada:", fecha);
+    console.log("inicioBusqueda:", inicioBusqueda);
+    console.log("finBusqueda:", finBusqueda);
+    console.log("Reservas encontradas:", reservas.length);
+    reservas.forEach((r) => {
+      console.log({
+        fecha_utc: r.fecha,
+        fecha_chile: dayjs(r.fecha)
+          .tz("America/Santiago")
+          .format("YYYY-MM-DD HH:mm"),
+        duracion: r.duracion,
+        estado: r.estado,
+      });
+    });
+    console.log("======================");
 
     const horasReservadas = reservas.map((r) =>
       dayjs(r.fecha).tz("America/Santiago").format("HH:mm"),
@@ -209,8 +238,8 @@ export const getHorasDisponibles = async (req, res) => {
     const excepciones = await ExcepcionHorarioModel.find({
       barbero: barberoId,
       fecha: {
-        $gte: fechaConsulta.startOf("day").utc().toDate(),
-        $lt: fechaConsulta.endOf("day").utc().toDate(),
+        $gte: inicioBusqueda, // reusar las mismas variables
+        $lt: finBusqueda,
       },
     });
 
@@ -334,12 +363,7 @@ export const getHorasDisponibles = async (req, res) => {
       duracionServicio,
       intervaloBase: horariosDelDia[0].duracionBloque,
       horas,
-      diasPermitidos: suscripcionActiva
-        ? dayjs(suscripcionActiva.fechaInicio)
-            .tz("America/Santiago")
-            .add(31, "day")
-            .diff(ahora, "day")
-        : 15,
+      diasPermitidos: suscripcionActiva ? 31 : 15,
     });
   } catch (error) {
     console.error("❌ Error getHorasDisponibles:", error);
@@ -575,44 +599,15 @@ export const getProximaHoraDisponible = async (req, res) => {
       // Para cada barbero con horario este día
       for (const horario of horariosDelDia) {
         // Rango del día completo en UTC para consultas
-        const inicioBusqueda = fechaConsulta
-          .startOf("day")
-          .subtract(4, "hour")
-          .utc()
-          .toDate();
-        const finBusqueda = fechaConsulta
-          .endOf("day")
-          .add(4, "hour")
-          .utc()
-          .toDate();
+        const inicioDiaUTC = diaActual.utc().startOf("day").toDate();
+        const finDiaUTC = diaActual.utc().endOf("day").toDate();
 
         // Obtener reservas del barbero para este día
         const reservas = await Reserva.find({
-          barbero: barberoId,
-          fecha: {
-            $gte: inicioBusqueda,
-            $lt: finBusqueda,
-          },
+          barbero: horario.barbero._id,
+          fecha: { $gte: inicioDiaUTC, $lte: finDiaUTC },
           estado: { $in: ["pendiente", "confirmada"] },
         });
-
-        // 🔍 DEBUG TEMPORAL
-        console.log("=== DEBUG RESERVAS ===");
-        console.log("Fecha consultada:", fecha);
-        console.log("inicioBusqueda:", inicioBusqueda);
-        console.log("finBusqueda:", finBusqueda);
-        console.log("Reservas encontradas:", reservas.length);
-        reservas.forEach((r) => {
-          console.log({
-            fecha_utc: r.fecha,
-            fecha_chile: dayjs(r.fecha)
-              .tz("America/Santiago")
-              .format("YYYY-MM-DD HH:mm"),
-            duracion: r.duracion,
-            estado: r.estado,
-          });
-        });
-        console.log("======================");
 
         // Convertir reservas a horas en Chile
         const horasOcupadas = reservas.map((r) =>
@@ -621,11 +616,8 @@ export const getProximaHoraDisponible = async (req, res) => {
 
         // Verificar excepciones de horario (bloqueos/extra)
         const excepciones = await ExcepcionHorarioModel.find({
-          barbero: barberoId,
-          fecha: {
-            $gte: inicioBusqueda, // reusar las mismas variables
-            $lt: finBusqueda,
-          },
+          barbero: horario.barbero._id,
+          fecha: { $gte: inicioDiaUTC, $lt: finDiaUTC },
         });
 
         // Filtrar excepciones válidas
