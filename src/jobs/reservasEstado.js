@@ -3,8 +3,8 @@ import Reserva from "../models/reserva.model.js";
 import usuarioModel from "../models/usuario.model.js";
 
 export const iniciarJobReservas = () => {
-  // Cada 5 minutos
-  cron.schedule("*/5 * * * *", async () => {
+  // Cada 2 horas
+  cron.schedule("0 */2 * * *", async () => {
     try {
       const ahora = new Date();
 
