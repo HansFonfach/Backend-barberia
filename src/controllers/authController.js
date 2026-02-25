@@ -113,7 +113,7 @@ export const register = async (req, res) => {
   try {
     const { slug } = req.params;
     const { rut, nombre, apellido, email, telefono, password } = req.body;
-   
+
     const empresa = await empresaModel.findOne({ slug });
     if (!empresa) {
       return res.status(404).json({ message: "Empresa no encontrada" });
@@ -207,21 +207,32 @@ export const register = async (req, res) => {
 };
 
 export const forgotPassword = async (req, res) => {
-  const { email } = req.body;
+  const { email, slug } = req.body;
 
-  const user = await Usuario.findOne({ email });
+  if (!slug) return res.status(400).json({ message: "Empresa no válida" });
+
+  // Buscar empresa por slug
+  const empresa = await Empresa.findOne({ slug });
+
+  if (!empresa)
+    return res.status(404).json({ message: "Empresa no encontrada" });
+
+  // Buscar usuario dentro de ESA empresa
+  const user = await Usuario.findOne({
+    email,
+    empresa: empresa._id,
+  });
 
   if (!user)
-    return res.status(400).json({ message: "No hemos encontrado el Email" });
+    return res.status(400).json({ message: "No hemos encontrado el email" });
 
   const resetToken = crypto.randomBytes(32).toString("hex");
-  const expireDate = Date.now() + 15 * 60 * 1000;
 
   user.resetToken = resetToken;
-  user.resetTokenExpire = expireDate;
+  user.resetTokenExpire = Date.now() + 15 * 60 * 1000;
   await user.save();
 
-  const resetUrl = `http://localhost:3000/reiniciar-contrasena/${resetToken}`;
+  const resetUrl = `www.agendafonfach.cl/${slug}/reiniciar-contrasena/${resetToken}`;
 
   await sendEmail({
     to: user.email,
@@ -231,6 +242,7 @@ export const forgotPassword = async (req, res) => {
       <a href="${resetUrl}">Restablecer contraseña</a>
     `,
   });
+
   res.json({ message: "Hemos enviado el Email correctamente" });
 };
 
