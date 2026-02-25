@@ -38,9 +38,14 @@ const UsuarioSchema = new Schema(
     // ✅ Verificación de cuenta (account claiming)
     verificationToken: { type: String, default: null },
     verificationTokenExpires: { type: Date, default: null },
-    pendingPassword: { type: String, default: null }, // password hasheado en espera
+
+    // 🔐 Recuperación de contraseña
+    resetPasswordToken: { type: String, default: null },
+    resetPasswordExpires: { type: Date, default: null },
+
+    pendingPassword: { type: String, default: null },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 UsuarioSchema.index({ empresa: 1, rol: 1 });

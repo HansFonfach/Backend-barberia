@@ -207,43 +207,107 @@ export const register = async (req, res) => {
 };
 
 export const forgotPassword = async (req, res) => {
-  const { email, slug } = req.body;
+  try {
+    const { email, slug } = req.body;
 
-  if (!slug) return res.status(400).json({ message: "Empresa no válida" });
+    if (!email || !slug)
+      return res.status(400).json({ message: "Datos inválidos" });
 
-  // Buscar empresa por slug
-  const empresa = await Empresa.findOne({ slug });
+    const empresa = await Empresa.findOne({ slug });
 
-  if (!empresa)
-    return res.status(404).json({ message: "Empresa no encontrada" });
+    // ⚠️ Respuesta neutra siempre
+    if (!empresa) {
+      return res.json({
+        message: "Si el email existe, recibirás un correo con instrucciones.",
+      });
+    }
 
-  // Buscar usuario dentro de ESA empresa
-  const user = await Usuario.findOne({
-    email,
-    empresa: empresa._id,
-  });
+    const user = await Usuario.findOne({
+      email,
+      empresa: empresa._id,
+    });
 
-  if (!user)
-    return res.status(400).json({ message: "No hemos encontrado el email" });
+    // ⚠️ Misma respuesta aunque no exista
+    if (!user) {
+      return res.json({
+        message: "Si el email existe, recibirás un correo con instrucciones.",
+      });
+    }
 
-  const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetToken = crypto.randomBytes(32).toString("hex");
 
-  user.resetToken = resetToken;
-  user.resetTokenExpire = Date.now() + 15 * 60 * 1000;
-  await user.save();
+    const resetTokenHash = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
 
-  const resetUrl = `www.agendafonfach.cl/${slug}/reiniciar-contrasena/${resetToken}`;
+    user.resetPasswordToken = resetTokenHash;
 
-  await sendEmail({
-    to: user.email,
-    subject: "Restablecer contraseña",
-    html: `
-      <p>Haz clic en el enlace para restablecer tu contraseña:</p>
-      <a href="${resetUrl}">Restablecer contraseña</a>
-    `,
-  });
+    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
 
-  res.json({ message: "Hemos enviado el Email correctamente" });
+    await user.save();
+
+    const resetUrl = `www.agendafonfach.cl/${slug}/reiniciar-contrasena/${resetToken}`;
+
+    await sendEmail({
+      to: user.email,
+      subject: "Restablecer contraseña",
+      html: `
+        <p>Haz clic en el enlace para restablecer tu contraseña:</p>
+        <a href="${resetUrl}">Restablecer contraseña</a>
+        <p>Este enlace expira en 15 minutos.</p>
+      `,
+    });
+
+    res.json({
+      message: "Si el email existe, recibirás un correo con instrucciones.",
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al procesar la solicitud" });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword)
+      return res.status(400).json({ message: "La contraseña es obligatoria" });
+
+    if (newPassword.length < 8)
+      return res.status(400).json({
+        message: "La contraseña debe tener al menos 8 caracteres",
+      });
+
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const usuario = await Usuario.findOne({
+      resetPasswordToken: tokenHash,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+
+
+    if (!usuario)
+      return res.status(400).json({
+        message: "Token inválido o expirado",
+      });
+
+    const saltRounds = 10;
+    usuario.password = await bcrypt.hash(newPassword, saltRounds);
+
+    // 🔥 invalidar token
+    usuario.resetPasswordToken = undefined;
+    usuario.resetPasswordExpires = undefined;
+
+    await usuario.save();
+
+    res.json({ message: "Contraseña actualizada correctamente" });
+  } catch (error) {
+    res.status(500).json({ message: "Error al restablecer contraseña" });
+  }
 };
 
 export const updateUsuarioPassword = async (req, res) => {
