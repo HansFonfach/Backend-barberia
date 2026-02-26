@@ -16,7 +16,7 @@ export const crearNotificacion = async (req, res) => {
     const notificaciones = [];
 
     for (const h of horasFinales) {
-      const fechaHora = new Date(`${fecha}T${h}:00`);
+     const fechaHora = new Date(`${fecha}T${h}:00-03:00`);
 
       const nueva = await NotificacionHora.create({
         usuarioId,
