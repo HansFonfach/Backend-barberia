@@ -212,23 +212,7 @@ export const getHorasDisponibles = async (req, res) => {
       estado: { $in: ["pendiente", "confirmada"] },
     });
 
-    // 🔍 DEBUG TEMPORAL
-    console.log("=== DEBUG RESERVAS ===");
-    console.log("Fecha consultada:", fecha);
-    console.log("inicioBusqueda:", inicioBusqueda);
-    console.log("finBusqueda:", finBusqueda);
-    console.log("Reservas encontradas:", reservas.length);
-    reservas.forEach((r) => {
-      console.log({
-        fecha_utc: r.fecha,
-        fecha_chile: dayjs(r.fecha)
-          .tz("America/Santiago")
-          .format("YYYY-MM-DD HH:mm"),
-        duracion: r.duracion,
-        estado: r.estado,
-      });
-    });
-    console.log("======================");
+    reservas.forEach((r) => {});
 
     const horasReservadas = reservas.map((r) =>
       dayjs(r.fecha).tz("America/Santiago").format("HH:mm"),

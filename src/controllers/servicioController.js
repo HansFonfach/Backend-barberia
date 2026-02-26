@@ -123,8 +123,9 @@ export const getServiciosPublicos = async (req, res) => {
     // 2️⃣ Buscar servicios por ID de empresa
     const servicios = await Servicio.find({
       empresa: empresa._id,
-    });
-   
+    }).sort({
+      precio: 1,
+    }); // 👈 ASC;
 
     res.json({
       servicios,

@@ -6,8 +6,10 @@ import barberoServicioModel from "../models/barberoServicio.model.js";
 import empresaModel from "../models/empresa.model.js";
 import { formatHora } from "../utils/horas.js";
 import {
+  sendCancelReservationEmail,
   sendGuestReservationEmail,
   sendReservationEmail,
+  sendWaitlistNotificationEmail,
 } from "./mailController.js";
 import accesTokenModel from "../models/accesToken.model.js";
 import crypto from "crypto";
@@ -468,97 +470,172 @@ export const getReservasByBarberId = async (req, res) => {
 export const postDeleteReserva = async (req, res) => {
   try {
     const { id } = req.params;
-
     const { motivo } = req.body;
 
-    const existeReserva = await Reserva.findById(id);
+    console.log(`🗑️ [DELETE RESERVA] Iniciando cancelación de reserva: ${id}`);
+
+    const existeReserva = await Reserva.findById(id)
+      .populate("cliente")
+      .populate("barbero")
+      .populate("servicio");
+
     if (!existeReserva) {
-      return res.status(404).json({
-        message: "No se ha encontrado la reserva.",
-      });
+      console.warn(`⚠️ [DELETE RESERVA] Reserva no encontrada: ${id}`);
+      return res
+        .status(404)
+        .json({ message: "No se ha encontrado la reserva." });
     }
 
-    // Eliminar la reserva
-    await Reserva.findByIdAndUpdate(id, {
-      estado: "cancelada",
-      motivoCancelacion: motivo || "Cancelada por el usuario",
+    if (existeReserva.estado === "cancelada") {
+      console.warn(`⚠️ [DELETE RESERVA] Reserva ya cancelada: ${id}`);
+      return res
+        .status(400)
+        .json({ message: "La reserva ya se encuentra cancelada." });
+    }
+
+    // 1️⃣ Cancelar reserva
+    existeReserva.estado = "cancelada";
+    existeReserva.motivoCancelacion = motivo || "Cancelada por el usuario";
+    await existeReserva.save();
+    console.log(`✅ [DELETE RESERVA] Reserva marcada como cancelada`);
+
+    // 2️⃣ Determinar datos del cliente
+    const emailCliente =
+      existeReserva.cliente?.email || existeReserva.invitado?.email;
+    const nombreCliente =
+      existeReserva.cliente?.nombre || existeReserva.invitado?.nombre;
+    const fechaFormateada = existeReserva.fecha.toLocaleDateString("es-CL");
+    const horaFormateada = existeReserva.fecha.toLocaleTimeString("es-CL", {
+      hour: "2-digit",
+      minute: "2-digit",
     });
 
-    // ────────────────────────────────
-    // Notificaciones
-    // ────────────────────────────────
+    console.log(
+      `👤 [DELETE RESERVA] Cliente: ${nombreCliente} | Email: ${emailCliente || "sin email"}`,
+    );
+    console.log(
+      `📅 [DELETE RESERVA] Fecha reserva: ${fechaFormateada} ${horaFormateada}`,
+    );
+
+    // 3️⃣ Enviar correo de cancelación al cliente
+    if (emailCliente) {
+      try {
+        console.log(
+          `📧 [CANCEL EMAIL] Enviando correo de cancelación a: ${emailCliente}`,
+        );
+        const cancelResult = await sendCancelReservationEmail(emailCliente, {
+          nombreCliente,
+          nombreBarbero: existeReserva.barbero?.nombre || "Tu barbero",
+          fecha: fechaFormateada,
+          hora: horaFormateada,
+          servicio: existeReserva.servicio?.nombre || "Servicio",
+        });
+
+        if (cancelResult?.error) {
+          console.error(
+            `❌ [CANCEL EMAIL] Resend rechazó el email:`,
+            cancelResult.error,
+          );
+        } else {
+          console.log(
+            `✅ [CANCEL EMAIL] Email enviado correctamente. ID Resend: ${cancelResult?.data?.id}`,
+          );
+        }
+      } catch (error) {
+        console.error(`❌ [CANCEL EMAIL] Excepción al enviar:`, error.message);
+      }
+    } else {
+      console.warn(
+        `⚠️ [CANCEL EMAIL] Sin email de cliente, no se envía correo de cancelación`,
+      );
+    }
+
+    // 4️⃣ Notificar lista de espera
+    const fechaInicio = new Date(existeReserva.fecha);
+    fechaInicio.setSeconds(0, 0);
+    const fechaFin = new Date(existeReserva.fecha);
+    fechaFin.setSeconds(59, 999);
+
+    console.log(
+      `🔍 [WAITLIST] Buscando notificaciones para barbero: ${existeReserva.barbero._id} | Rango: ${fechaInicio.toISOString()} - ${fechaFin.toISOString()}`,
+    );
+
     const notificaciones = await notificacionModel
       .find({
-        barberoId: existeReserva.barbero,
-        fecha: existeReserva.fecha,
+        barberoId: existeReserva.barbero._id,
+        fecha: { $gte: fechaInicio, $lte: fechaFin },
         enviado: false,
       })
-      .populate("usuarioId");
+      .populate("usuarioId")
+      .populate("barberoId");
+
+    console.log(
+      `📋 [WAITLIST] Notificaciones pendientes encontradas: ${notificaciones.length}`,
+    );
 
     await Promise.all(
       notificaciones.map(async (noti) => {
-        await Promise.all(
-          notificaciones.map(async (noti) => {
-            const usuario = noti.usuarioId;
+        const usuario = noti.usuarioId;
+        const barbero = noti.barberoId;
 
-            if (!usuario?.telefono) {
-              return;
-            }
-
-            const telefono = usuario.telefono.startsWith("+")
-              ? usuario.telefono
-              : `+${usuario.telefono}`;
-
-            const fecha = noti.fecha.toLocaleDateString("es-CL");
-            const hora = noti.fecha.toLocaleTimeString("es-CL", {
-              hour: "2-digit",
-              minute: "2-digit",
-            });
-
-            const mensaje = `💈 *Hora liberada*\n
-Hola ${usuario.nombre} 👋
-
-Se liberó una hora que te interesaba:
-
-📅 *Fecha:* ${fecha}
-🕒 *Hora:* ${hora}
-
-👉 Entra ahora y resérvala antes que otro:
-${process.env.FRONTEND_URL}/reservar
-
-✂️ La Santa Barbería`;
-
-            try {
-              await WhatsAppService.client.messages.create({
-                from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
-                to: `whatsapp:${telefono}`,
-                body: mensaje,
-              });
-
-              noti.enviado = true;
-              await noti.save();
-            } catch (err) {
-              console.error(
-                `❌ Error enviando WhatsApp a ${usuario.nombre}:`,
-                err.message,
-              );
-            }
-          }),
+        console.log(
+          `👤 [WAITLIST] Procesando notificación para usuario: ${usuario?.nombre} | Email: ${usuario?.email || "sin email"}`,
         );
 
-        noti.enviado = true;
-        await noti.save();
+        if (!usuario?.email) {
+          console.warn(
+            `⚠️ [WAITLIST] Usuario sin email, saltando notificación ID: ${noti._id}`,
+          );
+          return;
+        }
+
+        try {
+          console.log(`📧 [WAITLIST EMAIL] Enviando a: ${usuario.email}`);
+          const waitlistResult = await sendWaitlistNotificationEmail(
+            usuario.email,
+            {
+              nombreCliente: usuario.nombre,
+              nombreBarbero: barbero?.nombre || "Tu barbero",
+              fecha: noti.fecha.toLocaleDateString("es-CL"),
+              hora: noti.fecha.toLocaleTimeString("es-CL", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            },
+          );
+
+          if (waitlistResult?.error) {
+            console.error(
+              `❌ [WAITLIST EMAIL] Resend rechazó el email para ${usuario.email}:`,
+              waitlistResult.error,
+            );
+            return; // No marcar como enviado si Resend lo rechazó
+          }
+
+          console.log(
+            `✅ [WAITLIST EMAIL] Email enviado a ${usuario.email}. ID Resend: ${waitlistResult?.data?.id}`,
+          );
+          noti.enviado = true;
+          await noti.save();
+        } catch (err) {
+          console.error(
+            `❌ [WAITLIST EMAIL] Excepción al enviar a ${usuario.nombre}:`,
+            err.message,
+          );
+        }
       }),
     );
 
+    console.log(
+      `🎉 [DELETE RESERVA] Proceso completado. Notificaciones enviadas: ${notificaciones.length}`,
+    );
+
     return res.status(200).json({
-      message:
-        "Reserva cancelada, te enviaremos un mail confirmando la cancelación de tu hora.",
-      reserva: existeReserva,
+      message: "Reserva cancelada correctamente",
       notificacionesEnviadas: notificaciones.length,
     });
   } catch (error) {
-    console.error("❌ Error al eliminar reserva:", error);
+    console.error("❌ [DELETE RESERVA] Error general:", error);
     return res.status(500).json({
       message: "Error del servidor al eliminar la reserva.",
     });
