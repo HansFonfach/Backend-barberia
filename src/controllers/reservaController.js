@@ -472,22 +472,18 @@ export const postDeleteReserva = async (req, res) => {
     const { id } = req.params;
     const { motivo } = req.body;
 
-    console.log(`🗑️ [DELETE RESERVA] Iniciando cancelación de reserva: ${id}`);
-
     const existeReserva = await Reserva.findById(id)
       .populate("cliente")
       .populate("barbero")
       .populate("servicio");
 
     if (!existeReserva) {
-      console.warn(`⚠️ [DELETE RESERVA] Reserva no encontrada: ${id}`);
       return res
         .status(404)
         .json({ message: "No se ha encontrado la reserva." });
     }
 
     if (existeReserva.estado === "cancelada") {
-      console.warn(`⚠️ [DELETE RESERVA] Reserva ya cancelada: ${id}`);
       return res
         .status(400)
         .json({ message: "La reserva ya se encuentra cancelada." });
@@ -497,57 +493,38 @@ export const postDeleteReserva = async (req, res) => {
     existeReserva.estado = "cancelada";
     existeReserva.motivoCancelacion = motivo || "Cancelada por el usuario";
     await existeReserva.save();
-    console.log(`✅ [DELETE RESERVA] Reserva marcada como cancelada`);
 
     // 2️⃣ Determinar datos del cliente
     const emailCliente =
       existeReserva.cliente?.email || existeReserva.invitado?.email;
     const nombreCliente =
       existeReserva.cliente?.nombre || existeReserva.invitado?.nombre;
-    const fechaFormateada = existeReserva.fecha.toLocaleDateString("es-CL");
+
+    const fechaFormateada = existeReserva.fecha.toLocaleDateString("es-CL", {
+      timeZone: "America/Santiago",
+    });
     const horaFormateada = existeReserva.fecha.toLocaleTimeString("es-CL", {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "America/Santiago",
     });
-
-    console.log(
-      `👤 [DELETE RESERVA] Cliente: ${nombreCliente} | Email: ${emailCliente || "sin email"}`,
-    );
-    console.log(
-      `📅 [DELETE RESERVA] Fecha reserva: ${fechaFormateada} ${horaFormateada}`,
-    );
 
     // 3️⃣ Enviar correo de cancelación al cliente
     if (emailCliente) {
       try {
-        console.log(
-          `📧 [CANCEL EMAIL] Enviando correo de cancelación a: ${emailCliente}`,
-        );
-        const cancelResult = await sendCancelReservationEmail(emailCliente, {
+        await sendCancelReservationEmail(emailCliente, {
           nombreCliente,
           nombreBarbero: existeReserva.barbero?.nombre || "Tu barbero",
           fecha: fechaFormateada,
           hora: horaFormateada,
           servicio: existeReserva.servicio?.nombre || "Servicio",
         });
-
-        if (cancelResult?.error) {
-          console.error(
-            `❌ [CANCEL EMAIL] Resend rechazó el email:`,
-            cancelResult.error,
-          );
-        } else {
-          console.log(
-            `✅ [CANCEL EMAIL] Email enviado correctamente. ID Resend: ${cancelResult?.data?.id}`,
-          );
-        }
       } catch (error) {
-        console.error(`❌ [CANCEL EMAIL] Excepción al enviar:`, error.message);
+        console.error(
+          "❌ Error enviando correo de cancelación:",
+          error.message,
+        );
       }
-    } else {
-      console.warn(
-        `⚠️ [CANCEL EMAIL] Sin email de cliente, no se envía correo de cancelación`,
-      );
     }
 
     // 4️⃣ Notificar lista de espera
@@ -555,10 +532,6 @@ export const postDeleteReserva = async (req, res) => {
     fechaInicio.setSeconds(0, 0);
     const fechaFin = new Date(existeReserva.fecha);
     fechaFin.setSeconds(59, 999);
-
-    console.log(
-      `🔍 [WAITLIST] Buscando notificaciones para barbero: ${existeReserva.barbero._id} | Rango: ${fechaInicio.toISOString()} - ${fechaFin.toISOString()}`,
-    );
 
     const notificaciones = await notificacionModel
       .find({
@@ -569,65 +542,44 @@ export const postDeleteReserva = async (req, res) => {
       .populate("usuarioId")
       .populate("barberoId");
 
-    console.log(
-      `📋 [WAITLIST] Notificaciones pendientes encontradas: ${notificaciones.length}`,
-    );
-
     await Promise.all(
       notificaciones.map(async (noti) => {
         const usuario = noti.usuarioId;
         const barbero = noti.barberoId;
 
-        console.log(
-          `👤 [WAITLIST] Procesando notificación para usuario: ${usuario?.nombre} | Email: ${usuario?.email || "sin email"}`,
-        );
-
-        if (!usuario?.email) {
-          console.warn(
-            `⚠️ [WAITLIST] Usuario sin email, saltando notificación ID: ${noti._id}`,
-          );
-          return;
-        }
+        if (!usuario?.email) return;
 
         try {
-          console.log(`📧 [WAITLIST EMAIL] Enviando a: ${usuario.email}`);
-          const waitlistResult = await sendWaitlistNotificationEmail(
-            usuario.email,
-            {
-              nombreCliente: usuario.nombre,
-              nombreBarbero: barbero?.nombre || "Tu barbero",
-              fecha: noti.fecha.toLocaleDateString("es-CL"),
-              hora: noti.fecha.toLocaleTimeString("es-CL", {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            },
-          );
+          const result = await sendWaitlistNotificationEmail(usuario.email, {
+            nombreCliente: usuario.nombre,
+            nombreBarbero: barbero?.nombre || "Tu barbero",
+            fecha: noti.fecha.toLocaleDateString("es-CL", {
+              timeZone: "America/Santiago",
+            }),
+            hora: noti.fecha.toLocaleTimeString("es-CL", {
+              hour: "2-digit",
+              minute: "2-digit",
+              timeZone: "America/Santiago",
+            }),
+          });
 
-          if (waitlistResult?.error) {
+          if (result?.error) {
             console.error(
-              `❌ [WAITLIST EMAIL] Resend rechazó el email para ${usuario.email}:`,
-              waitlistResult.error,
+              `❌ Error enviando notificación a ${usuario.email}:`,
+              result.error,
             );
-            return; // No marcar como enviado si Resend lo rechazó
+            return;
           }
 
-          console.log(
-            `✅ [WAITLIST EMAIL] Email enviado a ${usuario.email}. ID Resend: ${waitlistResult?.data?.id}`,
-          );
           noti.enviado = true;
           await noti.save();
         } catch (err) {
           console.error(
-            `❌ [WAITLIST EMAIL] Excepción al enviar a ${usuario.nombre}:`,
+            `❌ Error enviando notificación a ${usuario.nombre}:`,
             err.message,
           );
         }
       }),
-    );
-
-    console.log(
-      `🎉 [DELETE RESERVA] Proceso completado. Notificaciones enviadas: ${notificaciones.length}`,
     );
 
     return res.status(200).json({
@@ -635,13 +587,12 @@ export const postDeleteReserva = async (req, res) => {
       notificacionesEnviadas: notificaciones.length,
     });
   } catch (error) {
-    console.error("❌ [DELETE RESERVA] Error general:", error);
+    console.error("❌ Error al eliminar reserva:", error);
     return res.status(500).json({
       message: "Error del servidor al eliminar la reserva.",
     });
   }
 };
-
 export const getReservasActivas = async (req, res) => {
   try {
     const { userId } = req.params;
