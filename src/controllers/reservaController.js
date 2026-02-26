@@ -500,10 +500,11 @@ export const postDeleteReserva = async (req, res) => {
     const nombreCliente =
       existeReserva.cliente?.nombre || existeReserva.invitado?.nombre;
 
-    const fechaFormateada = existeReserva.fecha.toLocaleDateString("es-CL", {
+    const fechaReserva = new Date(existeReserva.fecha);
+    const fechaFormateada = fechaReserva.toLocaleDateString("es-CL", {
       timeZone: "America/Santiago",
     });
-    const horaFormateada = existeReserva.fecha.toLocaleTimeString("es-CL", {
+    const horaFormateada = fechaReserva.toLocaleTimeString("es-CL", {
       hour: "2-digit",
       minute: "2-digit",
       timeZone: "America/Santiago",
@@ -549,14 +550,16 @@ export const postDeleteReserva = async (req, res) => {
 
         if (!usuario?.email) return;
 
+        const fechaNoti = new Date(noti.fecha);
+
         try {
           const result = await sendWaitlistNotificationEmail(usuario.email, {
             nombreCliente: usuario.nombre,
             nombreBarbero: barbero?.nombre || "Tu barbero",
-            fecha: noti.fecha.toLocaleDateString("es-CL", {
+            fecha: fechaNoti.toLocaleDateString("es-CL", {
               timeZone: "America/Santiago",
             }),
-            hora: noti.fecha.toLocaleTimeString("es-CL", {
+            hora: fechaNoti.toLocaleTimeString("es-CL", {
               hour: "2-digit",
               minute: "2-digit",
               timeZone: "America/Santiago",
