@@ -1,9 +1,12 @@
 import reservaModel from "../models/reserva.model.js";
 import usuarioModel from "../models/usuario.model.js";
+import empresaModel from "../models/empresa.model.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
 import suscripcionModel from "../models/suscripcion.model.js";
+import e from "express";
+import mongoose from "mongoose";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -600,5 +603,290 @@ export const getProximoCliente = async (req, res) => {
       success: false,
       message: "Error interno del servidor",
     });
+  }
+};
+
+export const ingresoTotal = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+
+    const resultado = await reservaModel.aggregate([
+      {
+        $match: {
+          estado: "completada",
+          empresa: new mongoose.Types.ObjectId(empresaId), // ← "empresa" no "empresaId"
+        },
+      },
+      {
+        $lookup: {
+          from: "servicios",
+          localField: "servicio", // ← "servicio" no "servicioId"
+          foreignField: "_id",
+          as: "servicioData",
+        },
+      },
+      {
+        $unwind: "$servicioData",
+      },
+      {
+        $group: {
+          _id: null,
+          totalIngresos: { $sum: "$servicioData.precio" },
+        },
+      },
+    ]);
+
+    const total = resultado.length > 0 ? resultado[0].totalIngresos : 0;
+    res.json({ totalIngresos: total });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al calcular el ingreso total" });
+  }
+};
+
+export const reservasCompletadas = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+
+    const total = await reservaModel.countDocuments({
+      estado: "completada",
+      empresa: new mongoose.Types.ObjectId(empresaId),
+    });
+
+    res.json({ reservasCompletadas: total });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Error al contar las reservas completadas" });
+  }
+};
+
+export const reservasCanceladas = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+
+    const total = await reservaModel.countDocuments({
+      estado: "cancelada",
+      empresa: new mongoose.Types.ObjectId(empresaId),
+    });
+
+    res.json({ reservasCanceladas: total });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Error al contar las reservas completadas" });
+  }
+};
+export const reservasNoAsistidas = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+
+    const total = await reservaModel.countDocuments({
+      estado: "no_asistio",
+      empresa: new mongoose.Types.ObjectId(empresaId),
+    });
+
+    res.json({ reservasNoAsistidas: total });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Error al contar las reservas completadas" });
+  }
+};
+
+export const horaMasSolicitada = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+
+    const resultado = await reservaModel.aggregate([
+      {
+        $match: {
+          empresa: new mongoose.Types.ObjectId(empresaId),
+          estado: { $in: ["completada", "confirmada", "pendiente"] },
+        },
+      },
+      {
+        $group: {
+          _id: { $hour: "$fecha" },
+          total: { $sum: 1 },
+        },
+      },
+      { $sort: { total: -1 } },
+      { $limit: 1 },
+    ]);
+
+    if (resultado.length === 0) {
+      return res.json({ horaMasSolicitada: null });
+    }
+
+    const hora = resultado[0]._id;
+
+    res.json({
+      horaMasSolicitada: `${hora}:00 - ${hora + 1}:00`,
+      totalReservas: resultado[0].total,
+    });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Error al obtener la hora más solicitada" });
+  }
+};
+
+export const horaMasCancelada = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+
+    const resultado = await reservaModel.aggregate([
+      {
+        $match: {
+          empresa: new mongoose.Types.ObjectId(empresaId),
+          estado: "cancelada",
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $hour: {
+              date: "$fecha",
+              timezone: "America/Argentina/Buenos_Aires",
+            },
+          },
+          total: { $sum: 1 },
+        },
+      },
+      { $sort: { total: -1 } },
+      { $limit: 1 },
+    ]);
+
+    if (resultado.length === 0) return res.json({ horaMasCancelada: null });
+
+    const hora = resultado[0]._id;
+    res.json({
+      horaMasCancelada: `${hora}:00 - ${hora + 1}:00`,
+      totalCancelaciones: resultado[0].total,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al obtener la hora más cancelada" });
+  }
+};
+
+export const servicioMasPopular = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+
+    const resultado = await reservaModel.aggregate([
+      {
+        $match: {
+          empresa: new mongoose.Types.ObjectId(empresaId),
+          estado: { $in: ["completada", "confirmada", "pendiente"] },
+        },
+      },
+      {
+        $group: {
+          _id: "$servicio",
+          total: { $sum: 1 },
+        },
+      },
+      { $sort: { total: -1 } },
+      { $limit: 1 },
+      {
+        $lookup: {
+          from: "servicios",
+          localField: "_id",
+          foreignField: "_id",
+          as: "servicio",
+        },
+      },
+      { $unwind: "$servicio" },
+      {
+        $project: {
+          nombre: "$servicio.nombre",
+          precio: "$servicio.precio",
+          totalReservas: "$total",
+        },
+      },
+    ]);
+
+    if (resultado.length === 0) return res.json({ servicioMasPopular: null });
+
+    res.json({ servicioMasPopular: resultado[0] });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Error al obtener el servicio más popular" });
+  }
+};
+
+export const tasaDeCancelacion = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+
+    const [total, canceladas] = await Promise.all([
+      reservaModel.countDocuments({
+        empresa: new mongoose.Types.ObjectId(empresaId),
+        estado: { $in: ["completada", "cancelada", "no_asistio"] }, // solo las "cerradas"
+      }),
+      reservaModel.countDocuments({
+        empresa: new mongoose.Types.ObjectId(empresaId),
+        estado: "cancelada",
+      }),
+    ]);
+
+    const tasa = total === 0 ? 0 : ((canceladas / total) * 100).toFixed(2);
+
+    res.json({
+      totalReservas: total,
+      canceladas,
+      tasaCancelacion: `${tasa}%`,
+    });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Error al calcular la tasa de cancelación" });
+  }
+};
+
+export const tasaDeAsistencia = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+
+    const ahora = new Date();
+
+    const [total, completadas, noAsistio] = await Promise.all([
+      reservaModel.countDocuments({
+        empresa: new mongoose.Types.ObjectId(empresaId),
+        fecha: { $lt: ahora }, // solo reservas que ya pasaron
+        estado: { $in: ["completada", "no_asistio", "cancelada"] },
+      }),
+      reservaModel.countDocuments({
+        empresa: new mongoose.Types.ObjectId(empresaId),
+        estado: "completada",
+      }),
+      reservaModel.countDocuments({
+        empresa: new mongoose.Types.ObjectId(empresaId),
+        estado: "no_asistio",
+      }),
+    ]);
+
+    const tasa = total === 0 ? 0 : ((completadas / total) * 100).toFixed(2);
+
+    res.json({
+      totalReservas: total,
+      completadas,
+      noAsistio,
+      tasaAsistencia: `${tasa}%`,
+    });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Error al calcular la tasa de asistencia" });
   }
 };
