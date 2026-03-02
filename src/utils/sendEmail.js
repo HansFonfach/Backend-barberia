@@ -12,7 +12,7 @@ export const transporter = nodemailer.createTransport({
 
 export default async function sendEmail({ to, subject, html }) {
   await transporter.sendMail({
-    from: '"La Santa Barberia" <hans.fonfach@gmail.com>',
+    from: '"🗓️Agenda Fonfach" <hans.fonfach@gmail.com>',
     to,
     subject,
     html,

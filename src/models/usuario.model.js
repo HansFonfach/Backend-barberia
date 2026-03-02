@@ -7,10 +7,10 @@ const UsuarioSchema = new Schema(
       ref: "Empresa",
       required: true,
     },
-    rut: { type: String, unique: true, required: true },
+    rut: { type: String, required: true },
     nombre: { type: String, required: true },
     apellido: { type: String },
-    email: { type: String, unique: true, required: true },
+    email: { type: String, required: true },
     telefono: { type: String, required: true },
     suscrito: { type: Boolean, default: false },
     password: { type: String, default: null },
@@ -34,21 +34,17 @@ const UsuarioSchema = new Schema(
     descripcion: { type: String },
     deletedAt: { type: Date, default: null },
     horariosDisponibles: [{ type: Schema.Types.ObjectId, ref: "Horario" }],
-
-    // ✅ Verificación de cuenta (account claiming)
     verificationToken: { type: String, default: null },
     verificationTokenExpires: { type: Date, default: null },
-
-    // 🔐 Recuperación de contraseña
     resetPasswordToken: { type: String, default: null },
     resetPasswordExpires: { type: Date, default: null },
-
     pendingPassword: { type: String, default: null },
   },
   { timestamps: true },
 );
 
+UsuarioSchema.index({ empresa: 1, rut: 1 }, { unique: true });
+UsuarioSchema.index({ empresa: 1, email: 1 }, { unique: true });
 UsuarioSchema.index({ empresa: 1, rol: 1 });
-UsuarioSchema.index({ email: 1 }, { unique: true });
 
 export default model("Usuario", UsuarioSchema);
