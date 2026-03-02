@@ -35,20 +35,33 @@ export const totalReservasHoyBarbero = async (req, res) => {
 
 export const totalSuscripcionesActivas = async (req, res) => {
   try {
+    const empresaId = req.usuario?.empresaId;
+
+    if (!empresaId) {
+      return res.status(400).json({ message: "Empresa no identificada" });
+    }
+
     const total = await usuarioModel.countDocuments({
+      empresaId: empresaId, // 👈 FILTRO POR EMPRESA
       suscrito: true,
     });
+
     return res.json({ total });
   } catch (error) {
     console.error(error);
-    return res
-      .status(500)
-      .json({ message: "Error al contar suscripciones activas" });
+    return res.status(500).json({
+      message: "Error al contar suscripciones activas",
+    });
   }
 };
 
 export const totalClientes = async (req, res) => {
   try {
+    const empresa = req.usuario?.empresaId;
+
+    if (!empresa) {
+      return res.status(400).json({ message: "Empresa no identificada" });
+    }
     const total = await usuarioModel.countDocuments();
     return res.json({ total });
   } catch (error) {
@@ -61,6 +74,11 @@ export const totalClientes = async (req, res) => {
 
 export const reservasTotales = async (req, res) => {
   try {
+    const empresa = req.usuario?.empresaId;
+
+    if (!empresa) {
+      return res.status(400).json({ message: "Empresa no identificada" });
+    }
     const total = await reservaModel.countDocuments();
     return res.json({ total });
   } catch (error) {
