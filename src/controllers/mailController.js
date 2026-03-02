@@ -45,7 +45,7 @@ const layout = (body) => `
              style="border-radius:8px;max-width:600px;width:100%;">
         <tr>
           <td style="background:#1a1a1a;padding:20px 32px;">
-            <p style="margin:0;color:#fff;font-size:20px;font-weight:bold;">💈 La Santa Barbería</p>
+            <p style="margin:0;color:#fff;font-size:20px;font-weight:bold;">🗓️Agenda Fonfach</p>
           </td>
         </tr>
         <tr><td style="padding:32px;">${body}</td></tr>
@@ -63,7 +63,7 @@ const layout = (body) => `
 const detalles = ({ nombreBarbero, servicio, fecha, hora }) => `
   <table cellpadding="8" cellspacing="0" border="0" width="100%"
          style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
-    <tr><td style="font-size:14px;color:#555;width:40%;">Barbero</td><td style="font-weight:bold;">${nombreBarbero}</td></tr>
+    <tr><td style="font-size:14px;color:#555;width:40%;">Profesional</td><td style="font-weight:bold;">${nombreBarbero}</td></tr>
     <tr><td style="font-size:14px;color:#555;">Servicio</td><td style="font-weight:bold;">${servicio}</td></tr>
     <tr><td style="font-size:14px;color:#555;">Fecha</td><td style="font-weight:bold;">${fecha}</td></tr>
     <tr><td style="font-size:14px;color:#555;">Hora</td><td style="font-weight:bold;">${hora}</td></tr>
@@ -73,31 +73,32 @@ export const sendReservationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora, servicio } = data;
   return await sendBaseEmail({
     to,
-    subject: "Reserva confirmada – La Santa Barbería",
+    subject: "Reserva confirmada – Agenda Fonfach",
     html: layout(`
       <h2 style="margin-top:0;">Reserva Confirmada ✂️</h2>
       <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido confirmada.</p>
       ${detalles({ nombreBarbero, servicio, fecha, hora })}
       <p style="color:#555;font-size:14px;">Si necesitas cancelar o reagendar, ingresa a tu perfil.</p>
     `),
-    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nBarbero: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
+    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
   });
 };
 
 export const sendGuestReservationEmail = async (to, data) => {
-  const { nombreCliente, nombreBarbero, fecha, hora, servicio, cancelUrl } = data;
+  const { nombreCliente, nombreBarbero, fecha, hora, servicio, cancelUrl } =
+    data;
   return await sendBaseEmail({
     to,
-    subject: "Reserva confirmada – La Santa Barbería",
+    subject: "Reserva confirmada – Agenda Fonfach",
     html: layout(`
-      <h2 style="margin-top:0;">Reserva Confirmada 💈</h2>
+      <h2 style="margin-top:0;">Reserva Confirmada 🗓️</h2>
       <p>Hola <strong>${nombreCliente}</strong>, tu reserva fue creada exitosamente.</p>
       ${detalles({ nombreBarbero, servicio, fecha, hora })}
       <p style="color:#555;font-size:14px;">Puedes cancelar hasta <strong>3 horas antes</strong> del horario agendado.</p>
       ${ctaButton(cancelUrl, "Cancelar mi reserva", "#c0392b")}
       <p style="font-size:12px;color:#aaa;">Este enlace es personal y expira automáticamente.</p>
     `),
-    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nBarbero: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\n\nCancelar reserva (hasta 3h antes):\n${cancelUrl}`,
+    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\n\nCancelar reserva (hasta 3h antes):\n${cancelUrl}`,
   });
 };
 
@@ -105,13 +106,13 @@ export const sendCancelReservationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora, servicio } = data;
   return await sendBaseEmail({
     to,
-    subject: "Tu reserva ha sido cancelada – La Santa Barbería",
+    subject: "Tu reserva ha sido cancelada – Agenda Fonfach",
     html: layout(`
       <h2 style="margin-top:0;">Reserva Cancelada</h2>
       <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido cancelada correctamente.</p>
       ${detalles({ nombreBarbero, servicio, fecha, hora })}
     `),
-    text: `Reserva cancelada\n\nHola ${nombreCliente}\n\nBarbero: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
+    text: `Reserva cancelada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
   });
 };
 
@@ -119,19 +120,19 @@ export const sendWaitlistNotificationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora } = data;
   return await sendBaseEmail({
     to,
-    subject: "Se liberó una hora con tu barbero – La Santa Barbería",
+    subject: "Se liberó una hora que querías – Agenda Fonfach",
     html: layout(`
       <h2 style="margin-top:0;">Se liberó una hora ✂️</h2>
       <p>Hola <strong>${nombreCliente}</strong>, se liberó una hora de tu lista de espera.</p>
       <table cellpadding="8" cellspacing="0" border="0" width="100%"
              style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
-        <tr><td style="font-size:14px;color:#555;width:40%;">Barbero</td><td style="font-weight:bold;">${nombreBarbero}</td></tr>
+        <tr><td style="font-size:14px;color:#555;width:40%;">Profesional</td><td style="font-weight:bold;">${nombreBarbero}</td></tr>
         <tr><td style="font-size:14px;color:#555;">Fecha</td><td style="font-weight:bold;">${fecha}</td></tr>
         <tr><td style="font-size:14px;color:#555;">Hora</td><td style="font-weight:bold;">${hora}</td></tr>
       </table>
       <p style="color:#555;font-size:14px;">Ingresa a la plataforma lo antes posible. ¡Las horas se llenan rápido!</p>
     `),
-    text: `Hora disponible\n\nHola ${nombreCliente}\n\nBarbero: ${nombreBarbero}\nFecha: ${fecha}\nHora: ${hora}\n\nIngresa a la plataforma lo antes posible.`,
+    text: `Hora disponible\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nFecha: ${fecha}\nHora: ${hora}\n\nIngresa a la plataforma lo antes posible.`,
   });
 };
 
@@ -139,7 +140,7 @@ export const sendSuscriptionActiveEmail = async (to, data) => {
   const { nombreCliente, fechaInicio, fechaFin } = data;
   return await sendBaseEmail({
     to,
-    subject: "Suscripción confirmada – La Santa Barbería",
+    subject: "Suscripción confirmada – Agenda Fonfach",
     html: layout(`
       <h2 style="margin-top:0;">Suscripción confirmada</h2>
       <p>Estimado/a <strong>${nombreCliente}</strong>, tu pago fue procesado correctamente.</p>
@@ -148,9 +149,9 @@ export const sendSuscriptionActiveEmail = async (to, data) => {
         <tr><td style="font-size:14px;color:#555;width:50%;">Activación</td><td style="font-weight:bold;">${fechaInicio}</td></tr>
         <tr><td style="font-size:14px;color:#555;">Válida hasta</td><td style="font-weight:bold;">${fechaFin}</td></tr>
       </table>
-      <p style="color:#555;font-size:14px;">Atentamente,<br/><strong>Equipo La Santa Barbería</strong></p>
+      <p style="color:#555;font-size:14px;">Atentamente,<br/><strong>Equipo 🗓️ Agenda Fonfach</strong></p>
     `),
-    text: `Suscripción confirmada\n\nEstimado/a ${nombreCliente}\n\nActivación: ${fechaInicio}\nVálida hasta: ${fechaFin}\n\nEquipo La Santa Barbería`,
+    text: `Suscripción confirmada\n\nEstimado/a ${nombreCliente}\n\nActivación: ${fechaInicio}\nVálida hasta: ${fechaFin}\n\nEquipo 🗓️ Agenda Fonfach`,
   });
 };
 
