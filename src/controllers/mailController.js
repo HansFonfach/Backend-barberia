@@ -2,158 +2,171 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const sendBaseEmail = async ({ to, subject, html }) => {
+const sendBaseEmail = async ({ to, subject, html, text }) => {
   return await resend.emails.send({
     from: "Agenda Fonfach <no-reply@agendafonfach.cl>",
     to,
     subject,
     html,
+    text, // ← NUEVO: versión texto plano, reduce spam score
   });
 };
 
+// ← NUEVO: botón sin target="_blank" (Apple Mail lo bloqueaba)
+const ctaButton = (href, label, color = "#1a73e8") => `
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td align="center" style="padding:16px 0;">
+        <a href="${href}"
+           style="display:inline-block;padding:12px 24px;background-color:${color};color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;font-family:Arial,sans-serif;font-size:15px;">
+          ${label}
+        </a>
+      </td>
+    </tr>
+    <tr>
+      <td align="center">
+        <p style="font-size:12px;color:#888;font-family:Arial,sans-serif;">
+          O copia este enlace en tu navegador:<br/>
+          <a href="${href}" style="color:#1a73e8;word-break:break-all;">${href}</a>
+        </p>
+      </td>
+    </tr>
+  </table>
+`;
+
+const layout = (body) => `
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f5f5f5">
+    <tr><td align="center" style="padding:32px 16px;">
+      <table width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff"
+             style="border-radius:8px;max-width:600px;width:100%;">
+        <tr>
+          <td style="background:#1a1a1a;padding:20px 32px;">
+            <p style="margin:0;color:#fff;font-size:20px;font-weight:bold;">💈 La Santa Barbería</p>
+          </td>
+        </tr>
+        <tr><td style="padding:32px;">${body}</td></tr>
+        <tr>
+          <td style="background:#f0f0f0;padding:16px 32px;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#888;">© Agenda Fonfach · agendafonfach.cl</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+const detalles = ({ nombreBarbero, servicio, fecha, hora }) => `
+  <table cellpadding="8" cellspacing="0" border="0" width="100%"
+         style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
+    <tr><td style="font-size:14px;color:#555;width:40%;">Barbero</td><td style="font-weight:bold;">${nombreBarbero}</td></tr>
+    <tr><td style="font-size:14px;color:#555;">Servicio</td><td style="font-weight:bold;">${servicio}</td></tr>
+    <tr><td style="font-size:14px;color:#555;">Fecha</td><td style="font-weight:bold;">${fecha}</td></tr>
+    <tr><td style="font-size:14px;color:#555;">Hora</td><td style="font-weight:bold;">${hora}</td></tr>
+  </table>`;
+
 export const sendReservationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora, servicio } = data;
-
-  const html = `
-    <h2>Reserva Confirmada ✂️</h2>
-    <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido confirmada.</p>
-    <h3>Detalles de tu reserva:</h3>
-    <ul>
-      <li><strong>Barbero:</strong> ${nombreBarbero}</li>
-      <li><strong>Servicio:</strong> ${servicio}</li>
-      <li><strong>Fecha:</strong> ${fecha}</li>
-      <li><strong>Hora:</strong> ${hora}</li>
-    </ul>
-    <p>Si necesitas cancelar o reagendar, ingresa a tu perfil o contáctanos.</p>
-  `;
-
   return await sendBaseEmail({
     to,
-    subject: "✔️ Tu reserva ha sido confirmada",
-    html,
+    subject: "Reserva confirmada – La Santa Barbería",
+    html: layout(`
+      <h2 style="margin-top:0;">Reserva Confirmada ✂️</h2>
+      <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido confirmada.</p>
+      ${detalles({ nombreBarbero, servicio, fecha, hora })}
+      <p style="color:#555;font-size:14px;">Si necesitas cancelar o reagendar, ingresa a tu perfil.</p>
+    `),
+    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nBarbero: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
   });
 };
 
 export const sendGuestReservationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora, servicio, cancelUrl } = data;
-
-  const html = `
-    <h2>Reserva Confirmada 💈</h2>
-    <p>Hola <strong>${nombreCliente}</strong>,</p>
-    <p>Tu reserva fue creada exitosamente.</p>
-    <h3>Detalles:</h3>
-    <ul>
-      <li><strong>Barbero:</strong> ${nombreBarbero}</li>
-      <li><strong>Servicio:</strong> ${servicio}</li>
-      <li><strong>Fecha:</strong> ${fecha}</li>
-      <li><strong>Hora:</strong> ${hora}</li>
-    </ul>
-    <p>❌ Si necesitas cancelar tu reserva, puedes hacerlo desde el siguiente enlace:</p>
-    <p>
-      <a href="${cancelUrl}" target="_blank" style="display:inline-block;padding:12px 18px;background:#dc3545;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">
-        ❌ Cancelar mi reserva
-      </a>
-    </p>
-    <p style="color:#555">⏰ Puedes cancelar esta reserva hasta <b>3 horas antes</b> del horario agendado.</p>
-    <small>Este enlace es personal y expira automáticamente.</small>
-  `;
-
   return await sendBaseEmail({
     to,
-    subject: "✔️ Reserva confirmada – La Santa Barbería",
-    html,
+    subject: "Reserva confirmada – La Santa Barbería",
+    html: layout(`
+      <h2 style="margin-top:0;">Reserva Confirmada 💈</h2>
+      <p>Hola <strong>${nombreCliente}</strong>, tu reserva fue creada exitosamente.</p>
+      ${detalles({ nombreBarbero, servicio, fecha, hora })}
+      <p style="color:#555;font-size:14px;">Puedes cancelar hasta <strong>3 horas antes</strong> del horario agendado.</p>
+      ${ctaButton(cancelUrl, "Cancelar mi reserva", "#c0392b")}
+      <p style="font-size:12px;color:#aaa;">Este enlace es personal y expira automáticamente.</p>
+    `),
+    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nBarbero: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\n\nCancelar reserva (hasta 3h antes):\n${cancelUrl}`,
   });
 };
 
 export const sendCancelReservationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora, servicio } = data;
-
-  const html = `
-    <h2>Reserva Cancelada ✂️</h2>
-    <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido cancelada.</p>
-    <h3>Detalles de tu reserva:</h3>
-    <ul>
-      <li><strong>Barbero:</strong> ${nombreBarbero}</li>
-      <li><strong>Servicio:</strong> ${servicio}</li>
-      <li><strong>Fecha:</strong> ${fecha}</li>
-      <li><strong>Hora:</strong> ${hora}</li>
-    </ul>
-    <p>Si necesitas agendar nuevamente, ingresa a tu perfil o contáctanos.</p>
-  `;
-
   return await sendBaseEmail({
     to,
-    subject: "✔️ Tu reserva ha sido cancelada",
-    html,
+    subject: "Tu reserva ha sido cancelada – La Santa Barbería",
+    html: layout(`
+      <h2 style="margin-top:0;">Reserva Cancelada</h2>
+      <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido cancelada correctamente.</p>
+      ${detalles({ nombreBarbero, servicio, fecha, hora })}
+    `),
+    text: `Reserva cancelada\n\nHola ${nombreCliente}\n\nBarbero: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
   });
 };
 
 export const sendWaitlistNotificationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora } = data;
-
-  const html = `
-    <h2>Hora disponible ✂️</h2>
-    <p>Hola <strong>${nombreCliente}</strong>, se ha liberado una hora que seleccionaste en tu lista de espera.</p>
-    <h3>Detalles de la hora disponible:</h3>
-    <ul>
-      <li><strong>Barbero:</strong> ${nombreBarbero}</li>
-      <li><strong>Fecha:</strong> ${fecha}</li>
-      <li><strong>Hora:</strong> ${hora}</li>
-    </ul>
-    <p>Si deseas reservarla, ingresa a la plataforma lo antes posible, ¡las horas se llenan rápido!</p>
-  `;
-
   return await sendBaseEmail({
     to,
-    subject: "⌛ Se liberó una hora con tu barbero",
-    html,
+    subject: "Se liberó una hora con tu barbero – La Santa Barbería",
+    html: layout(`
+      <h2 style="margin-top:0;">Se liberó una hora ✂️</h2>
+      <p>Hola <strong>${nombreCliente}</strong>, se liberó una hora de tu lista de espera.</p>
+      <table cellpadding="8" cellspacing="0" border="0" width="100%"
+             style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
+        <tr><td style="font-size:14px;color:#555;width:40%;">Barbero</td><td style="font-weight:bold;">${nombreBarbero}</td></tr>
+        <tr><td style="font-size:14px;color:#555;">Fecha</td><td style="font-weight:bold;">${fecha}</td></tr>
+        <tr><td style="font-size:14px;color:#555;">Hora</td><td style="font-weight:bold;">${hora}</td></tr>
+      </table>
+      <p style="color:#555;font-size:14px;">Ingresa a la plataforma lo antes posible. ¡Las horas se llenan rápido!</p>
+    `),
+    text: `Hora disponible\n\nHola ${nombreCliente}\n\nBarbero: ${nombreBarbero}\nFecha: ${fecha}\nHora: ${hora}\n\nIngresa a la plataforma lo antes posible.`,
   });
 };
 
 export const sendSuscriptionActiveEmail = async (to, data) => {
   const { nombreCliente, fechaInicio, fechaFin } = data;
-
-  const html = `
-    <h2>Suscripción confirmada</h2>
-    <p>Estimado/a <strong>${nombreCliente}</strong>,</p>
-    <p>Tu pago de suscripción ha sido procesado y acreditado correctamente.</p>
-    <h3>Detalles de la suscripción</h3>
-    <ul>
-      <li><strong>Fecha de activación:</strong> ${fechaInicio}</li>
-      <li><strong>Válida hasta:</strong> ${fechaFin}</li>
-    </ul>
-    <p>Desde ahora puedes disfrutar de todos los beneficios de tu plan.</p>
-    <p>Atentamente,<br/><strong>Equipo La Santa Barbería</strong></p>
-  `;
-
   return await sendBaseEmail({
     to,
-    subject: "✅ Pago confirmado",
-    html,
+    subject: "Suscripción confirmada – La Santa Barbería",
+    html: layout(`
+      <h2 style="margin-top:0;">Suscripción confirmada</h2>
+      <p>Estimado/a <strong>${nombreCliente}</strong>, tu pago fue procesado correctamente.</p>
+      <table cellpadding="8" cellspacing="0" border="0" width="100%"
+             style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
+        <tr><td style="font-size:14px;color:#555;width:50%;">Activación</td><td style="font-weight:bold;">${fechaInicio}</td></tr>
+        <tr><td style="font-size:14px;color:#555;">Válida hasta</td><td style="font-weight:bold;">${fechaFin}</td></tr>
+      </table>
+      <p style="color:#555;font-size:14px;">Atentamente,<br/><strong>Equipo La Santa Barbería</strong></p>
+    `),
+    text: `Suscripción confirmada\n\nEstimado/a ${nombreCliente}\n\nActivación: ${fechaInicio}\nVálida hasta: ${fechaFin}\n\nEquipo La Santa Barbería`,
   });
 };
 
 export const sendClaimAccountEmail = async (to, data) => {
   const { nombreCliente, claimUrl } = data;
-
-  const html = `
-    <h2>Activa tu cuenta 🔐</h2>
-    <p>Hola <strong>${nombreCliente}</strong>,</p>
-    <p>Recibimos una solicitud para crear una cuenta con tu RUT.</p>
-    <p>Si fuiste tú, haz clic en el botón para activar tu cuenta y conservar tu historial de reservas:</p>
-    <p>
-      <a href="${claimUrl}" target="_blank" style="display:inline-block;padding:12px 18px;background:#28a745;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">
-        ✅ Activar mi cuenta
-      </a>
-    </p>
-    <p style="color:#555">⏰ Este enlace expira en <b>1 hora</b>.</p>
-    <p>Si no fuiste tú, ignora este correo. Tu cuenta de invitado no será modificada.</p>
-    <small>Este enlace es personal e intransferible.</small>
-  `;
-
   return await sendBaseEmail({
     to,
-    subject: "🔐 Activa tu cuenta – Agenda Fonfach",
-    html,
+    subject: "Activa tu cuenta – Agenda Fonfach",
+    html: layout(`
+      <h2 style="margin-top:0;">Activa tu cuenta</h2>
+      <p>Hola <strong>${nombreCliente}</strong>,</p>
+      <p>Recibimos una solicitud para crear una cuenta con tu RUT. Si fuiste tú, activa tu cuenta aquí:</p>
+      ${ctaButton(claimUrl, "Activar mi cuenta", "#2e7d32")}
+      <p style="color:#555;font-size:14px;">⏰ Este enlace expira en <strong>1 hora</strong>.</p>
+      <p style="color:#aaa;font-size:13px;">Si no fuiste tú, ignora este correo.</p>
+    `),
+    text: `Activa tu cuenta\n\nHola ${nombreCliente}\n\nActiva tu cuenta aquí (expira en 1 hora):\n${claimUrl}\n\nSi no fuiste tú, ignora este correo.`,
   });
 };
