@@ -1,7 +1,7 @@
 import suscripcionModel from "../models/suscripcion.model.js";
 import usuarioModel from "../models/usuario.model.js";
 
-export const checkSuscripcion = async () => {
+export const checkSuscripcion = async (userId) => {
   const sus = await suscripcionModel.findOne({
     usuario: userId,
     activa: true,

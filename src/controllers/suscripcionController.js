@@ -1,3 +1,4 @@
+import reservaModel from "../models/reserva.model.js";
 import Suscripcion from "../models/suscripcion.model.js";
 import Usuario from "../models/usuario.model.js";
 import { checkSuscripcion } from "../utils/checkSuscripcion.js";
@@ -265,15 +266,27 @@ export const registrarUsoServicio = async (req, res) => {
 export const getSuscripcionActiva = async (req, res) => {
   try {
     const userId = req.usuario.id;
-
     const sus = await checkSuscripcion(userId);
     if (!sus) return res.json(null);
 
-    res.json({
+    // Contar reservas no canceladas dentro del período de suscripción
+    const reservas = await reservaModel.find({
+      cliente: userId,
+      fecha: { $gte: sus.fechaInicio, $lte: sus.fechaFin },
+      estado: { $ne: "cancelada" },
+    });
+
+    // Mismo criterio que en getReservasPorFechaBarbero
+    let serviciosUsados = 0;
+    for (const r of reservas) {
+      serviciosUsados += r.duracion >= 120 ? 2 : 1;
+    }
+
+    return res.json({
       fechaInicio: sus.fechaInicio,
       fechaFin: sus.fechaFin,
       serviciosTotales: sus.serviciosTotales,
-      serviciosUsados: sus.serviciosUsados,
+      serviciosUsados, // ✅ calculado en tiempo real
     });
   } catch (e) {
     res.status(500).json({ message: "Error obteniendo suscripción activa" });

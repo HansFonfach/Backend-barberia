@@ -21,28 +21,24 @@ import {
   totalSuscripcionesActivas,
   ultimaReserva,
 } from "../controllers/estadisticasController.js";
-import { validateRequest } from "twilio/lib/webhooks/webhooks.js";
 ("../controllers/excepcionHorarioController.js");
 
 const router = Router();
 
 // Rutas RESTful
 
-router.get(
-  "/reservasHoyBarbero/:userId",
-  validarToken,
-  totalReservasHoyBarbero,
-);
+router.get("/reservasHoyBarbero", validarToken, totalReservasHoyBarbero);
 router.get("/suscripcionesActivas", validarToken, totalSuscripcionesActivas);
 router.get("/totalClientes", validarToken, totalClientes);
 router.get("/ingresoMensual", validarToken, ingresoMensual);
-router.get("/citasMes/:userId", validarToken, citasEsteMes);
-router.get("/ultima-reserva/:userId", validarToken, ultimaReserva);
-router.get("/proxima-reserva/", validarToken, proximaReserva);
+router.get("/citasMes", validarToken, citasEsteMes);
+router.get("/ultima-reserva", validarToken, ultimaReserva);
+router.get("/proxima-reserva", validarToken, proximaReserva);
 router.get("/top5-clientes", validarToken, getTop5Clientes);
 router.get("/horaMasSolicitada", validarToken, getHoraMasSolicitada);
 router.get("/proximo-cliente", validarToken, getProximoCliente);
-router.get("/ingresoTotal", validarToken, ingresoTotal);
+router.get("/ingreso-total", validarToken, ingresoTotal);
+
 router.get("/reservas-completadas", validarToken, reservasCompletadas);
 router.get("/reservas-canceladas", validarToken, reservasCanceladas);
 router.get("/reservas-no-asistidas", validarToken, reservasNoAsistidas);
