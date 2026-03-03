@@ -78,7 +78,7 @@ export const createReserva = async (req, res) => {
     const rolUsuario = req.usuario?.rol;
 
     const { barbero, servicio, fecha, hora } = req.body;
-    const cliente = req.usuario?.id;
+    const cliente = req.body.cliente || req.usuario?.id;
 
     if (!empresa || !barbero || !servicio || !fecha || !hora) {
       return res.status(400).json({ message: "Datos incompletos" });
