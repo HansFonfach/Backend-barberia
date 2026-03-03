@@ -22,24 +22,41 @@ dayjs.extend(isSameOrBefore);
    FUNCIONES AUXILIARES
 ===================================================== */
 
-const calcularHuecosDisponibles = (reservasDelDia, bloque) => {
+const calcularHuecosDisponibles = (reservasDelDia, bloque, fecha) => {
+  // ✅ Convertir a dayjs si vienen como strings
+  const bloqueInicio = dayjs.isDayjs(bloque.inicio)
+    ? bloque.inicio
+    : dayjs.tz(
+        `${fecha} ${bloque.inicio}`,
+        "YYYY-MM-DD HH:mm",
+        "America/Santiago",
+      ); // ← fecha + hora
+
+  const bloqueFin = dayjs.isDayjs(bloque.fin)
+    ? bloque.fin
+    : dayjs.tz(
+        `${fecha} ${bloque.fin}`,
+        "YYYY-MM-DD HH:mm",
+        "America/Santiago",
+      ); // ← fecha + hora
+
   const reservasFiltradas = reservasDelDia
     .map((r) => {
-      const inicio = dayjs(r.fecha).tz("America/Santiago"); // ✅ FIX
+      const inicio = dayjs(r.fecha).tz("America/Santiago");
       const fin = inicio.add(r.duracion, "minute");
       return { inicio, fin };
     })
     .filter(
-      (r) => r.fin.isAfter(bloque.inicio) && r.inicio.isBefore(bloque.fin),
+      (r) => r.fin.isAfter(bloqueInicio) && r.inicio.isBefore(bloqueFin), // ✅ usa las nuevas vars
     )
     .sort((a, b) => a.inicio.diff(b.inicio));
 
   const huecos = [];
-  let cursor = bloque.inicio;
+  let cursor = bloqueInicio; // ✅
 
   for (const r of reservasFiltradas) {
-    const inicioReserva = r.inicio.isBefore(bloque.inicio)
-      ? bloque.inicio
+    const inicioReserva = r.inicio.isBefore(bloqueInicio)
+      ? bloqueInicio
       : r.inicio;
 
     if (cursor.isBefore(inicioReserva)) {
@@ -50,16 +67,15 @@ const calcularHuecosDisponibles = (reservasDelDia, bloque) => {
       });
     }
 
-    if (r.fin.isAfter(cursor)) {
-      cursor = r.fin;
-    }
+    if (r.fin.isAfter(cursor)) cursor = r.fin;
   }
 
-  if (cursor.isBefore(bloque.fin)) {
+  if (cursor.isBefore(bloqueFin)) {
+    // ✅
     huecos.push({
       inicio: cursor,
-      fin: bloque.fin,
-      duracion: bloque.fin.diff(cursor, "minute"),
+      fin: bloqueFin,
+      duracion: bloqueFin.diff(cursor, "minute"),
     });
   }
 
@@ -236,29 +252,14 @@ export const getHorasDisponibles = async (req, res) => {
       .map((e) => e.horaInicio);
 
     /* ================= HORAS DISPONIBLES ================= */
+    /* ================= HORAS DISPONIBLES ================= */
     const horasDisponibles = new Set();
     const horasBase = new Set();
 
     for (const horario of horariosDelDia) {
       const intervalo = Number(horario.duracionBloque);
 
-      let cursor = dayjs.tz(
-        `${fecha} ${horario.horaInicio}`,
-        "YYYY-MM-DD HH:mm",
-        "America/Santiago",
-      );
-
-      const fin = dayjs.tz(
-        `${fecha} ${horario.horaFin}`,
-        "YYYY-MM-DD HH:mm",
-        "America/Santiago",
-      );
-
-      while (cursor.isBefore(fin)) {
-        horasBase.add(cursor.format("HH:mm"));
-        cursor = cursor.add(intervalo, "minute");
-      }
-
+      // ✅ Generar horasBase respetando los dos bloques (antes y después de colación)
       const bloquesTrabajo = horario.colacionInicio
         ? [
             {
@@ -301,8 +302,18 @@ export const getHorasDisponibles = async (req, res) => {
             },
           ];
 
+      // ✅ horasBase se llena desde los bloques, no desde horaInicio a horaFin directo
       for (const bloque of bloquesTrabajo) {
-        const huecos = calcularHuecosDisponibles(reservas, bloque);
+        let cursor = bloque.inicio;
+        while (cursor.isBefore(bloque.fin)) {
+          horasBase.add(cursor.format("HH:mm"));
+          cursor = cursor.add(intervalo, "minute");
+        }
+      }
+
+      // ✅ Calcular disponibles usando los mismos bloques (ya son dayjs)
+      for (const bloque of bloquesTrabajo) {
+        const huecos = calcularHuecosDisponibles(reservas, bloque, fecha);
 
         for (const hueco of huecos) {
           if (hueco.duracion >= duracionServicio) {
@@ -319,6 +330,15 @@ export const getHorasDisponibles = async (req, res) => {
     }
 
     horasExtra.forEach((h) => horasBase.add(h));
+
+    // ✅ DEBUG AQUÍ, después de llenar todo
+    console.log("=== DEBUG ===");
+    console.log("horasBase:", [...horasBase]);
+    console.log("horasDisponibles:", [...horasDisponibles]);
+    console.log("horasReservadas:", horasReservadas);
+    console.log("horario.horaInicio:", horariosDelDia[0]?.horaInicio);
+    console.log("horario.horaFin:", horariosDelDia[0]?.horaFin);
+    console.log("intervalo:", horariosDelDia[0]?.duracionBloque);
 
     /* ================= RESPUESTA FINAL ================= */
     const horas = [...horasBase].sort().reduce((acc, hora) => {

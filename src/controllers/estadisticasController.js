@@ -41,9 +41,10 @@ export const totalSuscripcionesActivas = async (req, res) => {
       return res.status(400).json({ message: "Empresa no identificada" });
     }
 
-    const total = await usuarioModel.countDocuments({
-      empresaId: empresaId, // 👈 FILTRO POR EMPRESA
-      suscrito: true,
+    const total = await suscripcionModel.countDocuments({
+      empresa: empresaId,
+      activa: true,
+      fechaFin: { $gte: new Date() }, // 👈 que no hayan vencido
     });
 
     return res.json({ total });
