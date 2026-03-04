@@ -5,7 +5,9 @@ import {
   citasEsteMes,
   getHoraMasSolicitada,
   getProximoCliente,
-  getTop5Clientes,
+  getTop5ClientesAsistentes,
+  getTop5ClientesCanceladores,
+  getTop5ClientesNoAsistidos,
   horaMasCancelada,
   ingresoMensual,
   ingresoTotal,
@@ -34,7 +36,9 @@ router.get("/ingresoMensual", validarToken, ingresoMensual);
 router.get("/citasMes", validarToken, citasEsteMes);
 router.get("/ultima-reserva", validarToken, ultimaReserva);
 router.get("/proxima-reserva", validarToken, proximaReserva);
-router.get("/top5-clientes", validarToken, getTop5Clientes);
+router.get("/top5-clientes-asistencia", validarToken, getTop5ClientesAsistentes);
+router.get("/top5-clientes-canceladores", validarToken, getTop5ClientesCanceladores)
+router.get("/top5-clientes-no-asisten", validarToken, getTop5ClientesNoAsistidos)
 router.get("/horaMasSolicitada", validarToken, getHoraMasSolicitada);
 router.get("/proximo-cliente", validarToken, getProximoCliente);
 router.get("/ingreso-total", validarToken, ingresoTotal);

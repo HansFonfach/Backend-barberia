@@ -584,12 +584,17 @@ export const tasaDeAsistencia = async (req, res) => {
 /* =====================================================
    TOP 5 CLIENTES (sin cambios funcionales)
 ===================================================== */
-export const getTop5Clientes = async (req, res) => {
+export const getTop5ClientesAsistentes = async (req, res) => {
   try {
     const empresaId = req.usuario.empresaId;
 
     const topClientes = await reservaModel.aggregate([
-      { $match: { empresa: new mongoose.Types.ObjectId(empresaId) } },
+      {
+        $match: {
+          empresa: new mongoose.Types.ObjectId(empresaId),
+          estado: "completada", // ✅
+        },
+      },
       {
         $lookup: {
           from: "usuarios",
@@ -613,7 +618,7 @@ export const getTop5Clientes = async (req, res) => {
         $group: {
           _id: "$cliente",
           totalReservas: { $sum: 1 },
-          totalGastado: { $sum: "$servicioInfo.precio" },
+          totalGastado: { $sum: "$servicioInfo.precio" }, // ✅ precio del servicio
           nombre: { $first: "$clienteInfo.nombre" },
           apellido: { $first: "$clienteInfo.apellido" },
           email: { $first: "$clienteInfo.email" },
@@ -632,10 +637,8 @@ export const getTop5Clientes = async (req, res) => {
     return ok(
       res,
       topClientes.map((c) => ({
-        id: c._id,
         nombre: c.nombre,
         apellido: c.apellido,
-        email: c.email,
         totalReservas: c.totalReservas,
         totalGastado: c.totalGastado,
         totalGastadoFormateado: formatter.format(c.totalGastado),
@@ -647,6 +650,103 @@ export const getTop5Clientes = async (req, res) => {
   }
 };
 
+export const getTop5ClientesCanceladores = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+
+    const topCanceladores = await reservaModel.aggregate([
+      {
+        $match: {
+          empresa: new mongoose.Types.ObjectId(empresaId),
+          estado: "cancelada", // ✅ solo canceladas
+        },
+      },
+      {
+        $lookup: {
+          from: "usuarios",
+          localField: "cliente",
+          foreignField: "_id",
+          as: "clienteInfo",
+        },
+      },
+      { $unwind: "$clienteInfo" },
+      { $match: { "clienteInfo.rol": "cliente" } },
+      {
+        $group: {
+          _id: "$cliente",
+          totalCancelaciones: { $sum: 1 },
+          nombre: { $first: "$clienteInfo.nombre" },
+          apellido: { $first: "$clienteInfo.apellido" },
+          email: { $first: "$clienteInfo.email" },
+        },
+      },
+      { $sort: { totalCancelaciones: -1 } },
+      { $limit: 5 },
+    ]);
+
+    return ok(
+      res,
+      topCanceladores.map((c) => ({
+        nombre: c.nombre,
+        apellido: c.apellido,
+        email: c.email,
+        totalCancelaciones: c.totalCancelaciones,
+      })),
+    );
+  } catch (error) {
+    console.error(error);
+    return err(res, "Error al obtener top clientes canceladores");
+  }
+};
+
+export const getTop5ClientesNoAsistidos = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+
+    const topNoAsistidos = await reservaModel.aggregate([
+      {
+        $match: {
+          empresa: new mongoose.Types.ObjectId(empresaId),
+          estado: "no_asistio", // ✅
+        },
+      },
+      {
+        $lookup: {
+          from: "usuarios",
+          localField: "cliente",
+          foreignField: "_id",
+          as: "clienteInfo",
+        },
+      },
+      { $unwind: "$clienteInfo" },
+      { $match: { "clienteInfo.rol": "cliente" } },
+      {
+        $group: {
+          _id: "$cliente",
+          totalNoAsistidos: { $sum: 1 },
+          nombre: { $first: "$clienteInfo.nombre" },
+          apellido: { $first: "$clienteInfo.apellido" },
+          email: { $first: "$clienteInfo.email" },
+        },
+      },
+      { $sort: { totalNoAsistidos: -1 } },
+      { $limit: 5 },
+    ]);
+
+    return ok(
+      res,
+      topNoAsistidos.map((c) => ({
+        nombre: c.nombre,
+        apellido: c.apellido,
+        email: c.email,
+        totalNoAsistidos: c.totalNoAsistidos,
+      })),
+    );
+  } catch (error) {
+    console.error(error);
+    return err(res, "Error al obtener top clientes no asistidos");
+  }
+};
 /* =====================================================
    HORA MÁS SOLICITADA
 ===================================================== */
