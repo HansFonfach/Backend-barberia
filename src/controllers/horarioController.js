@@ -331,14 +331,7 @@ export const getHorasDisponibles = async (req, res) => {
 
     horasExtra.forEach((h) => horasBase.add(h));
 
-    // ✅ DEBUG AQUÍ, después de llenar todo
-    console.log("=== DEBUG ===");
-    console.log("horasBase:", [...horasBase]);
-    console.log("horasDisponibles:", [...horasDisponibles]);
-    console.log("horasReservadas:", horasReservadas);
-    console.log("horario.horaInicio:", horariosDelDia[0]?.horaInicio);
-    console.log("horario.horaFin:", horariosDelDia[0]?.horaFin);
-    console.log("intervalo:", horariosDelDia[0]?.duracionBloque);
+
 
     /* ================= RESPUESTA FINAL ================= */
     const horas = [...horasBase].sort().reduce((acc, hora) => {

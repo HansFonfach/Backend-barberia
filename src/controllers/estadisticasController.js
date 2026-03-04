@@ -166,7 +166,11 @@ export const proximaReserva = async (req, res) => {
     );
 
     const reserva = await reservaModel
-      .findOne({ cliente: clienteId, fecha: { $gt: ahoraChile } })
+      .findOne({
+        cliente: clienteId,
+        fecha: { $gt: ahoraChile },
+        estado: "pendiente",
+      })
       .sort({ fecha: 1 })
       .lean();
 
