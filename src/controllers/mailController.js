@@ -75,7 +75,7 @@ export const sendReservationEmail = async (to, data) => {
     to,
     subject: "Reserva confirmada – Agenda Fonfach",
     html: layout(`
-      <h2 style="margin-top:0;">Reserva Confirmada ✂️</h2>
+      <h2 style="margin-top:0;">Reserva Confirmada 🗓️</h2>
       <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido confirmada.</p>
       ${detalles({ nombreBarbero, servicio, fecha, hora })}
       <p style="color:#555;font-size:14px;">Si necesitas cancelar o reagendar, ingresa a tu perfil.</p>
@@ -122,7 +122,7 @@ export const sendWaitlistNotificationEmail = async (to, data) => {
     to,
     subject: "Se liberó una hora que querías – Agenda Fonfach",
     html: layout(`
-      <h2 style="margin-top:0;">Se liberó una hora ✂️</h2>
+      <h2 style="margin-top:0;">Se liberó una hora 🗓️</h2>
       <p>Hola <strong>${nombreCliente}</strong>, se liberó una hora de tu lista de espera.</p>
       <table cellpadding="8" cellspacing="0" border="0" width="100%"
              style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
@@ -169,5 +169,30 @@ export const sendClaimAccountEmail = async (to, data) => {
       <p style="color:#aaa;font-size:13px;">Si no fuiste tú, ignora este correo.</p>
     `),
     text: `Activa tu cuenta\n\nHola ${nombreCliente}\n\nActiva tu cuenta aquí (expira en 1 hora):\n${claimUrl}\n\nSi no fuiste tú, ignora este correo.`,
+  });
+};
+
+
+export const sendReminderEmail = async (to, data) => {
+  const { nombreCliente, nombreBarbero, servicio, fecha, hora, tipo } = data;
+
+  const es24h = tipo === "24h";
+
+  return await sendBaseEmail({
+    to,
+    subject: es24h
+      ? "Recordatorio: tu cita es mañana – Agenda Fonfach"
+      : "Recordatorio: tu cita es en 3 horas – Agenda Fonfach",
+    html: layout(`
+      <h2 style="margin-top:0;">
+        ${es24h ? "⏰ Tu cita es mañana" : "⏰ Tu cita es en 3 horas"}
+      </h2>
+      <p>Hola <strong>${nombreCliente}</strong>, te recordamos que tienes una cita agendada.</p>
+      ${detalles({ nombreBarbero, servicio, fecha, hora })}
+      <p style="color:#555;font-size:14px;">
+        Si necesitas cancelar, hazlo con anticipación desde tu perfil.
+      </p>
+    `),
+    text: `Recordatorio de cita\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
   });
 };

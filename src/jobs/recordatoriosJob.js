@@ -1,121 +1,134 @@
 import cron from "node-cron";
-import WhatsAppService from "../services/whatsappService.js";
 import Reserva from "../models/reserva.model.js";
 import Usuario from "../models/usuario.model.js";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
+import { sendReminderEmail } from "../../src/controllers/mailController.js";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 class RecordatoriosJob {
   init() {
-    cron.schedule("* * * * *", async () => {
-      await this.enviarRecordatoriosDelDia();
+    // ✅ Corre cada 15 minutos — suficiente precisión sin sobrecargar
+    cron.schedule("*/15 * * * *", async () => {
+      await this.enviarRecordatorios24h();
+      await this.enviarRecordatorios3h();
     });
+
+    console.log("✅ Job de recordatorios iniciado");
   }
-  async enviarRecordatoriosDelDia() {
+
+  /* =============================
+     RECORDATORIO 24 HORAS ANTES
+  ============================== */
+  async enviarRecordatorios24h() {
     try {
-      const hoy = new Date();
-      const inicioDia = new Date(hoy);
-      inicioDia.setHours(0, 0, 0, 0);
+      const ahora = dayjs().tz("America/Santiago");
 
-      const finDia = new Date(hoy);
-      finDia.setHours(23, 59, 59, 999);
+      // Buscar reservas que ocurran entre 23h y 25h desde ahora
+      const desde = ahora.add(23, "hour").toDate();
+      const hasta = ahora.add(25, "hour").toDate();
 
-      const reservasHoy = await Reserva.find({
-        fecha: {
-          $gte: inicioDia,
-          $lte: finDia,
-        },
+      const reservas = await Reserva.find({
+        fecha: { $gte: desde, $lte: hasta },
         estado: { $in: ["pendiente", "confirmada"] },
-        recordatorioEnviado: false,
-      }).populate("servicio", "nombre duracion"); // ✅ POPULAR SERVICIO
+        recordatorioEnviado: { $ne: true }, // ✅ cambia esto
+      })
+        .populate("servicio", "nombre")
+        .populate("barbero", "nombre apellido");
 
-      for (const reserva of reservasHoy) {
+      for (const reserva of reservas) {
         try {
-          const cliente = await Usuario.findById(reserva.cliente);
-          const barbero = await Usuario.findById(reserva.barbero);
+          const cliente = await Usuario.findById(reserva.cliente).select(
+            "nombre email",
+          );
+          if (!cliente?.email) continue;
 
-          if (!cliente || !barbero) {
-            continue;
-          }
+          const fechaChile = dayjs(reserva.fecha).tz("America/Santiago");
 
-          if (!cliente.telefono) {
-            continue;
-          }
-
-          // ✅ MEJORAR LOS DATOS ENVIADOS
-          const resultado = await WhatsAppService.enviarRecordatorio({
-            usuario: {
-              nombre: cliente.nombre,
-              telefono: cliente.telefono,
-            },
-            barbero: {
-              nombre: barbero.nombre,
-            },
-            fecha: reserva.fecha,
-            hora: reserva.hora || "No especificada", // ✅ VALOR POR DEFECTO
-            servicio: reserva.servicio?.nombre || "Corte de pelo", // ✅ NOMBRE DEL SERVICIO
+          await sendReminderEmail(cliente.email, {
+            nombreCliente: cliente.nombre,
+            nombreBarbero:
+              `${reserva.barbero?.nombre} ${reserva.barbero?.apellido || ""}`.trim(),
+            servicio: reserva.servicio?.nombre || "Servicio",
+            fecha: fechaChile.format("DD/MM/YYYY"),
+            hora: fechaChile.format("HH:mm"),
+            tipo: "24h",
           });
 
-          if (resultado.success) {
-            await Reserva.findByIdAndUpdate(reserva._id, {
-              recordatorioEnviado: true,
-              fechaRecordatorio: new Date(),
-            });
-          } else {
-          }
+          await Reserva.findByIdAndUpdate(reserva._id, {
+            recordatorioEnviado: true,
+            fechaRecordatorio: new Date(),
+          });
 
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          // Pequeña pausa para no saturar el servicio de email
+          await new Promise((r) => setTimeout(r, 500));
         } catch (error) {
-          console.error(`❌ Error procesando reserva ${reserva._id}:`, error);
+          console.error(
+            `❌ Error recordatorio 24h reserva ${reserva._id}:`,
+            error.message,
+          );
         }
       }
     } catch (error) {
-      console.error("❌ Error en job de recordatorios:", error);
+      console.error("❌ Error en enviarRecordatorios24h:", error);
     }
   }
 
-  // Para testing manual con ID real
-  async enviarRecordatorioManual(reservaId) {
+  /* =============================
+     RECORDATORIO 3 HORAS ANTES
+  ============================== */
+  async enviarRecordatorios3h() {
     try {
-      const reserva = await Reserva.findById(reservaId);
+      const ahora = dayjs().tz("America/Santiago");
 
-      if (!reserva) {
-        return { success: false, error: "Reserva no encontrada" };
+      // Buscar reservas que ocurran entre 2h45 y 3h15 desde ahora
+      const desde = ahora.add(2, "hour").add(45, "minute").toDate();
+      const hasta = ahora.add(3, "hour").add(15, "minute").toDate();
+
+      const reservas = await Reserva.find({
+        fecha: { $gte: desde, $lte: hasta },
+        estado: { $in: ["pendiente", "confirmada"] },
+        recordatorio3hEnviado: { $ne: true }, // ✅ cambia esto
+      })
+        .populate("servicio", "nombre")
+        .populate("barbero", "nombre apellido");
+
+      for (const reserva of reservas) {
+        try {
+          const cliente = await Usuario.findById(reserva.cliente).select(
+            "nombre email",
+          );
+          if (!cliente?.email) continue;
+
+          const fechaChile = dayjs(reserva.fecha).tz("America/Santiago");
+
+          await sendReminderEmail(cliente.email, {
+            nombreCliente: cliente.nombre,
+            nombreBarbero:
+              `${reserva.barbero?.nombre} ${reserva.barbero?.apellido || ""}`.trim(),
+            servicio: reserva.servicio?.nombre || "Servicio",
+            fecha: fechaChile.format("DD/MM/YYYY"),
+            hora: fechaChile.format("HH:mm"),
+            tipo: "3h",
+          });
+
+          await Reserva.findByIdAndUpdate(reserva._id, {
+            recordatorio3hEnviado: true,
+          });
+
+          await new Promise((r) => setTimeout(r, 500));
+        } catch (error) {
+          console.error(
+            `❌ Error recordatorio 3h reserva ${reserva._id}:`,
+            error.message,
+          );
+        }
       }
-
-      // ✅ CORREGIDO: Usar reserva.cliente
-      const cliente = await Usuario.findById(reserva.cliente);
-      const barbero = await Usuario.findById(reserva.barbero);
-
-      if (!cliente || !barbero) {
-        return { success: false, error: "Cliente o barbero no encontrado" };
-      }
-
-      if (!cliente.telefono) {
-        return { success: false, error: "Cliente no tiene teléfono" };
-      }
-
-      const resultado = await WhatsAppService.enviarRecordatorio({
-        usuario: {
-          nombre: cliente.nombre,
-          telefono: cliente.telefono,
-        },
-        barbero: {
-          nombre: barbero.nombre,
-        },
-        fecha: reserva.fecha,
-        hora: reserva.hora,
-      });
-
-      if (resultado.success) {
-        await Reserva.findByIdAndUpdate(reservaId, {
-          recordatorioEnviado: true,
-          fechaRecordatorio: new Date(),
-        });
-      }
-
-      return resultado;
     } catch (error) {
-      console.error("❌ Error en recordatorio manual:", error);
-      return { success: false, error: error.message };
+      console.error("❌ Error en enviarRecordatorios3h:", error);
     }
   }
 }

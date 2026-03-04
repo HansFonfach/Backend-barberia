@@ -66,7 +66,7 @@ export const enviarMensaje = async (req, res) => {
       reserva.fechaConfirmacion = new Date();
       await reserva.save();
       
-      mensajeRespuesta = `¡Gracias por confirmar, ${usuario.nombre}! 💈✂️\n\nTe esperamos hoy a las ${reserva.hora} con ${reserva.barbero.nombre}.`;
+      mensajeRespuesta = `¡Gracias por confirmar, ${usuario.nombre}! 🗓️\n\nTe esperamos hoy a las ${reserva.hora} con ${reserva.barbero.nombre}.`;
       
     
       

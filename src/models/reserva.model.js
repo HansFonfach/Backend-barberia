@@ -28,7 +28,13 @@ const ReservaSchema = new Schema(
 
     estado: {
       type: String,
-      enum: ["pendiente", "confirmada", "cancelada", "completada" ,"no_asistio"],
+      enum: [
+        "pendiente",
+        "confirmada",
+        "cancelada",
+        "completada",
+        "no_asistio",
+      ],
       default: "pendiente",
     },
 
@@ -49,6 +55,8 @@ const ReservaSchema = new Schema(
     cancelTokenExpira: {
       type: Date,
     },
+    recordatorioEnviado: { type: Boolean, default: false }, // 24h — ya existe
+    recordatorio3hEnviado: { type: Boolean, default: false }, // 3h — agregar esto
   },
 
   { timestamps: true },

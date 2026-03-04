@@ -5,6 +5,7 @@ import app from "./app.js";
 import { connectDB } from "./database/db.js";
 import { iniciarCronSuscripciones } from "./cron/suscripcionesCron.js";
 import { iniciarJobReservas } from "./jobs/reservasEstado.js";
+import recordatoriosJob from "./jobs/recordatoriosJob.js";
 
 // Obtener el directorio actual
 const __filename = fileURLToPath(import.meta.url);
@@ -12,7 +13,6 @@ const __dirname = path.dirname(__filename);
 
 // Especificar la ruta exacta del .env (una carpeta arriba de src)
 const envPath = path.resolve(__dirname, "..", ".env");
-
 
 // Cargar dotenv con la ruta específica
 dotenv.config({ path: envPath });
@@ -25,10 +25,9 @@ const startServer = async () => {
   //CRON
   iniciarCronSuscripciones();
   iniciarJobReservas();
+  recordatoriosJob.init();
 
-  app.listen(PORT, "0.0.0.0", () => {
-    
-  });
+  app.listen(PORT, "0.0.0.0", () => {});
 };
 
 startServer();

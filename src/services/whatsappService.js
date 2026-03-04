@@ -57,10 +57,10 @@ class WhatsAppService {
     return `💈 *Recordatorio La Santa Barberia*\n\nHola ${reserva.usuario.nombre}!  Te escribimos para recordarte que tienes una hora agendada con los siguientes datos:
     
 
-📅 *Fecha:* Hoy
-🕒 *Hora:* ${reserva.fecha}
-👨‍💼 *Barbero:* ${reserva.barbero.nombre}
-✂️ *Servicio:* ${reserva.servicio}
+ *Fecha:* Hoy
+ *Hora:* ${reserva.fecha}
+ *Barbero:* ${reserva.barbero.nombre}
+ *Servicio:* ${reserva.servicio}
 
 📍 *Ubicación:* Calle portales nº 310
 
@@ -73,7 +73,7 @@ _Responde con Si o No dentro de las próximas 2 horas_`;
   }
 
   async enviarConfirmacion(telefono, nombre) {
-    const mensaje = `¡Gracias por confirmar, ${nombre}! 💈✂️
+    const mensaje = `¡Gracias por confirmar, ${nombre}! 
 
 Te esperamos en la barbería.`;
 
