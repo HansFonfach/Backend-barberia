@@ -1,99 +1,91 @@
-// ✅ CARGAR DOTENV TAMBIÉN AQUÍ
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Cargar .env desde la raíz del proyecto
-const envPath = path.resolve(__dirname, "..", "..", ".env");
-dotenv.config({ path: envPath });
-
-
-
-import twilio from "twilio";
+dotenv.config({ path: path.resolve(__dirname, "..", "..", ".env") });
 
 class WhatsAppService {
   constructor() {
-   
+    this.accessToken = process.env.ACCESS_TOKEN;
+    this.phoneNumberId = process.env.PHONE_NUMBER;
 
-    // Verificar credenciales
-    if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-      console.error("❌ CREDENCIALES TWILIO FALTANTES EN SERVICIO:");
-      console.error("TWILIO_ACCOUNT_SID:", process.env.TWILIO_ACCOUNT_SID);
-      console.error("TWILIO_AUTH_TOKEN:", process.env.TWILIO_AUTH_TOKEN);
-      console.error(
-        "TWILIO_WHATSAPP_NUMBER:",
-        process.env.TWILIO_WHATSAPP_NUMBER
-      );
-      throw new Error("Credenciales de Twilio no configuradas en servicio");
+    if (!this.accessToken || !this.phoneNumberId) {
+      console.error("❌ Faltan ACCESS_TOKEN o PHONE_NUMBER en .env");
     }
 
-    this.client = twilio(
-      process.env.TWILIO_ACCOUNT_SID,
-      process.env.TWILIO_AUTH_TOKEN
-    );
-    this.sandboxNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+    this.apiUrl = `https://graph.facebook.com/v19.0/${this.phoneNumberId}/messages`;
   }
 
-  async enviarRecordatorio(reserva) {
-    try {
-      const mensaje = this.crearMensajeRecordatorio(reserva);
+  /* =============================
+     UTIL: formatear teléfono
+     Convierte "912345678" → "56912345678"
+  ============================== */
+  formatearTelefono(telefono) {
+    // Limpiar todo lo que no sea número
+    let clean = telefono.replace(/\D/g, "");
 
-      const message = await this.client.messages.create({
-        body: mensaje,
-        from: `whatsapp:${this.sandboxNumber}`,
-        to: `whatsapp:${reserva.usuario.telefono}`,
+    // Si empieza con 56 ya está bien
+    if (clean.startsWith("56")) return clean;
+
+    // Si empieza con 9 (Chile) agregar 56
+    if (clean.startsWith("9")) return `56${clean}`;
+
+    return clean;
+  }
+
+  /* =============================
+     ENVIAR RECORDATORIO
+  ============================== */
+  async enviarRecordatorio({ nombreCliente, telefono, nombreBarbero, fecha, hora, servicio }) {
+    try {
+      const telefonoFormateado = this.formatearTelefono(telefono);
+
+      const body = {
+        messaging_product: "whatsapp",
+        to: telefonoFormateado,
+        type: "template",
+        template: {
+          name: "recordatorio_cita", // ← nombre exacto del template en Meta
+         language: { code: "es_CL" },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: nombreCliente },
+                { type: "text", text: nombreBarbero },
+                { type: "text", text: fecha },
+                { type: "text", text: hora },
+                { type: "text", text: servicio },
+              ],
+            },
+          ],
+        },
+      };
+
+      const res = await fetch(this.apiUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
       });
 
-      return { success: true, messageId: message.sid };
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("❌ Error Meta API:", data);
+        return { success: false, error: data };
+      }
+
+      console.log(`✅ Recordatorio enviado a ${telefonoFormateado}`);
+      return { success: true, data };
     } catch (error) {
+      console.error("❌ Error enviando WhatsApp:", error.message);
       return { success: false, error: error.message };
     }
-  }
-
-  crearMensajeRecordatorio(reserva) {
-    return `💈 *Recordatorio La Santa Barberia*\n\nHola ${reserva.usuario.nombre}!  Te escribimos para recordarte que tienes una hora agendada con los siguientes datos:
-    
-
- *Fecha:* Hoy
- *Hora:* ${reserva.fecha}
- *Barbero:* ${reserva.barbero.nombre}
- *Servicio:* ${reserva.servicio}
-
-📍 *Ubicación:* Calle portales nº 310
-
-¿Confirmas tu asistencia?
-
-✅ *Sí, asistiré*
-❌ *No podré asistir*
-
-_Responde con Si o No dentro de las próximas 2 horas_`;
-  }
-
-  async enviarConfirmacion(telefono, nombre) {
-    const mensaje = `¡Gracias por confirmar, ${nombre}! 
-
-Te esperamos en la barbería.`;
-
-    return await this.client.messages.create({
-      body: mensaje,
-      from: `whatsapp:${this.sandboxNumber}`,
-      to: `whatsapp:${telefono}`,
-    });
-  }
-
-  async enviarCancelacion(telefono, nombre) {
-    const mensaje = `Entendido, ${nombre}. Hemos cancelado tu reserva. 
-
-¡Esperamos verte pronto! 💈`;
-
-    return await this.client.messages.create({
-      body: mensaje,
-      from: `whatsapp:${this.sandboxNumber}`,
-      to: `whatsapp:${telefono}`,
-    });
   }
 }
 

@@ -2,6 +2,7 @@ import { Router } from "express";
 import RecordatoriosJob from "../jobs/recordatoriosJob.js";
 import { validarToken } from "../middlewares/validarToken.js";
 import { obtenerEstadoLookCliente } from "../controllers/clienteAnalyticsController.js";
+import recordatoriosJob from "../jobs/recordatoriosJob.js";
 
 const router = Router();
 
@@ -10,9 +11,8 @@ router.post("/test-recordatorio/:reservaId", async (req, res) => {
   try {
     const { reservaId } = req.params;
 
-    const resultado = await RecordatoriosJob.enviarRecordatorioManual(
-      reservaId
-    );
+    const resultado =
+      await RecordatoriosJob.enviarRecordatorioManual(reservaId);
 
     res.json(resultado);
   } catch (error) {
@@ -42,7 +42,11 @@ router.post("/test-recordatorios-hoy", async (req, res) => {
 router.get(
   "/recordatorios-inteligentes",
   validarToken,
-  obtenerEstadoLookCliente
+  obtenerEstadoLookCliente,
 );
 
+router.get("/test-recordatorio/:reservaId", async (req, res) => {
+  const resultado = await recordatoriosJob.testEnviar(req.params.reservaId);
+  res.json(resultado);
+});
 export default router;

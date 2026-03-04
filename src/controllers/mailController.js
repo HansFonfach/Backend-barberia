@@ -175,7 +175,6 @@ export const sendClaimAccountEmail = async (to, data) => {
 
 export const sendReminderEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, servicio, fecha, hora, tipo } = data;
-
   const es24h = tipo === "24h";
 
   return await sendBaseEmail({
