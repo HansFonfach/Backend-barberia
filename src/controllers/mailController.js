@@ -60,15 +60,20 @@ const layout = (body) => `
 </body>
 </html>`;
 
-const detalles = ({ nombreBarbero, servicio, fecha, hora }) => `
+const detalles = ({
+  nombreBarbero,
+  servicio,
+  fecha,
+  hora,
+  labelProfesional = "Profesional",
+}) => `
   <table cellpadding="8" cellspacing="0" border="0" width="100%"
          style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
-    <tr><td style="font-size:14px;color:#555;width:40%;">Profesional</td><td style="font-weight:bold;">${nombreBarbero}</td></tr>
+    <tr><td style="font-size:14px;color:#555;width:40%;">${labelProfesional}</td><td style="font-weight:bold;">${nombreBarbero}</td></tr>
     <tr><td style="font-size:14px;color:#555;">Servicio</td><td style="font-weight:bold;">${servicio}</td></tr>
     <tr><td style="font-size:14px;color:#555;">Fecha</td><td style="font-weight:bold;">${fecha}</td></tr>
     <tr><td style="font-size:14px;color:#555;">Hora</td><td style="font-weight:bold;">${hora}</td></tr>
   </table>`;
-
 export const sendReservationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora, servicio } = data;
   return await sendBaseEmail({
@@ -203,7 +208,7 @@ export const sendProfesionalNewReservationEmail = async (to, data) => {
     html: layout(`
       <h2 style="margin-top:0;">Nueva Reserva 🗓️</h2>
       <p>Hola <strong>${nombreBarbero}</strong>, tienes una nueva reserva.</p>
-      ${detalles({ nombreBarbero: nombreCliente, servicio, fecha, hora })}
+      ${detalles({ nombreBarbero: nombreCliente, servicio, fecha, hora, labelProfesional: "Cliente" })}
     `),
     text: `Nueva reserva\n\nHola ${nombreBarbero}\n\nCliente: ${nombreCliente}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
   });
@@ -217,7 +222,7 @@ export const sendProfesionalCancelReservationEmail = async (to, data) => {
     html: layout(`
       <h2 style="margin-top:0;">Reserva Cancelada</h2>
       <p>Hola <strong>${nombreBarbero}</strong>, una reserva ha sido cancelada.</p>
-      ${detalles({ nombreBarbero: nombreCliente, servicio, fecha, hora })}
+      ${detalles({ nombreBarbero: nombreCliente, servicio, fecha, hora, labelProfesional: "Cliente" })}
     `),
     text: `Reserva cancelada\n\nHola ${nombreBarbero}\n\nCliente: ${nombreCliente}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
   });
