@@ -12,6 +12,7 @@ import { generarBloquesDesdeHorario } from "../utils/generarBloquesDesdeHorario.
 import barberoServicioModel from "../models/barberoServicio.model.js";
 import suscripcionModel from "../models/suscripcion.model.js";
 import horarioModel from "../models/horario.model.js";
+import empresaModel from "../models/empresa.model.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -107,6 +108,7 @@ export const getHorasDisponibles = async (req, res) => {
     const { id: barberoId } = req.params;
     const { fecha, servicioId } = req.query;
     const usuario = req.usuario;
+    const rolUsuario = req.usuario?.rol; // 👈
 
     if (!fecha || !servicioId) {
       return res.status(400).json({ message: "Fecha y servicio requeridos" });
@@ -148,10 +150,22 @@ export const getHorasDisponibles = async (req, res) => {
       });
     }
 
+    /* ================= BARBERO ================= */
+    const barbero = await Usuario.findById(barberoId).populate(
+      "horariosDisponibles",
+    );
+
+    if (!barbero) {
+      return res.status(404).json({ message: "Barbero no encontrado" });
+    }
+
+    /* ================= EMPRESA ================= */
+    const empresaDoc = await empresaModel.findById(barbero.empresa);
+
     /* ================= SUSCRIPCIÓN ================= */
     let suscripcionActiva = null;
 
-    if (usuario) {
+    if (usuario && empresaDoc?.permiteSuscripcion) {
       suscripcionActiva = await suscripcionModel.findOne({
         usuario: usuario.id,
         activa: true,
@@ -161,7 +175,8 @@ export const getHorasDisponibles = async (req, res) => {
     }
 
     /* ================= LÍMITE DE DÍAS ================= */
-    const limiteNormal = ahora.add(15, "day").endOf("day");
+    const diasPermitidos = empresaDoc?.diasMostradosCalendario ?? 15;
+    const limiteNormal = ahora.add(diasPermitidos, "day").endOf("day");
     let limiteDias = limiteNormal;
 
     if (suscripcionActiva) {
@@ -170,27 +185,17 @@ export const getHorasDisponibles = async (req, res) => {
         .add(31, "day")
         .endOf("day");
 
-      // max(hoy + 15, fechaSuscripcion + 31)
       limiteDias = limiteSuscripcion.isAfter(limiteNormal)
         ? limiteSuscripcion
         : limiteNormal;
     }
 
-    if (fechaConsulta.isAfter(limiteDias, "day")) {
+    if (rolUsuario !== "barbero" && fechaConsulta.isAfter(limiteDias, "day")) {
       return res.status(400).json({
         message: suscripcionActiva
           ? "No puedes reservar más allá de los 31 días de tu suscripción"
-          : "No puedes reservar con más de 15 días de anticipación",
+          : `No puedes reservar con más de ${diasPermitidos} días de anticipación`,
       });
-    }
-
-    /* ================= BARBERO ================= */
-    const barbero = await Usuario.findById(barberoId).populate(
-      "horariosDisponibles",
-    );
-
-    if (!barbero) {
-      return res.status(404).json({ message: "Barbero no encontrado" });
     }
 
     const diaSemana = fechaConsulta.day();
@@ -228,8 +233,6 @@ export const getHorasDisponibles = async (req, res) => {
       estado: { $in: ["pendiente", "confirmada"] },
     });
 
-    reservas.forEach((r) => {});
-
     const horasReservadas = reservas.map((r) =>
       dayjs(r.fecha).tz("America/Santiago").format("HH:mm"),
     );
@@ -238,7 +241,7 @@ export const getHorasDisponibles = async (req, res) => {
     const excepciones = await ExcepcionHorarioModel.find({
       barbero: barberoId,
       fecha: {
-        $gte: inicioBusqueda, // reusar las mismas variables
+        $gte: inicioBusqueda,
         $lt: finBusqueda,
       },
     });
@@ -252,14 +255,12 @@ export const getHorasDisponibles = async (req, res) => {
       .map((e) => e.horaInicio);
 
     /* ================= HORAS DISPONIBLES ================= */
-    /* ================= HORAS DISPONIBLES ================= */
     const horasDisponibles = new Set();
     const horasBase = new Set();
 
     for (const horario of horariosDelDia) {
       const intervalo = Number(horario.duracionBloque);
 
-      // ✅ Generar horasBase respetando los dos bloques (antes y después de colación)
       const bloquesTrabajo = horario.colacionInicio
         ? [
             {
@@ -302,7 +303,6 @@ export const getHorasDisponibles = async (req, res) => {
             },
           ];
 
-      // ✅ horasBase se llena desde los bloques, no desde horaInicio a horaFin directo
       for (const bloque of bloquesTrabajo) {
         let cursor = bloque.inicio;
         while (cursor.isBefore(bloque.fin)) {
@@ -311,7 +311,6 @@ export const getHorasDisponibles = async (req, res) => {
         }
       }
 
-      // ✅ Calcular disponibles usando los mismos bloques (ya son dayjs)
       for (const bloque of bloquesTrabajo) {
         const huecos = calcularHuecosDisponibles(reservas, bloque, fecha);
 
@@ -331,8 +330,6 @@ export const getHorasDisponibles = async (req, res) => {
 
     horasExtra.forEach((h) => horasBase.add(h));
 
-
-
     /* ================= RESPUESTA FINAL ================= */
     const horas = [...horasBase].sort().reduce((acc, hora) => {
       const inicio = dayjs.tz(
@@ -341,7 +338,11 @@ export const getHorasDisponibles = async (req, res) => {
         "America/Santiago",
       );
 
-      if (fechaConsulta.isSame(ahora, "day") && inicio.isBefore(ahora))
+      if (
+        rolUsuario !== "barbero" &&
+        fechaConsulta.isSame(ahora, "day") &&
+        inicio.isBefore(ahora)
+      )
         return acc;
 
       if (horasBloqueadas.includes(hora)) return acc;
@@ -360,7 +361,7 @@ export const getHorasDisponibles = async (req, res) => {
       duracionServicio,
       intervaloBase: horariosDelDia[0].duracionBloque,
       horas,
-      diasPermitidos: suscripcionActiva ? 31 : 15,
+      diasPermitidos: suscripcionActiva ? 31 : diasPermitidos,
     });
   } catch (error) {
     console.error("❌ Error getHorasDisponibles:", error);

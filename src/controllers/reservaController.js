@@ -8,6 +8,8 @@ import { formatHora } from "../utils/horas.js";
 import {
   sendCancelReservationEmail,
   sendGuestReservationEmail,
+  sendProfesionalCancelReservationEmail,
+  sendProfesionalNewReservationEmail,
   sendReservationEmail,
   sendWaitlistNotificationEmail,
 } from "./mailController.js";
@@ -144,36 +146,45 @@ export const createReserva = async (req, res) => {
     const diaSemana = inicioReservaChile.day();
 
     /* =============================
-   LÍMITE DE DÍAS CALENDARIO
-============================== */
+       LÍMITE DE DÍAS CALENDARIO
+    ============================== */
     if (rolUsuario !== "barbero") {
-      const limiteNormal = ahoraChile.add(15, "day").endOf("day");
+      const diasPermitidos = empresaDoc.diasMostradosCalendario ?? 15;
+      const limiteNormal = ahoraChile.add(diasPermitidos, "day").endOf("day");
       let limiteDias = limiteNormal;
 
-      const suscripcionCliente = await suscripcionModel.findOne({
-        usuario: cliente,
-        activa: true,
-        fechaInicio: { $lte: new Date() },
-        fechaFin: { $gte: new Date() },
-      });
-
-      if (suscripcionCliente) {
-        const limiteSuscripcion = dayjs(suscripcionCliente.fechaInicio)
-          .tz("America/Santiago")
-          .add(31, "day")
-          .endOf("day");
-
-        limiteDias = limiteSuscripcion.isAfter(limiteNormal)
-          ? limiteSuscripcion
-          : limiteNormal;
-      }
-
-      if (inicioReservaChile.isAfter(limiteDias)) {
-        return res.status(400).json({
-          message: suscripcionCliente
-            ? "No puedes reservar más allá de los 31 días de tu suscripción"
-            : "Solo puedes reservar hasta 15 días desde hoy",
+      if (empresaDoc.permiteSuscripcion) {
+        const suscripcionCliente = await suscripcionModel.findOne({
+          usuario: cliente,
+          activa: true,
+          fechaInicio: { $lte: new Date() },
+          fechaFin: { $gte: new Date() },
         });
+
+        if (suscripcionCliente) {
+          const limiteSuscripcion = dayjs(suscripcionCliente.fechaInicio)
+            .tz("America/Santiago")
+            .add(31, "day")
+            .endOf("day");
+
+          limiteDias = limiteSuscripcion.isAfter(limiteNormal)
+            ? limiteSuscripcion
+            : limiteNormal;
+        }
+
+        if (inicioReservaChile.isAfter(limiteDias)) {
+          return res.status(400).json({
+            message: suscripcionCliente
+              ? "No puedes reservar más allá de los 31 días de tu suscripción"
+              : `Solo puedes reservar hasta ${diasPermitidos} días desde hoy`,
+          });
+        }
+      } else {
+        if (inicioReservaChile.isAfter(limiteDias)) {
+          return res.status(400).json({
+            message: `Solo puedes reservar hasta ${diasPermitidos} días desde hoy`,
+          });
+        }
       }
     }
 
@@ -181,18 +192,20 @@ export const createReserva = async (req, res) => {
        SÁBADOS / SUSCRIPCIÓN
     ============================== */
     if (diaSemana === 6 && rolUsuario !== "barbero") {
-      const suscripcionActiva = await suscripcionModel.findOne({
-        usuario: cliente,
-        activa: true,
-        fechaInicio: { $lte: new Date() },
-        fechaFin: { $gte: new Date() },
-      });
-
-      if (!suscripcionActiva) {
-        return res.status(403).json({
-          message:
-            "Las reservas del sábado son solo para suscriptores o barberos",
+      if (empresaDoc.permiteSuscripcion) {
+        const suscripcionActiva = await suscripcionModel.findOne({
+          usuario: cliente,
+          activa: true,
+          fechaInicio: { $lte: new Date() },
+          fechaFin: { $gte: new Date() },
         });
+
+        if (!suscripcionActiva) {
+          return res.status(403).json({
+            message:
+              "Las reservas del sábado son solo para suscriptores o barberos",
+          });
+        }
       }
     }
 
@@ -276,7 +289,7 @@ export const createReserva = async (req, res) => {
 
     const excepciones = await excepcionHorarioModel.find({
       barbero,
-      fecha: { $gte: inicioBusqueda, $lt: finBusqueda }, // ✅
+      fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
       tipo: "bloqueo",
     });
 
@@ -325,14 +338,16 @@ export const createReserva = async (req, res) => {
     /* =============================
        HORAS PASADAS
     ============================== */
-    if (
-      inicioReservaChile.isSame(ahoraChile, "day") &&
-      inicioReservaChile.isBefore(ahoraChile.add(30, "minute"))
-    ) {
-      return res.status(400).json({
-        message:
-          "No se pueden reservar horas pasadas o con menos de 30 minutos",
-      });
+    if (rolUsuario !== "barbero") {
+      if (
+        inicioReservaChile.isSame(ahoraChile, "day") &&
+        inicioReservaChile.isBefore(ahoraChile.add(30, "minute"))
+      ) {
+        return res.status(400).json({
+          message:
+            "No se pueden reservar horas pasadas o con menos de 30 minutos",
+        });
+      }
     }
 
     /* =============================
@@ -360,7 +375,7 @@ export const createReserva = async (req, res) => {
       await accesTokenModel.create({
         usuario: cliente,
         reserva: reserva._id,
-        empresa: empresa, // 👈 agregar esto
+        empresa: empresa,
         token: cancelToken,
         tipo: "reserva",
         expiraEn: inicioReservaUTC.add(1, "year").toDate(),
@@ -380,31 +395,35 @@ export const createReserva = async (req, res) => {
     });
 
     /* =============================
-       EMAIL (CLAVE)
+       EMAILS
     ============================== */
+    const emailData = {
+      nombreCliente: clienteDoc.nombre,
+      nombreBarbero: barberoDoc.nombre,
+      fecha,
+      hora: horaFormateada,
+      servicio: nombreServicio,
+      duracion: duracionServicio,
+      horaFin: finReservaChile.format("HH:mm"),
+    };
+
+    // Email al cliente
     if (req.crearTokenCancelacion && cancelToken) {
-      // 👉 INVITADO
+      // Invitado
       sendGuestReservationEmail(clienteDoc.email, {
-        nombreCliente: clienteDoc.nombre,
-        nombreBarbero: barberoDoc.nombre,
-        fecha,
-        hora: horaFormateada,
-        servicio: nombreServicio,
-        duracion: duracionServicio,
-        horaFin: finReservaChile.format("HH:mm"),
+        ...emailData,
         cancelUrl: `www.agendafonfach.cl/${empresaDoc.slug}/cancelar-reserva-invitado?token=${cancelToken}`,
       }).catch(console.error);
     } else {
-      // 👉 USUARIO REGISTRADO
-      sendReservationEmail(clienteDoc.email, {
-        nombreCliente: clienteDoc.nombre,
-        nombreBarbero: barberoDoc.nombre,
-        fecha,
-        hora: horaFormateada,
-        servicio: nombreServicio,
-        duracion: duracionServicio,
-        horaFin: finReservaChile.format("HH:mm"),
-      }).catch(console.error);
+      // Usuario registrado
+      sendReservationEmail(clienteDoc.email, emailData).catch(console.error);
+    }
+
+    // Email al barbero — solo si la empresa tiene activada la notificación
+    if (empresaDoc.envioNotificacionReserva) {
+      sendProfesionalNewReservationEmail(barberoDoc.email, emailData).catch(
+        console.error,
+      );
     }
   } catch (error) {
     console.error("❌ Error createReserva:", error);
@@ -494,7 +513,10 @@ export const postDeleteReserva = async (req, res) => {
     existeReserva.motivoCancelacion = motivo || "Cancelada por el usuario";
     await existeReserva.save();
 
-    // 2️⃣ Determinar datos del cliente
+    // 2️⃣ Cargar empresa
+    const empresaDoc = await empresaModel.findById(existeReserva.empresa);
+
+    // 3️⃣ Datos compartidos para emails
     const emailCliente =
       existeReserva.cliente?.email || existeReserva.invitado?.email;
     const nombreCliente =
@@ -510,25 +532,38 @@ export const postDeleteReserva = async (req, res) => {
       timeZone: "America/Santiago",
     });
 
-    // 3️⃣ Enviar correo de cancelación al cliente
+    const emailData = {
+      nombreCliente,
+      nombreBarbero: existeReserva.barbero?.nombre || "Tu barbero",
+      fecha: fechaFormateada,
+      hora: horaFormateada,
+      servicio: existeReserva.servicio?.nombre || "Servicio",
+    };
+
+    // 4️⃣ Email al cliente
     if (emailCliente) {
-      try {
-        await sendCancelReservationEmail(emailCliente, {
-          nombreCliente,
-          nombreBarbero: existeReserva.barbero?.nombre || "Tu barbero",
-          fecha: fechaFormateada,
-          hora: horaFormateada,
-          servicio: existeReserva.servicio?.nombre || "Servicio",
-        });
-      } catch (error) {
+      sendCancelReservationEmail(emailCliente, emailData).catch((error) =>
         console.error(
           "❌ Error enviando correo de cancelación:",
           error.message,
-        );
-      }
+        ),
+      );
     }
 
-    // 4️⃣ Notificar lista de espera
+    // 5️⃣ Email al barbero — solo si la empresa tiene activada la notificación
+    if (empresaDoc?.envioNotificacionReserva && existeReserva.barbero?.email) {
+      sendProfesionalCancelReservationEmail(
+        existeReserva.barbero.email,
+        emailData,
+      ).catch((error) =>
+        console.error(
+          "❌ Error enviando notificación al barbero:",
+          error.message,
+        ),
+      );
+    }
+
+    // 6️⃣ Notificar lista de espera
     const fechaInicio = new Date(existeReserva.fecha);
     fechaInicio.setSeconds(0, 0);
     const fechaFin = new Date(existeReserva.fecha);
@@ -591,9 +626,9 @@ export const postDeleteReserva = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error al eliminar reserva:", error);
-    return res.status(500).json({
-      message: "Error del servidor al eliminar la reserva.",
-    });
+    return res
+      .status(500)
+      .json({ message: "Error del servidor al eliminar la reserva." });
   }
 };
 export const getReservasActivas = async (req, res) => {

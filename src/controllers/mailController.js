@@ -172,7 +172,6 @@ export const sendClaimAccountEmail = async (to, data) => {
   });
 };
 
-
 export const sendReminderEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, servicio, fecha, hora, tipo } = data;
   const es24h = tipo === "24h";
@@ -193,5 +192,33 @@ export const sendReminderEmail = async (to, data) => {
       </p>
     `),
     text: `Recordatorio de cita\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
+  });
+};
+
+export const sendProfesionalNewReservationEmail = async (to, data) => {
+  const { nombreCliente, nombreBarbero, fecha, hora, servicio } = data;
+  return await sendBaseEmail({
+    to,
+    subject: "Nueva reserva recibida – Agenda Fonfach",
+    html: layout(`
+      <h2 style="margin-top:0;">Nueva Reserva 🗓️</h2>
+      <p>Hola <strong>${nombreBarbero}</strong>, tienes una nueva reserva.</p>
+      ${detalles({ nombreBarbero: nombreCliente, servicio, fecha, hora })}
+    `),
+    text: `Nueva reserva\n\nHola ${nombreBarbero}\n\nCliente: ${nombreCliente}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
+  });
+};
+
+export const sendProfesionalCancelReservationEmail = async (to, data) => {
+  const { nombreCliente, nombreBarbero, fecha, hora, servicio } = data;
+  return await sendBaseEmail({
+    to,
+    subject: "Reserva cancelada – Agenda Fonfach",
+    html: layout(`
+      <h2 style="margin-top:0;">Reserva Cancelada</h2>
+      <p>Hola <strong>${nombreBarbero}</strong>, una reserva ha sido cancelada.</p>
+      ${detalles({ nombreBarbero: nombreCliente, servicio, fecha, hora })}
+    `),
+    text: `Reserva cancelada\n\nHola ${nombreBarbero}\n\nCliente: ${nombreCliente}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
   });
 };

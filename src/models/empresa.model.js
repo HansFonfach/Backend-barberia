@@ -48,8 +48,6 @@ const EmpresaSchema = new mongoose.Schema({
     heroBg: String, // Fondo del hero (puede ser gradiente)
   },
 
-  
-
   // ====== CONFIGURACIÓN VISUAL ======
   configuracion: {
     mostrarLogo: { type: Boolean, default: true },
@@ -67,6 +65,20 @@ const EmpresaSchema = new mongoose.Schema({
   creadoEn: {
     type: Date,
     default: Date.now,
+  },
+
+  permiteSuscripcion: {
+    type: Boolean,
+    default: false,
+  },
+  diasMostradosCalendario: {
+    type: Number,
+    default: 15,
+  },
+  envioNotificacionReserva: { type: Boolean, default: false },
+  permiteAbonos: {
+    type: Boolean,
+    default: false,
   },
 });
 
