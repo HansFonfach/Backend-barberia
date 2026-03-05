@@ -409,21 +409,16 @@ export const createReserva = async (req, res) => {
 
     // Email al cliente
     if (req.crearTokenCancelacion && cancelToken) {
-      // Invitado
       sendGuestReservationEmail(clienteDoc.email, {
         ...emailData,
+        instrucciones: barberoServicio.servicio.instrucciones ?? null, // 👈
         cancelUrl: `www.agendafonfach.cl/${empresaDoc.slug}/cancelar-reserva-invitado?token=${cancelToken}`,
       }).catch(console.error);
     } else {
-      // Usuario registrado
-      sendReservationEmail(clienteDoc.email, emailData).catch(console.error);
-    }
-
-    // Email al barbero — solo si la empresa tiene activada la notificación
-    if (empresaDoc.envioNotificacionReserva) {
-      sendProfesionalNewReservationEmail(barberoDoc.email, emailData).catch(
-        console.error,
-      );
+      sendReservationEmail(clienteDoc.email, {
+        ...emailData,
+        instrucciones: barberoServicio.servicio.instrucciones ?? null, // 👈
+      }).catch(console.error);
     }
   } catch (error) {
     console.error("❌ Error createReserva:", error);

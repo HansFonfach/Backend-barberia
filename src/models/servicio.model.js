@@ -14,6 +14,7 @@ const servicioSchema = new Schema({
     type: Number,
     required: true,
   },
+  instrucciones: { type: String, default: null },
 });
 
 export default mongoose.model("Servicio", servicioSchema);

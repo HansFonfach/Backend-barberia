@@ -52,14 +52,14 @@ class RecordatoriosJob {
   /* =============================
      ENVIAR POR EMAIL + WHATSAPP
   ============================== */
-  async enviarPorTodosLosCanales(cliente, datos, tipo) {
-    // ✅ Email
+  async enviarPorTodosLosCanales(cliente, datos, tipo, reserva) {
+    // 👈 agrega reserva
     if (cliente.email) {
-      console.log("📧 Intentando enviar email a:", cliente.email);
       try {
         const resEmail = await sendReminderEmail(cliente.email, {
           ...datos,
           tipo,
+          instrucciones: reserva.servicio?.instrucciones ?? null, // 👈
         });
         console.log("📧 Respuesta Resend:", resEmail);
       } catch (err) {
@@ -92,7 +92,7 @@ class RecordatoriosJob {
         estado: { $in: ["pendiente", "confirmada"] },
         recordatorioEnviado: { $ne: true },
       })
-        .populate("servicio", "nombre")
+        .populate("servicio", "nombre instrucciones") //
         .populate("barbero", "nombre apellido");
 
       console.log(
@@ -106,7 +106,7 @@ class RecordatoriosJob {
 
           const { cliente, datos } = resultado;
 
-          await this.enviarPorTodosLosCanales(cliente, datos, "24h");
+          await this.enviarPorTodosLosCanales(cliente, datos, "24h", reserva); // 👈
 
           await Reserva.findByIdAndUpdate(reserva._id, {
             recordatorioEnviado: true,
@@ -141,7 +141,7 @@ class RecordatoriosJob {
         estado: { $in: ["pendiente", "confirmada"] },
         recordatorio3hEnviado: { $ne: true },
       })
-        .populate("servicio", "nombre")
+       .populate("servicio", "nombre instrucciones") // 👈
         .populate("barbero", "nombre apellido");
 
       console.log(
@@ -155,7 +155,7 @@ class RecordatoriosJob {
 
           const { cliente, datos } = resultado;
 
-          await this.enviarPorTodosLosCanales(cliente, datos, "3h");
+          await this.enviarPorTodosLosCanales(cliente, datos, "3h", reserva); // 👈
 
           await Reserva.findByIdAndUpdate(reserva._id, {
             recordatorio3hEnviado: true,
@@ -178,7 +178,7 @@ class RecordatoriosJob {
   async testEnviar(reservaId) {
     try {
       const reserva = await Reserva.findById(reservaId)
-        .populate("servicio", "nombre")
+      .populate("servicio", "nombre instrucciones") // 👈
         .populate("barbero", "nombre apellido");
 
       if (!reserva) return { error: "Reserva no encontrada" };
@@ -188,7 +188,7 @@ class RecordatoriosJob {
 
       const { cliente, datos } = resultado;
 
-      await this.enviarPorTodosLosCanales(cliente, datos, "24h");
+      await this.enviarPorTodosLosCanales(cliente, datos, "24h", reserva); // 👈
 
       return {
         success: true,

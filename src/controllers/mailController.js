@@ -74,8 +74,10 @@ const detalles = ({
     <tr><td style="font-size:14px;color:#555;">Fecha</td><td style="font-weight:bold;">${fecha}</td></tr>
     <tr><td style="font-size:14px;color:#555;">Hora</td><td style="font-weight:bold;">${hora}</td></tr>
   </table>`;
+
 export const sendReservationEmail = async (to, data) => {
-  const { nombreCliente, nombreBarbero, fecha, hora, servicio } = data;
+  const { nombreCliente, nombreBarbero, fecha, hora, servicio, instrucciones } =
+    data; // 👈
   return await sendBaseEmail({
     to,
     subject: "Reserva confirmada – Agenda Fonfach",
@@ -83,15 +85,34 @@ export const sendReservationEmail = async (to, data) => {
       <h2 style="margin-top:0;">Reserva Confirmada 🗓️</h2>
       <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido confirmada.</p>
       ${detalles({ nombreBarbero, servicio, fecha, hora })}
+
+      ${
+        instrucciones
+          ? `
+        <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
+          <p style="margin:0 0 8px;font-weight:bold;color:#555;">📋 Instrucciones para tu cita:</p>
+          <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;">${instrucciones}</p>
+        </div>
+      `
+          : ""
+      }
+
       <p style="color:#555;font-size:14px;">Si necesitas cancelar o reagendar, ingresa a tu perfil.</p>
     `),
-    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
+    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}`,
   });
 };
 
 export const sendGuestReservationEmail = async (to, data) => {
-  const { nombreCliente, nombreBarbero, fecha, hora, servicio, cancelUrl } =
-    data;
+  const {
+    nombreCliente,
+    nombreBarbero,
+    fecha,
+    hora,
+    servicio,
+    cancelUrl,
+    instrucciones,
+  } = data; // 👈
   return await sendBaseEmail({
     to,
     subject: "Reserva confirmada – Agenda Fonfach",
@@ -99,11 +120,23 @@ export const sendGuestReservationEmail = async (to, data) => {
       <h2 style="margin-top:0;">Reserva Confirmada 🗓️</h2>
       <p>Hola <strong>${nombreCliente}</strong>, tu reserva fue creada exitosamente.</p>
       ${detalles({ nombreBarbero, servicio, fecha, hora })}
+
+      ${
+        instrucciones
+          ? `
+        <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
+          <p style="margin:0 0 8px;font-weight:bold;color:#555;">📋 Instrucciones para tu cita:</p>
+          <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;">${instrucciones}</p>
+        </div>
+      `
+          : ""
+      }
+
       <p style="color:#555;font-size:14px;">Puedes cancelar hasta <strong>3 horas antes</strong> del horario agendado.</p>
       ${ctaButton(cancelUrl, "Cancelar mi reserva", "#c0392b")}
       <p style="font-size:12px;color:#aaa;">Este enlace es personal y expira automáticamente.</p>
     `),
-    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\n\nCancelar reserva (hasta 3h antes):\n${cancelUrl}`,
+    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}\n\nCancelar reserva (hasta 3h antes):\n${cancelUrl}`,
   });
 };
 
@@ -178,7 +211,16 @@ export const sendClaimAccountEmail = async (to, data) => {
 };
 
 export const sendReminderEmail = async (to, data) => {
-  const { nombreCliente, nombreBarbero, servicio, fecha, hora, tipo } = data;
+  const {
+    nombreCliente,
+    nombreBarbero,
+    servicio,
+    fecha,
+    hora,
+    tipo,
+    instrucciones,
+  } = data; // 👈 agrega instrucciones
+
   const es24h = tipo === "24h";
 
   return await sendBaseEmail({
@@ -192,11 +234,23 @@ export const sendReminderEmail = async (to, data) => {
       </h2>
       <p>Hola <strong>${nombreCliente}</strong>, te recordamos que tienes una cita agendada.</p>
       ${detalles({ nombreBarbero, servicio, fecha, hora })}
+
+      ${
+        instrucciones
+          ? `
+        <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
+          <p style="margin:0 0 8px;font-weight:bold;color:#555;">📋 Instrucciones para tu cita:</p>
+          <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;">${instrucciones}</p>
+        </div>
+      `
+          : ""
+      }
+
       <p style="color:#555;font-size:14px;">
         Si necesitas cancelar, hazlo con anticipación desde tu perfil.
       </p>
     `),
-    text: `Recordatorio de cita\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
+    text: `Recordatorio de cita\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}`,
   });
 };
 

@@ -38,7 +38,7 @@ export const getBarberosPublicos = async (req, res) => {
         rol: "barbero",
         estado: "activo", // 🔹 Cambiado de activo: true a estado: "activo"
       })
-      .select("_id nombre apellido")
+      .select("_id nombre apellido descripcion perfilProfesional")
       .lean();
 
     res.status(200).json(barberos);

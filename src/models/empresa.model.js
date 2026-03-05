@@ -80,6 +80,15 @@ const EmpresaSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+
+  perfilProfesional: {
+    aniosExperiencia: { type: Number, default: null },
+    especialidades: [{ type: String }],
+    fotoPerfil: {
+      url: { type: String, default: null }, // URL de Cloudinary
+      publicId: { type: String, default: null }, // Para poder eliminarla/reemplazarla
+    },
+  },
 });
 
 export default mongoose.model("Empresa", EmpresaSchema);
