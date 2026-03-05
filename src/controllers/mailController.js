@@ -91,7 +91,7 @@ export const sendReservationEmail = async (to, data) => {
           ? `
         <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
           <p style="margin:0 0 8px;font-weight:bold;color:#555;">📋 Instrucciones para tu cita:</p>
-          <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;">${instrucciones}</p>
+          <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;text-align:justify;">${instrucciones}</p>
         </div>
       `
           : ""
@@ -126,7 +126,7 @@ export const sendGuestReservationEmail = async (to, data) => {
           ? `
         <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
           <p style="margin:0 0 8px;font-weight:bold;color:#555;">📋 Instrucciones para tu cita:</p>
-          <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;">${instrucciones}</p>
+         <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;text-align:justify;">${instrucciones}</p>
         </div>
       `
           : ""
@@ -240,7 +240,7 @@ export const sendReminderEmail = async (to, data) => {
           ? `
         <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
           <p style="margin:0 0 8px;font-weight:bold;color:#555;">📋 Instrucciones para tu cita:</p>
-          <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;">${instrucciones}</p>
+         <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;text-align:justify;">${instrucciones}</p>
         </div>
       `
           : ""
