@@ -23,15 +23,19 @@ dayjs.extend(isSameOrBefore);
    FUNCIONES AUXILIARES
 ===================================================== */
 
-const calcularHuecosDisponibles = (reservasDelDia, bloque, fecha) => {
-  // ✅ Convertir a dayjs si vienen como strings
+const calcularHuecosDisponibles = (
+  reservasDelDia,
+  bloque,
+  fecha,
+  horasBloqueadas = [],
+) => {
   const bloqueInicio = dayjs.isDayjs(bloque.inicio)
     ? bloque.inicio
     : dayjs.tz(
         `${fecha} ${bloque.inicio}`,
         "YYYY-MM-DD HH:mm",
         "America/Santiago",
-      ); // ← fecha + hora
+      );
 
   const bloqueFin = dayjs.isDayjs(bloque.fin)
     ? bloque.fin
@@ -39,17 +43,26 @@ const calcularHuecosDisponibles = (reservasDelDia, bloque, fecha) => {
         `${fecha} ${bloque.fin}`,
         "YYYY-MM-DD HH:mm",
         "America/Santiago",
-      ); // ← fecha + hora
+      );
 
-  const reservasFiltradas = reservasDelDia
-    .map((r) => {
+  // ✅ Convertir horas bloqueadas a "reservas ficticias" de 30 min
+  const bloqueosComoReservas = horasBloqueadas.map((hora) => {
+    const inicio = dayjs.tz(
+      `${fecha} ${hora}`,
+      "YYYY-MM-DD HH:mm",
+      "America/Santiago",
+    );
+    return { inicio, fin: inicio.add(30, "minute") };
+  });
+
+  const todasLasOcupaciones = [
+    ...reservasDelDia.map((r) => {
       const inicio = dayjs(r.fecha).tz("America/Santiago");
-      const fin = inicio.add(r.duracion, "minute");
-      return { inicio, fin };
-    })
-    .filter(
-      (r) => r.fin.isAfter(bloqueInicio) && r.inicio.isBefore(bloqueFin), // ✅ usa las nuevas vars
-    )
+      return { inicio, fin: inicio.add(r.duracion, "minute") };
+    }),
+    ...bloqueosComoReservas,
+  ]
+    .filter((r) => r.fin.isAfter(bloqueInicio) && r.inicio.isBefore(bloqueFin))
     .sort((a, b) => a.inicio.diff(b.inicio));
 
   const huecos = [];
@@ -376,7 +389,7 @@ export const getHorasDisponibles = async (req, res) => {
       }
 
       for (const bloque of bloquesEfectivos) {
-        const huecos = calcularHuecosDisponibles(reservas, bloque, fecha);
+        const huecos = calcularHuecosDisponibles(reservas, bloque, fecha, horasBloqueadas); 
         for (const hueco of huecos) {
           if (hueco.duracion >= duracionServicio) {
             generarIniciosEnHueco(hueco, intervalo, duracionServicio).forEach(
