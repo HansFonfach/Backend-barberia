@@ -254,8 +254,11 @@ export const getAllUsersWithSuscripcion = async (req, res) => {
         .status(400)
         .json({ message: "No se pudo identificar la empresa del usuario" });
 
-    // 🔹 Filtrar usuarios por empresa
-    const usuarios = await Usuario.find({ empresa: empresaId }).lean();
+    // 🔹 Filtrar usuarios por empresa y rol
+    const usuarios = await Usuario.find({
+      empresa: empresaId,
+      
+    }).lean();
 
     const usuariosConSub = await Promise.all(
       usuarios.map(async (u) => {
@@ -267,6 +270,7 @@ export const getAllUsersWithSuscripcion = async (req, res) => {
             fechaFin: { $gte: new Date() },
           })
           .lean();
+
         return { ...u, suscripcion: sus || null };
       }),
     );
@@ -277,6 +281,7 @@ export const getAllUsersWithSuscripcion = async (req, res) => {
     res.status(500).json({ message: "Error cargando usuarios" });
   }
 };
+
 
 export const verMisPuntos = async (req, res) => {
   try {

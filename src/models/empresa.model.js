@@ -59,6 +59,7 @@ const EmpresaSchema = new mongoose.Schema({
     },
     fuente: { type: String, default: "default" },
     borderRadius: { type: String, default: "24px" },
+    usaHorasAncla: { type: Boolean, default: false }, // 👈 aquí dentro
   },
 
   horarios: String,

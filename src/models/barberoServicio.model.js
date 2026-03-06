@@ -21,7 +21,7 @@ const barberoServicioSchema = new Schema(
       min: 15, // mínimo 15 minutos
       max: 240, // máximo 4 horas
     },
-   
+
     intervaloMinimo: {
       type: Number,
       default: 15, // ← NUEVO CAMPO! Intervalo mínimo de reserva
@@ -32,8 +32,12 @@ const barberoServicioSchema = new Schema(
       type: Boolean,
       default: true,
     },
+    horasPermitidas: {
+      type: [String], // ["08:30", "12:00", "16:00"]
+      default: [], // vacío = sin restricción, cualquier hora válida
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 barberoServicioSchema.index({ barbero: 1, servicio: 1 }, { unique: true });

@@ -108,7 +108,7 @@ export const getHorasDisponibles = async (req, res) => {
     const { id: barberoId } = req.params;
     const { fecha, servicioId } = req.query;
     const usuario = req.usuario;
-    const rolUsuario = req.usuario?.rol; // 👈
+    const rolUsuario = req.usuario?.rol;
 
     if (!fecha || !servicioId) {
       return res.status(400).json({ message: "Fecha y servicio requeridos" });
@@ -258,6 +258,9 @@ export const getHorasDisponibles = async (req, res) => {
     const horasDisponibles = new Set();
     const horasBase = new Set();
 
+    // ✅ Mapa de hora → servicioExclusivo (se construye por horario)
+    const mapaPermitidos = {};
+
     for (const horario of horariosDelDia) {
       const intervalo = Number(horario.duracionBloque);
 
@@ -303,17 +306,77 @@ export const getHorasDisponibles = async (req, res) => {
             },
           ];
 
-      for (const bloque of bloquesTrabajo) {
-        let cursor = bloque.inicio;
-        while (cursor.isBefore(bloque.fin)) {
-          horasBase.add(cursor.format("HH:mm"));
-          cursor = cursor.add(intervalo, "minute");
+      const usaAncla =
+        empresaDoc?.configuracion?.usaHorasAncla === true &&
+        horario.horasAncla?.length > 0;
+
+      // ✅ Construir mapa de servicios exclusivos por hora ancla
+      if (usaAncla) {
+        horario.horasAncla.forEach((a) => {
+          if (a.serviciosPermitidos?.length > 0) {
+            mapaPermitidos[a.hora] = a.serviciosPermitidos.map((s) =>
+              s.toString(),
+            );
+          }
+        });
+      }
+
+      // Función que convierte un bloque en sub-bloques según las anclas
+      const dividirBloqueEnAnclas = (bloque, anclas, fecha) => {
+        const anclasDentro = anclas
+          .map((a) =>
+            dayjs.tz(`${fecha} ${a}`, "YYYY-MM-DD HH:mm", "America/Santiago"),
+          )
+          .filter(
+            (a) => a.isSameOrAfter(bloque.inicio) && a.isBefore(bloque.fin),
+          )
+          .sort((a, b) => a.diff(b));
+
+        if (!anclasDentro.length) return [bloque];
+
+        const subBloques = [];
+        const puntos = [bloque.inicio, ...anclasDentro, bloque.fin];
+
+        for (let i = 0; i < puntos.length - 1; i++) {
+          subBloques.push({ inicio: puntos[i], fin: puntos[i + 1] });
+        }
+
+        return subBloques;
+      };
+
+      const bloquesEfectivos = (
+        usaAncla
+          ? bloquesTrabajo.flatMap((b) =>
+              dividirBloqueEnAnclas(
+                b,
+                horario.horasAncla.map((a) => a.hora),
+                fecha,
+              ),
+            )
+          : bloquesTrabajo
+      ).filter((b) => b.inicio.isBefore(b.fin));
+
+      if (usaAncla) {
+        for (const subBloque of bloquesEfectivos) {
+          if (subBloque.inicio.isSame(subBloque.fin)) continue;
+          let cursor = subBloque.inicio;
+          while (cursor.isBefore(subBloque.fin)) {
+            horasBase.add(cursor.format("HH:mm"));
+            cursor = cursor.add(intervalo, "minute");
+          }
+        }
+      } else {
+        for (const bloque of bloquesTrabajo) {
+          let cursor = bloque.inicio;
+          while (cursor.isBefore(bloque.fin)) {
+            horasBase.add(cursor.format("HH:mm"));
+            cursor = cursor.add(intervalo, "minute");
+          }
         }
       }
 
-      for (const bloque of bloquesTrabajo) {
+      for (const bloque of bloquesEfectivos) {
         const huecos = calcularHuecosDisponibles(reservas, bloque, fecha);
-
         for (const hueco of huecos) {
           if (hueco.duracion >= duracionServicio) {
             generarIniciosEnHueco(hueco, intervalo, duracionServicio).forEach(
@@ -346,6 +409,10 @@ export const getHorasDisponibles = async (req, res) => {
         return acc;
 
       if (horasBloqueadas.includes(hora)) return acc;
+
+      // ✅ Si la hora tiene servicio exclusivo y no coincide con el solicitado, omitir
+      if (mapaPermitidos[hora] && !mapaPermitidos[hora].includes(servicioId))
+        return acc;
 
       if (horasReservadas.includes(hora)) {
         acc.push({ hora, estado: "reservada" });
@@ -380,6 +447,7 @@ export const createHorario = async (req, res) => {
       colacionInicio,
       colacionFin,
       duracionBloque,
+      horasAncla, // 👈 nuevo campo opcional
     } = req.body;
 
     if (
@@ -394,6 +462,8 @@ export const createHorario = async (req, res) => {
       });
     }
 
+    console.log("📥 body recibido:", JSON.stringify(req.body, null, 2));
+
     let horario = await Horario.findOne({ barbero, diaSemana });
 
     if (horario) {
@@ -403,6 +473,11 @@ export const createHorario = async (req, res) => {
       horario.colacionInicio = colacionInicio;
       horario.colacionFin = colacionFin;
       horario.duracionBloque = duracionBloque || horario.duracionBloque;
+
+      // ✅ Solo actualiza horasAncla si viene en el body
+      if (Array.isArray(horasAncla)) {
+        horario.horasAncla = horasAncla;
+      }
 
       await horario.save();
 
@@ -421,9 +496,11 @@ export const createHorario = async (req, res) => {
       colacionInicio,
       colacionFin,
       duracionBloque,
+      // ✅ Solo incluye horasAncla si viene y es array válido
+      ...(Array.isArray(horasAncla) && { horasAncla }),
     });
 
-    // (opcional) asociar al barbero
+    // asociar al barbero
     await Usuario.findByIdAndUpdate(barbero, {
       $addToSet: { horariosDisponibles: nuevoHorario._id },
     });

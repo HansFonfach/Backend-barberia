@@ -22,6 +22,17 @@ const horarioSchema = new mongoose.Schema(
       required: true,
       default: 60, // 👈 MUY IMPORTANTE
     },
+    horasAncla: [
+      {
+        hora: { type: String, required: true },
+        serviciosPermitidos: [
+          {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Servicio",
+          },
+        ], 
+      },
+    ],
   },
   { timestamps: true },
 );
