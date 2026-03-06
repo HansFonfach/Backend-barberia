@@ -45,39 +45,37 @@ const calcularHuecosDisponibles = (
         "America/Santiago",
       );
 
-  // ✅ Convertir horas bloqueadas a "reservas ficticias" de 30 min
-  const bloqueosComoReservas = horasBloqueadas.map((hora) => {
-    const inicio = dayjs.tz(
-      `${fecha} ${hora}`,
-      "YYYY-MM-DD HH:mm",
-      "America/Santiago",
-    );
-    return { inicio, fin: inicio.add(30, "minute") };
-  });
-
+  // ✅ Reservas reales + horas bloqueadas como ocupaciones ficticias de 30 min
   const todasLasOcupaciones = [
     ...reservasDelDia.map((r) => {
       const inicio = dayjs(r.fecha).tz("America/Santiago");
       return { inicio, fin: inicio.add(r.duracion, "minute") };
     }),
-    ...bloqueosComoReservas,
+    ...horasBloqueadas.map((hora) => {
+      const inicio = dayjs.tz(
+        `${fecha} ${hora}`,
+        "YYYY-MM-DD HH:mm",
+        "America/Santiago",
+      );
+      return { inicio, fin: inicio.add(30, "minute") };
+    }),
   ]
     .filter((r) => r.fin.isAfter(bloqueInicio) && r.inicio.isBefore(bloqueFin))
     .sort((a, b) => a.inicio.diff(b.inicio));
 
   const huecos = [];
-  let cursor = bloqueInicio; // ✅
+  let cursor = bloqueInicio;
 
-  for (const r of reservasFiltradas) {
-    const inicioReserva = r.inicio.isBefore(bloqueInicio)
+  for (const r of todasLasOcupaciones) {
+    const inicioOcupacion = r.inicio.isBefore(bloqueInicio)
       ? bloqueInicio
       : r.inicio;
 
-    if (cursor.isBefore(inicioReserva)) {
+    if (cursor.isBefore(inicioOcupacion)) {
       huecos.push({
         inicio: cursor,
-        fin: inicioReserva,
-        duracion: inicioReserva.diff(cursor, "minute"),
+        fin: inicioOcupacion,
+        duracion: inicioOcupacion.diff(cursor, "minute"),
       });
     }
 
@@ -85,7 +83,6 @@ const calcularHuecosDisponibles = (
   }
 
   if (cursor.isBefore(bloqueFin)) {
-    // ✅
     huecos.push({
       inicio: cursor,
       fin: bloqueFin,
@@ -95,7 +92,6 @@ const calcularHuecosDisponibles = (
 
   return huecos;
 };
-
 /**
  * 🔥 FUNCIÓN CLAVE CORREGIDA
  * Solo genera inicios donde el servicio COMPLETO cabe
@@ -389,7 +385,12 @@ export const getHorasDisponibles = async (req, res) => {
       }
 
       for (const bloque of bloquesEfectivos) {
-        const huecos = calcularHuecosDisponibles(reservas, bloque, fecha, horasBloqueadas); 
+        const huecos = calcularHuecosDisponibles(
+          reservas,
+          bloque,
+          fecha,
+          horasBloqueadas,
+        );
         for (const hueco of huecos) {
           if (hueco.duracion >= duracionServicio) {
             generarIniciosEnHueco(hueco, intervalo, duracionServicio).forEach(
