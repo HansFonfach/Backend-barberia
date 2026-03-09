@@ -38,10 +38,58 @@ const ReservaSchema = new Schema(
       default: "pendiente",
     },
 
+    abono: {
+      requerido: { type: Boolean, default: false },
+      monto: { type: Number, default: 0 },
+      tipoCalculo: {
+        type: String,
+        enum: ["fijo", "porcentaje"],
+        default: "fijo",
+      },
+      porcentajeAplicado: { type: Number, default: 0 },
+
+      estado: {
+        type: String,
+        enum: ["pendiente", "pagado", "rechazado"],
+        default: "pendiente",
+      },
+      metodo: {
+        type: String,
+        enum: ["transferencia", "mercadopago", "webpay", "efectivo"],
+        default: "transferencia",
+      },
+      comprobante: {
+        url: String,
+        publicId: String,
+      },
+      transaccion: {
+        proveedor: String,
+        idTransaccion: String,
+        estadoPago: String,
+        montoPagado: Number,
+        moneda: { type: String, default: "CLP" },
+        fechaPago: Date,
+        respuestaProveedor: Schema.Types.Mixed,
+      },
+      pagadoEn: Date,
+    },
+
+    // pagos[] queda igual que antes, sin tocar
+    pagos: [
+      {
+        tipo: { type: String, enum: ["abono", "pago_total", "saldo"] },
+        monto: Number,
+        metodo: String,
+        estado: String,
+        proveedor: String,
+        idTransaccion: String,
+        fechaPago: Date,
+      },
+    ],
+
     puntosOtorgados: { type: Number, default: 10 },
     puntosSumados: { type: Boolean, default: false },
 
-    recordatorioEnviado: { type: Boolean, default: false },
     fechaRecordatorio: { type: Date },
 
     confirmacionUsuario: { type: Boolean, default: false },

@@ -351,6 +351,33 @@ export const createReserva = async (req, res) => {
     }
 
     /* =============================
+   CALCULAR ABONO
+============================== */
+
+    const requiereAbono = empresaDoc.pagos?.requiereAbono === true;
+    let abonoData = { requerido: false, monto: 0 };
+
+    if (requiereAbono) {
+      const tipoAbono = empresaDoc.pagos.tipoAbono || "fijo";
+      const monto =
+        tipoAbono === "porcentaje"
+          ? Math.round(
+              (precioServicio * empresaDoc.pagos.porcentajeAbono) / 100,
+            )
+          : empresaDoc.pagos.montoAbonoFijo;
+
+      abonoData = {
+        requerido: true,
+        monto,
+        tipoCalculo: tipoAbono,
+        porcentajeAplicado:
+          tipoAbono === "porcentaje" ? empresaDoc.pagos.porcentajeAbono : 0,
+        estado: "pendiente",
+        metodo: "transferencia",
+      };
+    }
+
+    /* =============================
        CREAR RESERVA
     ============================== */
     const reserva = await Reserva.create({
@@ -362,6 +389,7 @@ export const createReserva = async (req, res) => {
       duracion: duracionServicio,
       precio: precioServicio,
       estado: "pendiente",
+      abono: abonoData, // 👈
     });
 
     /* =============================
@@ -392,6 +420,12 @@ export const createReserva = async (req, res) => {
       nombreServicio,
       intervaloMinimo,
       cancelToken,
+      datosPago: requiereAbono
+        ? {
+            ...empresaDoc.pagos.transferencia.toObject(),
+            telefonoEmpresa: empresaDoc.telefono || null,
+          }
+        : null,
     });
 
     /* =============================

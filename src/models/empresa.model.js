@@ -77,10 +77,6 @@ const EmpresaSchema = new mongoose.Schema({
     default: 15,
   },
   envioNotificacionReserva: { type: Boolean, default: false },
-  permiteAbonos: {
-    type: Boolean,
-    default: false,
-  },
 
   perfilProfesional: {
     aniosExperiencia: { type: Number, default: null },
@@ -88,6 +84,25 @@ const EmpresaSchema = new mongoose.Schema({
     fotoPerfil: {
       url: { type: String, default: null }, // URL de Cloudinary
       publicId: { type: String, default: null }, // Para poder eliminarla/reemplazarla
+    },
+  },
+
+  pagos: {
+    requiereAbono: { type: Boolean, default: false },
+    tipoAbono: {
+      type: String,
+      enum: ["fijo", "porcentaje"],
+      default: "fijo",
+    },
+    montoAbonoFijo: { type: Number, default: 0 }, // si tipoAbono === "fijo"
+    porcentajeAbono: { type: Number, default: 0 }, // si tipoAbono === "porcentaje"
+    transferencia: {
+      banco: { type: String, default: "" },
+      tipoCuenta: { type: String, default: "" },
+      numeroCuenta: { type: String, default: "" },
+      titular: { type: String, default: "" },
+      rut: { type: String, default: "" },
+      correo: { type: String, default: "" },
     },
   },
 });
