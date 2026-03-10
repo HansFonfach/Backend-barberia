@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  actualizarEmpresa,
   actualizarLogoEmpresa,
   getEmpresaPorId,
   getEmpresaPorSlug,
@@ -20,6 +21,7 @@ router.post(
 );
 router.get("/slug/:slug", getEmpresaPorSlug);
 router.get("/:id", validarToken, getEmpresaPorId);
+router.patch("/actualizar", validarToken, actualizarEmpresa);
 router.put("/:empresaId/logo", actualizarLogoEmpresa);
 
 export default router;

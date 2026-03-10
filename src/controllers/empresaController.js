@@ -121,7 +121,7 @@ export const actualizarLogoEmpresa = async (req, res) => {
     const empresaActualizada = await empresaModel.findByIdAndUpdate(
       empresaId,
       { logo: logo }, // ahora usa la URL que envías
-      { new: true }
+      { new: true },
     );
 
     if (!empresaActualizada) {
@@ -129,8 +129,41 @@ export const actualizarLogoEmpresa = async (req, res) => {
     }
 
     res.status(200).json(empresaActualizada);
-
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const actualizarEmpresa = async (req, res) => {
+  try {
+    const empresaId = req.usuario?.empresaId;
+
+    if (!empresaId) {
+      return res.status(403).json({ message: "No autorizado" });
+    }
+
+    const camposProtegidos = [
+      "rutEmpresa",
+      "slug",
+      "tipo",
+      "configuracion",
+      "permiteSuscripcion",
+    ];
+    camposProtegidos.forEach((campo) => delete req.body[campo]);
+
+    const empresaActualizada = await empresaModel.findByIdAndUpdate(
+      empresaId,
+      { $set: req.body },
+      { new: true, runValidators: true },
+    );
+
+    if (!empresaActualizada) {
+      return res.status(404).json({ message: "Empresa no encontrada" });
+    }
+
+    res.status(200).json(empresaActualizada);
+  } catch (error) {
+    console.error("❌ Error actualizarEmpresa:", error);
     res.status(500).json({ message: error.message });
   }
 };

@@ -105,6 +105,18 @@ const EmpresaSchema = new mongoose.Schema({
       correo: { type: String, default: "" },
     },
   },
+
+  // Configuración de reservas
+  anticipacionMinima: { type: Number, default: 30 }, // minutos mínimos antes de reservar
+  anticipacionMaxima: { type: Number, default: 15 }, // días máximos hacia adelante (ya tienes diasMostradosCalendario, podrían unificarse)
+  mensajeBienvenida: { type: String, default: "" }, // texto personalizado en la página pública
+
+  // Política de cancelación
+  politicaCancelacion: {
+    permiteCancelacion: { type: Boolean, default: true },
+    horasLimite: { type: Number, default: 24 }, // hasta X horas antes puede cancelar
+    mensajePolitica: { type: String, default: "" },
+  },
 });
 
 export default mongoose.model("Empresa", EmpresaSchema);
