@@ -13,6 +13,7 @@ import {
 } from "../controllers/usuarioController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 import { verificarRol } from "../middlewares/verificarRol.js";
+import { upload } from "../middlewares/upload.js";
 
 const router = Router();
 
@@ -25,7 +26,7 @@ router.put("/actualizarPerfil", validarToken, updatePerfil); // ✅ AQUÍ
 // 📄 GENERALES
 router.get("/", validarToken, getUsuarios);
 router.get("/barbero/:slug/barberos", getBarberosPublicos);
-router.post("/barbero/crearBarbero", verificarRol("admin", "barbero"), validarToken, crearBarbero);
+router.post("/barbero/crearBarbero", validarToken, verificarRol("admin", "barbero"), upload.single("fotoPerfil"), crearBarbero);
 
 // 🆔 DINÁMICAS AL FINAL
 router.get("/:id", validarToken, getUsuarioById);

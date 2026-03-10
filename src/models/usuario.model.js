@@ -7,6 +7,7 @@ const UsuarioSchema = new Schema(
       ref: "Empresa",
       required: true,
     },
+
     rut: { type: String, required: true },
     nombre: { type: String, required: true },
     apellido: { type: String },
@@ -29,6 +30,14 @@ const UsuarioSchema = new Schema(
       enum: ["gratis", "premium"],
       default: "gratis",
     },
+    perfilProfesional: {
+      aniosExperiencia: { type: Number, default: null },
+      especialidades: [{ type: String }],
+      fotoPerfil: {
+        url: { type: String, default: null },
+        publicId: { type: String, default: null },
+      },
+    },
     maxReservas: { type: Number, default: 2 },
     puntos: { type: Number, default: 0 },
     descripcion: { type: String },
@@ -40,6 +49,7 @@ const UsuarioSchema = new Schema(
     resetPasswordExpires: { type: Date, default: null },
     pendingPassword: { type: String, default: null },
   },
+
   { timestamps: true },
 );
 

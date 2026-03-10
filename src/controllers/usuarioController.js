@@ -3,6 +3,7 @@ import suscripcionModel from "../models/suscripcion.model.js";
 import usuarioModel from "../models/usuario.model.js";
 import Usuario from "../models/usuario.model.js";
 import bcrypt from "bcryptjs";
+import cloudinary from "../config/cloudinary.js";
 
 //obtener todos los usuarios
 export const getUsuarios = async (req, res) => {
@@ -257,7 +258,6 @@ export const getAllUsersWithSuscripcion = async (req, res) => {
     // 🔹 Filtrar usuarios por empresa y rol
     const usuarios = await Usuario.find({
       empresa: empresaId,
-      
     }).lean();
 
     const usuariosConSub = await Promise.all(
@@ -281,7 +281,6 @@ export const getAllUsersWithSuscripcion = async (req, res) => {
     res.status(500).json({ message: "Error cargando usuarios" });
   }
 };
-
 
 export const verMisPuntos = async (req, res) => {
   try {
@@ -315,29 +314,53 @@ export const crearBarbero = async (req, res) => {
       confirmaPassword,
     } = req.body;
 
-    if (!rut || !email || !password) {
+    const empresaId = req.usuario?.empresaId; // 👈 viene del token
+
+    if (!empresaId) {
+      return res
+        .status(400)
+        .json({ message: "No se pudo identificar la empresa" });
+    }
+
+    if (!rut || !email || !password)
       return res.status(400).json({ message: "Campos obligatorios faltantes" });
-    }
 
-    if (password !== confirmaPassword) {
+    if (password !== confirmaPassword)
       return res.status(400).json({ message: "Las contraseñas no coinciden" });
-    }
 
-    const existe = await Usuario.findOne({
-      $or: [{ rut }, { email }],
-    });
-
-    if (existe) {
+    const existe = await Usuario.findOne({ $or: [{ rut }, { email }] });
+    if (existe)
       return res
         .status(409)
         .json({ message: "Ya existe un usuario con ese rut o email" });
-    }
 
     const telefonoCompleto = telefono?.startsWith("569")
       ? telefono
       : `569${telefono}`;
-
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    // ✅ Subir foto a Cloudinary si viene en el request
+    let fotoPerfil = { url: null, publicId: null };
+    if (req.file) {
+      const resultado = await new Promise((resolve, reject) => {
+        cloudinary.uploader
+          .upload_stream(
+            {
+              folder: "profesionales",
+              transformation: [
+                { width: 500, height: 500, crop: "fill", gravity: "face" },
+              ],
+            },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            },
+          )
+          .end(req.file.buffer); // 👈 aquí usas el buffer
+      });
+
+      fotoPerfil = { url: resultado.secure_url, publicId: resultado.public_id };
+    }
 
     const nuevoBarbero = await Usuario.create({
       rut,
@@ -347,7 +370,9 @@ export const crearBarbero = async (req, res) => {
       telefono: telefonoCompleto,
       descripcion,
       rol: "barbero",
+      empresa: empresaId, // 👈 agrega esto
       password: hashedPassword,
+      perfilProfesional: { fotoPerfil },
     });
 
     res.status(201).json(nuevoBarbero);

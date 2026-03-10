@@ -1,4 +1,14 @@
 import dotenv from "dotenv";
-dotenv.config(); // <-- Esto también es útil aquí
+dotenv.config(); // 👈 agrega esto
+
+import { v2 as cloudinary } from "cloudinary";
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_NAME,
+  api_key: process.env.CLOUDINARY_KEY,
+  api_secret: process.env.CLOUDINARY_SECRET,
+});
+
+export default cloudinary;
 
 export const TOKEN_SECRET = process.env.TOKEN_SECRET;
