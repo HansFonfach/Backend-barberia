@@ -10,11 +10,12 @@ export const generarToken = (usuario) => {
       apellido: usuario.apellido,
       email: usuario.email,
       rol: usuario.rol,
+      esAdmin: usuario.esAdmin, // 👈 agrega esto
       suscrito: usuario.suscrito,
       telefono: usuario.telefono,
       empresaId: usuario.empresa, // ✅
     },
     TOKEN_SECRET,
-    { expiresIn: "1d" }, // configurable
+    { expiresIn: "12h" }, // configurable
   );
 };

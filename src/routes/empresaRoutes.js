@@ -21,7 +21,7 @@ router.post(
 );
 router.get("/slug/:slug", getEmpresaPorSlug);
 router.get("/:id", validarToken, getEmpresaPorId);
-router.patch("/actualizar", validarToken, actualizarEmpresa);
-router.put("/:empresaId/logo", actualizarLogoEmpresa);
+router.patch("/actualizar", validarToken, verificarRol("esAdmin"),  actualizarEmpresa);
+router.put("/:empresaId/logo", verificarRol("esAdmin"), actualizarLogoEmpresa);
 
 export default router;

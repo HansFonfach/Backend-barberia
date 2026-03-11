@@ -11,9 +11,9 @@ import { validarToken } from "../middlewares/validarToken.js";
 const router = Router();
 
 router.get("/listarCanjes", validarToken, getAllCanje);
-router.post("/crearCanje", validarToken, createCanje);
-router.put("/actualizarCanje/:id", validarToken, updateCanje);
-router.put("/eliminarCanje/:id", validarToken, deleteCanje);
+router.post("/crearCanje", validarToken, verificarRol("esAdmin"),  createCanje);
+router.put("/actualizarCanje/:id", validarToken, verificarRol("esAdmin"),  updateCanje);
+router.put("/eliminarCanje/:id", validarToken, verificarRol("esAdmin"), deleteCanje);
 router.post("/canjear/:idCanje", validarToken, canjear);
 
 export default router;

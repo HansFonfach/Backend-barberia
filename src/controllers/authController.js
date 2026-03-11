@@ -288,8 +288,6 @@ export const resetPassword = async (req, res) => {
       resetPasswordExpires: { $gt: Date.now() },
     });
 
-
-
     if (!usuario)
       return res.status(400).json({
         message: "Token inválido o expirado",
@@ -348,7 +346,7 @@ export const me = async (req, res) => {
   try {
     // 1️⃣ Usuario
     const usuario = await Usuario.findById(req.usuario.id).select(
-      "rut nombre apellido email telefono rol suscrito empresa",
+      "rut nombre apellido email telefono rol esAdmin suscrito empresa",
     );
 
     if (!usuario) {
@@ -377,6 +375,7 @@ export const me = async (req, res) => {
       email: usuario.email,
       telefono: usuario.telefono,
       rol: usuario.rol,
+      esAdmin: usuario.esAdmin,
       suscrito: usuario.suscrito,
 
       // ✅ FECHAS VIENEN DE SUSCRIPCIÓN

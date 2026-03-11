@@ -11,11 +11,10 @@ import { validarToken } from "../middlewares/validarToken.js";
 const router = Router();
 
 // Rutas RESTful
-router.get("/", validarToken,   getServicios); // Listar todos
-router.post("/", validarToken, createServicio); // Crear nuevo
-router.put("/:id", validarToken, updateServicio);
-router.delete("/:id", validarToken, deleteServicio);
-router.get("/:slug/serviciosPublicos", getServiciosPublicos)
-
+router.get("/", validarToken, getServicios); // Listar todos
+router.post("/", validarToken, verificarRol("esAdmin"), createServicio); // Crear nuevo
+router.put("/:id", validarToken, verificarRol("esAdmin"),  updateServicio);
+router.delete("/:id", validarToken,verificarRol("esAdmin"),   deleteServicio);
+router.get("/:slug/serviciosPublicos", getServiciosPublicos);
 
 export default router;

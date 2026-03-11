@@ -25,6 +25,7 @@ const UsuarioSchema = new Schema(
       enum: ["cliente", "barbero", "admin", "invitado"],
       default: "cliente",
     },
+    esAdmin: { type: Boolean, default: false }, 
     plan: {
       type: String,
       enum: ["gratis", "premium"],
