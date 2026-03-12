@@ -13,7 +13,7 @@ import webhookRoutes from "./routes/webhooksRoutes.js";
 import cookieParser from "cookie-parser";
 import testRoutes from "./routes/testRoutes.js";
 import feriadoRoutes from "./routes/feriadoRoutes.js";
-import RecordatoriosJob from "./jobs/recordatoriosJob.js";
+
 import notificacionRoutes from "./routes/notificacionRoutes.js";
 import pagosRoutes from "./routes/pagoRoutes.js";
 import canjeRoutes from "./routes/canjeRoutes.js";
@@ -53,7 +53,6 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-RecordatoriosJob.init();
 
 // Rutas
 app.get("/", (req, res) => {
