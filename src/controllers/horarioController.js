@@ -148,14 +148,53 @@ export const getHorasDisponibles = async (req, res) => {
     const duracionServicio = Number(barberoServicio.duracion);
 
     /* ================= FERIADOS ================= */
+    /* ================= FERIADOS ================= */
     const feriado = await verificarFeriadoConComportamiento(fecha);
 
-    if (feriado?.comportamiento === "cerrado") {
+    if (feriado?.comportamiento === "bloquear_todo") {
+      // Revisar si el barbero habilitó horas extra para este feriado
+      const fechaConsultaInicio = fechaConsulta
+        .startOf("day")
+        .subtract(4, "hour")
+        .utc()
+        .toDate();
+      const fechaConsultaFin = fechaConsulta
+        .endOf("day")
+        .add(4, "hour")
+        .utc()
+        .toDate();
+
+      const excepcionesFeriado = await ExcepcionHorarioModel.find({
+        barbero: barberoId,
+        fecha: { $gte: fechaConsultaInicio, $lt: fechaConsultaFin },
+        tipo: "extra",
+      });
+
+      if (excepcionesFeriado.length === 0) {
+        // No hay horas habilitadas, bloquear todo
+        return res.json({
+          fecha,
+          horas: [],
+          esFeriado: true,
+          nombreFeriado: feriado.nombre,
+          mensaje: `Feriado: ${feriado.nombre}. No se trabaja este día.`,
+        });
+      }
+
+      // Hay horas extra habilitadas, mostrar solo esas
+      const horasHabilitadas = excepcionesFeriado.map((e) => e.horaInicio);
+
+      const horas = horasHabilitadas.sort().map((hora) => ({
+        hora,
+        estado: "disponible",
+      }));
+
       return res.json({
         fecha,
-        horas: [],
+        horas,
         esFeriado: true,
         nombreFeriado: feriado.nombre,
+        mensaje: `Feriado: ${feriado.nombre}. Horas habilitadas por el barbero.`,
       });
     }
 
@@ -246,14 +285,38 @@ export const getHorasDisponibles = async (req, res) => {
       dayjs(r.fecha).tz("America/Santiago").format("HH:mm"),
     );
 
+    const vacacion = await ExcepcionHorarioModel.findOne({
+      barbero: barberoId,
+      tipo: "vacaciones",
+      fechaInicio: { $lte: fechaConsulta.endOf("day").utc().toDate() },
+      fechaFin: { $gte: fechaConsulta.startOf("day").utc().toDate() },
+    });
+
+    if (vacacion) {
+      return res.json({
+        fecha,
+        horas: [],
+        bloqueado: true,
+        motivo: vacacion.motivo || "Vacaciones",
+      });
+    }
+
     /* ================= EXCEPCIONES ================= */
     const excepciones = await ExcepcionHorarioModel.find({
       barbero: barberoId,
-      fecha: {
-        $gte: inicioBusqueda,
-        $lt: finBusqueda,
-      },
+      fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
     });
+
+    // ← NUEVO: si hay bloqueo de día completo, retornar vacío
+    const bloqueoDia = excepciones.find((e) => e.tipo === "bloqueo_dia");
+    if (bloqueoDia) {
+      return res.json({
+        fecha,
+        horas: [],
+        bloqueado: true,
+        motivo: bloqueoDia.motivo || "Día bloqueado",
+      });
+    }
 
     const horasBloqueadas = excepciones
       .filter((e) => e.tipo === "bloqueo")

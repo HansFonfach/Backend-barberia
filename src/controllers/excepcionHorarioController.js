@@ -172,3 +172,128 @@ export const obtenerExcepcionesPorDia = async (req, res) => {
     res.status(500).json({ message: "Error al obtener excepciones", error });
   }
 };
+
+export const crearBloqueoVacaciones = async (req, res) => {
+  const { barbero, fechaInicio, fechaFin, motivo } = req.body;
+  console.log(fechaInicio, fechaFin);
+
+  if (!barbero || !fechaInicio || !fechaFin) {
+    return res.status(400).json({
+      message: "barbero, fechaInicio y fechaFin son requeridos",
+    });
+  }
+  console.log(fechaInicio, fechaFin);
+
+  try {
+    // Convertir fecha Chile → UTC
+    const inicio = dayjs
+      .tz(fechaInicio, "YYYY-MM-DD", "America/Santiago")
+      .startOf("day")
+      .utc()
+      .toDate();
+
+    const fin = dayjs
+      .tz(fechaFin, "YYYY-MM-DD", "America/Santiago")
+      .endOf("day")
+      .utc()
+      .toDate();
+
+    if (fin < inicio) {
+      return res.status(400).json({
+        message: "fechaFin debe ser posterior a fechaInicio",
+      });
+    }
+
+    // Evitar superposición de vacaciones
+    const existe = await excepcionHorario.findOne({
+      barbero,
+      tipo: "vacaciones",
+      fechaInicio: { $lte: fin },
+      fechaFin: { $gte: inicio },
+    });
+
+    if (existe) {
+      return res.status(409).json({
+        message: "Ya existe un rango de vacaciones que se superpone con este",
+      });
+    }
+
+    const nuevaVacacion = await excepcionHorario.create({
+      barbero,
+      tipo: "vacaciones",
+      fechaInicio: inicio,
+      fechaFin: fin,
+      motivo: motivo || "Vacaciones",
+    });
+
+    return res.status(201).json({
+      message: "Vacaciones registradas correctamente",
+      data: nuevaVacacion,
+    });
+  } catch (error) {
+    console.error("❌ Error al crear vacaciones:", error);
+
+    return res.status(500).json({
+      message: "Error interno al crear vacaciones",
+    });
+  }
+};
+
+export const eliminarBloqueoVacaciones = async (req, res) => {
+  const { id } = req.body;
+
+  if (!id) {
+    return res.status(400).json({
+      message: "El id es requerido",
+    });
+  }
+
+  try {
+    const eliminado = await excepcionHorario.findByIdAndDelete(id);
+
+    if (!eliminado) {
+      return res.status(404).json({
+        message: "Vacación no encontrada",
+      });
+    }
+
+    return res.json({
+      message: "Vacaciones eliminadas correctamente",
+    });
+  } catch (error) {
+    console.error("❌ Error al eliminar vacaciones:", error);
+
+    res.status(500).json({
+      message: "Error al eliminar vacaciones",
+    });
+  }
+};
+
+export const obtenerVacaciones = async (req, res) => {
+  const { barberoId } = req.params;
+
+  try {
+    const vacaciones = await excepcionHorario
+      .find({ barbero: barberoId, tipo: "vacaciones" })
+      .sort({ fechaInicio: 1 });
+
+    const rangos = vacaciones.map((v) => ({
+      _id: v._id,
+      motivo: v.motivo,
+
+      fechaInicio: dayjs(v.fechaInicio)
+        .tz("America/Santiago")
+        .format("YYYY-MM-DD"),
+
+      fechaFin: dayjs(v.fechaFin).tz("America/Santiago").format("YYYY-MM-DD"),
+    }));
+
+    return res.status(200).json({ rangos });
+  } catch (error) {
+    console.error("❌ Error en obtenerVacaciones:", error);
+
+    res.status(500).json({
+      message: "Error al obtener vacaciones",
+    });
+  }
+};

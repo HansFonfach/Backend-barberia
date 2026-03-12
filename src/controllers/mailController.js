@@ -141,16 +141,17 @@ export const sendGuestReservationEmail = async (to, data) => {
 };
 
 export const sendCancelReservationEmail = async (to, data) => {
-  const { nombreCliente, nombreBarbero, fecha, hora, servicio } = data;
+  const { nombreCliente, nombreBarbero, fecha, hora, servicio, motivo } = data;
   return await sendBaseEmail({
     to,
     subject: "Tu reserva ha sido cancelada – Agenda Fonfach",
     html: layout(`
       <h2 style="margin-top:0;">Reserva Cancelada</h2>
       <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido cancelada correctamente.</p>
+      ${motivo ? `<p><strong>Motivo:</strong> ${motivo}</p>` : ""}
       ${detalles({ nombreBarbero, servicio, fecha, hora })}
     `),
-    text: `Reserva cancelada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
+    text: `Reserva cancelada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${motivo ? `\nMotivo: ${motivo}` : ""}`,
   });
 };
 

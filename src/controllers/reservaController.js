@@ -569,13 +569,14 @@ export const postDeleteReserva = async (req, res) => {
       timeZone: "America/Santiago",
     });
 
-    const emailData = {
-      nombreCliente,
-      nombreBarbero: existeReserva.barbero?.nombre || "Tu barbero",
-      fecha: fechaFormateada,
-      hora: horaFormateada,
-      servicio: existeReserva.servicio?.nombre || "Servicio",
-    };
+  const emailData = {
+  nombreCliente,
+  nombreBarbero: existeReserva.barbero?.nombre || "Tu barbero",
+  fecha: fechaFormateada,
+  hora: horaFormateada,
+  servicio: existeReserva.servicio?.nombre || "Servicio",
+  motivo: existeReserva.motivoCancelacion, 
+};
 
     // 4️⃣ Email al cliente
     if (emailCliente) {

@@ -20,10 +20,10 @@ const FeriadoSchema = new mongoose.Schema(
     comportamiento: {
       type: String,
       enum: ["bloquear_todo", "permitir_excepciones"],
-      default: "permitir_excepciones", // ← IMPORTANTE: Por defecto permite excepciones
+      default: "bloquear_todo", // ← cambiar esto
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default mongoose.model("Feriado", FeriadoSchema);

@@ -10,71 +10,49 @@ dayjs.extend(tz);
 // Nueva función: verificar feriado con comportamiento - VERSIÓN CORREGIDA
 export const verificarFeriadoConComportamiento = async (fechaStr) => {
   try {
-    // Validar que la fechaStr no esté vacía
-    if (!fechaStr || typeof fechaStr !== 'string') {
-      console.error("Fecha no válida recibida:", fechaStr);
-      return null;
-    }
+    if (!fechaStr || typeof fechaStr !== "string") return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) return null;
 
-    // Validar formato básico YYYY-MM-DD
-    const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!fechaRegex.test(fechaStr)) {
-      console.error(`Formato de fecha inválido: ${fechaStr}. Se espera YYYY-MM-DD`);
-      return null;
-    }
+    // ✅ Buscar con timezone Chile para evitar desfase UTC
+    const inicioDia = dayjs
+      .tz(fechaStr, "YYYY-MM-DD", "America/Santiago")
+      .startOf("day")
+      .toDate();
+    const finDia = dayjs
+      .tz(fechaStr, "YYYY-MM-DD", "America/Santiago")
+      .endOf("day")
+      .toDate();
 
-    // Parsear con dayjs directamente
-    const fechaDayjs = dayjs(fechaStr, "YYYY-MM-DD");
-    
-    if (!fechaDayjs.isValid()) {
-      console.error(`Fecha inválida después de parsear: ${fechaStr}`);
-      return null;
-    }
-
-    // Crear fechas para consulta
-    const inicioDia = fechaDayjs.startOf("day").toDate();
-    const finDia = fechaDayjs.endOf("day").toDate();
-
-    // Buscar feriado
     const feriado = await Feriado.findOne({
-      fecha: {
-        $gte: inicioDia,
-        $lt: finDia,
-      },
+      fecha: { $gte: inicioDia, $lt: finDia },
       activo: true,
     });
 
     if (!feriado) return null;
 
-    // Retornar objeto formateado
     return {
       _id: feriado._id,
       nombre: feriado.nombre,
       fecha: feriado.fecha,
-      fechaFormateada: dayjs(feriado.fecha).format("YYYY-MM-DD"),
+      fechaFormateada: dayjs(feriado.fecha)
+        .tz("America/Santiago")
+        .format("YYYY-MM-DD"),
       comportamiento: feriado.comportamiento || "permitir_excepciones",
       activo: feriado.activo,
-      // Asegurar que existe el campo
-      __comportamiento: feriado.comportamiento || "permitir_excepciones",
     };
   } catch (error) {
     console.error("❌ Error en verificarFeriadoConComportamiento:", error);
-    console.error("Stack trace:", error.stack);
     return null;
   }
 };
 
 // OPCIONAL: Función de depuración para ver qué está pasando
 export const debugFeriadoConsulta = async (fechaStr) => {
- 
-  
   const fechaDayjs = dayjs(fechaStr, "YYYY-MM-DD");
- 
-  
+
   const inicioDia = fechaDayjs.startOf("day").toDate();
   const finDia = fechaDayjs.endOf("day").toDate();
- 
-  
+
   try {
     const feriado = await Feriado.findOne({
       fecha: {
@@ -83,8 +61,7 @@ export const debugFeriadoConsulta = async (fechaStr) => {
       },
       activo: true,
     });
-    
-   
+
     return feriado;
   } catch (error) {
     console.error("Error en consulta:", error);
@@ -96,7 +73,7 @@ export const debugFeriadoConsulta = async (fechaStr) => {
 export const bloquearFeriado = async (
   barbero,
   fechaConsulta,
-  horariosDisponibles
+  horariosDisponibles,
 ) => {
   const diaSemana = fechaConsulta.day();
   const fechaStr = fechaConsulta.format("YYYY-MM-DD");
@@ -115,7 +92,7 @@ export const bloquearFeriado = async (
 
   // Calcular horas del día normalmente
   const bloques = horariosDisponibles.filter(
-    (h) => Number(h.dia) === diaSemana
+    (h) => Number(h.dia) === diaSemana,
   );
 
   if (!bloques.length) return [];
@@ -142,7 +119,7 @@ export const bloquearFeriado = async (
 export const determinarVistaSegunFeriado = (
   feriado,
   usuario,
-  hayExcepcionesBarbero = false
+  hayExcepcionesBarbero = false,
 ) => {
   if (!feriado) return { mostrarHoras: true, mensaje: null, esFeriado: false };
 
@@ -189,7 +166,7 @@ export const determinarVistaSegunFeriado = (
 export const getHorasParaBarberoFeriado = (
   todasLasHoras,
   excepciones,
-  feriado
+  feriado,
 ) => {
   const horasExtra = excepciones
     .filter((e) => e.tipo === "extra")
@@ -200,7 +177,7 @@ export const getHorasParaBarberoFeriado = (
     .map((e) => e.horaInicio);
 
   const horasBloqueadasPorFeriado = todasLasHoras.filter(
-    (hora) => !horasDesbloqueadas.includes(hora)
+    (hora) => !horasDesbloqueadas.includes(hora),
   );
 
   const horasDisponibles = [...horasDesbloqueadas];

@@ -68,29 +68,24 @@ export const cambiarComportamientoFeriado = async (req, res) => {
 export const verificarFeriado = async (req, res) => {
   try {
     const { fecha } = req.query;
-    
-    if (!fecha) {
-      return res.status(400).json({ message: "Fecha requerida" });
-    }
+    if (!fecha) return res.status(400).json({ message: "Fecha requerida" });
 
-    const fechaDate = new Date(fecha);
+    const inicioDia = dayjs.tz(fecha, "YYYY-MM-DD", "America/Santiago").startOf("day").toDate();
+    const finDia = dayjs.tz(fecha, "YYYY-MM-DD", "America/Santiago").endOf("day").toDate();
+
     const feriado = await Feriado.findOne({
-      fecha: {
-        $gte: dayjs(fechaDate).startOf('day').toDate(),
-        $lt: dayjs(fechaDate).endOf('day').toDate()
-      },
+      fecha: { $gte: inicioDia, $lt: finDia },
       activo: true
     });
 
     res.json({
       esFeriado: !!feriado,
       nombre: feriado?.nombre || null,
-      comportamiento: feriado?.comportamiento || "permitir_excepciones",
+      comportamiento: feriado?.comportamiento || "bloquear_todo",
       activo: feriado?.activo || false,
       fecha: fecha
     });
   } catch (error) {
-    console.error("❌ Error al verificar feriado:", error);
     res.status(500).json({ message: "Error al verificar feriado" });
   }
 };
@@ -104,7 +99,7 @@ export const cargarFeriadosChile = async (req, res) => {
     let cargados = 0;
 
     for (const f of data) {
-      const fecha = new Date(f.date);
+      const fecha = new Date(`${f.date}T12:00:00.000Z`);
       const nombre = f.localName;
 
       const existe = await Feriado.findOne({ fecha });
@@ -119,7 +114,7 @@ export const cargarFeriadosChile = async (req, res) => {
         fecha,
         nombre,
         activo: true,
-        comportamiento: "permitir_excepciones" // Por defecto
+      
       });
 
       cargados++;
