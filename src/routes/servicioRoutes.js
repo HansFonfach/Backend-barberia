@@ -7,6 +7,7 @@ import {
   updateServicio,
 } from "../controllers/servicioController.js";
 import { validarToken } from "../middlewares/validarToken.js";
+import { verificarRol } from "../middlewares/verificarRol.js";
 
 const router = Router();
 

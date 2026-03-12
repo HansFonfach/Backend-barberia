@@ -12,7 +12,7 @@ import { validarTokenOpcional } from "../middlewares/validarTokenOpcional.js";
 
 const router = Router();
 
-router.post("/", validarToken, verificarRol("esAdmin"), createHorario);
+router.post("/", validarToken, createHorario);
 
 router.get("/barbero/:id/horas-disponibles", validarTokenOpcional, getHorasDisponibles);
 

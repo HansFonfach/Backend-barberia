@@ -7,6 +7,7 @@ import {
   updateCanje,
 } from "../controllers/canjeController.js";
 import { validarToken } from "../middlewares/validarToken.js";
+import { verificarRol } from "../middlewares/verificarRol.js";
 
 const router = Router();
 

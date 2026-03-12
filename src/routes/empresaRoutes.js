@@ -8,6 +8,7 @@ import {
 } from "../controllers/empresaController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 import { upload } from "../middlewares/upload.js";
+import { verificarRol } from "../middlewares/verificarRol.js";
 
 const router = Router();
 
