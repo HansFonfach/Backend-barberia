@@ -9,13 +9,13 @@ export const detectarRecordatorios = async () => {
       promedioDias: { $gt: 0 },
     })
     .populate({ path: "servicio", match: { recordatorioActivo: true } })
-    .populate("cliente");
-
+    .populate("cliente")
+    .populate("empresa"); 
   const clientesRecordar = [];
 
   for (const s of stats) {
     if (!s.servicio) {
-      console.log(`⚠️ Servicio inactivo o sin recordatorio: ${s._id}`); // 👈
+      console.log(`⚠️ Servicio inactivo o sin recordatorio: ${s._id}`); 
       continue;
     }
 

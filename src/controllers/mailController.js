@@ -77,7 +77,7 @@ const detalles = ({
 
 export const sendReservationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora, servicio, instrucciones } =
-    data; // 👈
+    data; 
   return await sendBaseEmail({
     to,
     subject: "Reserva confirmada – Agenda Fonfach",
@@ -220,7 +220,7 @@ export const sendReminderEmail = async (to, data) => {
     hora,
     tipo,
     instrucciones,
-  } = data; // 👈 agrega instrucciones
+  } = data; 
 
   const es24h = tipo === "24h";
 
@@ -280,5 +280,22 @@ export const sendProfesionalCancelReservationEmail = async (to, data) => {
       ${detalles({ nombreBarbero: nombreCliente, servicio, fecha, hora, labelProfesional: "Cliente" })}
     `),
     text: `Reserva cancelada\n\nHola ${nombreBarbero}\n\nCliente: ${nombreCliente}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
+  });
+};
+
+export const sendRetentionEmail = async (to, data) => {
+  const { titulo, cuerpo, nombreEmpresa } = data;
+
+  return await sendBaseEmail({
+    to,
+    subject: `${titulo} – ${nombreEmpresa || "Agenda Fonfach"}`,
+    html: layout(`
+      <h2 style="margin-top:0;">${titulo}</h2>
+      <p style="color:#555;font-size:15px;line-height:1.7;">${cuerpo}</p>
+      <p style="color:#aaa;font-size:12px;margin-top:32px;">
+        Este recordatorio fue enviado por <strong>${nombreEmpresa || "Agenda Fonfach"}</strong>.
+      </p>
+    `),
+    text: `${titulo}\n\n${cuerpo.replace(/<[^>]*>/g, "")}`,
   });
 };
