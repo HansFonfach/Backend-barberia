@@ -2,7 +2,7 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const sendBaseEmail = async ({ to, subject, html, text }) => {
+export const sendBaseEmail = async ({ to, subject, html, text }) => {
   return await resend.emails.send({
     from: "Agenda Fonfach <no-reply@agendafonfach.cl>",
     to,

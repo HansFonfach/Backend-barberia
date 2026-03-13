@@ -22,6 +22,7 @@ import timezone from "dayjs/plugin/timezone.js";
 import isSameOrBefore from "dayjs/plugin/isSameOrBefore.js";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter.js";
 import notificacionModel from "../models/notificacion.Model.js";
+import { actualizarClienteServicioStats } from "../helpers/actualizarClienteServicioStats.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -392,6 +393,13 @@ export const createReserva = async (req, res) => {
       abono: abonoData, // 👈
     });
 
+    await actualizarClienteServicioStats({
+      clienteId: reserva.cliente,
+      servicioId: reserva.servicio,
+      empresaId: reserva.empresa,
+      fechaReserva: reserva.fecha,
+    });
+
     /* =============================
        TOKEN INVITADO
     ============================== */
@@ -569,14 +577,14 @@ export const postDeleteReserva = async (req, res) => {
       timeZone: "America/Santiago",
     });
 
-  const emailData = {
-  nombreCliente,
-  nombreBarbero: existeReserva.barbero?.nombre || "Tu barbero",
-  fecha: fechaFormateada,
-  hora: horaFormateada,
-  servicio: existeReserva.servicio?.nombre || "Servicio",
-  motivo: existeReserva.motivoCancelacion, 
-};
+    const emailData = {
+      nombreCliente,
+      nombreBarbero: existeReserva.barbero?.nombre || "Tu barbero",
+      fecha: fechaFormateada,
+      hora: horaFormateada,
+      servicio: existeReserva.servicio?.nombre || "Servicio",
+      motivo: existeReserva.motivoCancelacion,
+    };
 
     // 4️⃣ Email al cliente
     if (emailCliente) {
