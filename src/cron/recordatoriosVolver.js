@@ -10,6 +10,9 @@ import ClienteServicioStats from "../models/clienteServicioStats.model.js";
 
 // Lógica central reutilizable
 const procesarRecordatorios = async () => {
+  console.log("🔍 Buscando clientes...");
+  
+  console.log(`📊 Clientes encontrados: ${clientes.length}`); // ← agrega esto
   const clientes = await detectarRecordatorios();
   let enviados = 0,
     errores = 0;
