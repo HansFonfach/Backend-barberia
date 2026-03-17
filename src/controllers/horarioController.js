@@ -478,8 +478,10 @@ export const getHorasDisponibles = async (req, res) => {
         "America/Santiago",
       );
 
+      const esPrivilegiado = rolUsuario === "barbero" || rolUsuario === "admin";
+
       if (
-        rolUsuario !== "barbero" &&
+        !esPrivilegiado &&
         fechaConsulta.isSame(ahora, "day") &&
         inicio.isBefore(ahora)
       )
