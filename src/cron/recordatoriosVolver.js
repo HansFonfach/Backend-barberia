@@ -24,17 +24,25 @@ const procesarRecordatorios = async () => {
         c.empresa,
       );
 
+      console.log(
+        `📨 Enviando recordatorio a: ${c.cliente?.nombre} (${c.cliente?.email})`,
+      );
+
       await sendRetentionEmail(c.cliente.email, {
         ...mensaje,
         nombreEmpresa: c.empresa?.nombre,
       });
+
+      console.log(
+        `✅ Enviado a: ${c.cliente?.email} | Servicio: ${c.servicio?.nombre}`,
+      );
 
       c.ultimaNotificacion = new Date();
       await c.save();
       enviados++;
     } catch (err) {
       errores++;
-      console.error(`Error enviando a ${c.cliente?.email}:`, err.message);
+      console.error(`❌ Error enviando a ${c.cliente?.email}:`, err.message);
     }
   }
 
@@ -45,15 +53,16 @@ const init = () => {
   cron.schedule(
     "* * * * *",
     async () => {
-      console.log("Buscando clientes para recordar...");
-      const result = await procesarRecordatorios();
-      console.log(
-        `Recordatorios: ${result.enviados} enviados, ${result.errores} errores`,
-      );
+      console.log("🔔 CRON TICK");
+      // ...
     },
-    {
-      timezone: "America/Santiago",
-    },
+    { timezone: "America/Santiago" },
+  );
+
+  // Disparo inmediato para verificar que funciona
+  console.log("🚀 Ejecutando primer ciclo al arrancar...");
+  procesarRecordatorios().then((r) =>
+    console.log(`Primer ciclo: ${r.enviados} enviados, ${r.errores} errores`),
   );
 };
 

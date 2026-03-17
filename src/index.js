@@ -6,6 +6,7 @@ import { connectDB } from "./database/db.js";
 import { iniciarCronSuscripciones } from "./cron/suscripcionesCron.js";
 import { iniciarJobReservas } from "./jobs/reservasEstado.js";
 import recordatoriosJob from "./jobs/recordatoriosJob.js";
+import recordatoriosVolver from "./cron/recordatoriosVolver.js";
 
 // Obtener el directorio actual
 const __filename = fileURLToPath(import.meta.url);
@@ -18,7 +19,6 @@ const envPath = path.resolve(__dirname, "..", ".env");
 dotenv.config({ path: envPath });
 
 const PORT = process.env.PORT || 4000;
-
 const startServer = async () => {
   await connectDB();
 
@@ -26,6 +26,7 @@ const startServer = async () => {
   iniciarCronSuscripciones();
   iniciarJobReservas();
   recordatoriosJob.init();
+  recordatoriosVolver.init(); // ← FALTA ESTA LÍNEA
 
   app.listen(PORT, "0.0.0.0", () => {});
 };
