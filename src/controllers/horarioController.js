@@ -126,13 +126,6 @@ export const getHorasDisponibles = async (req, res) => {
     const ahora = dayjs().tz("America/Santiago");
     const fechaConsulta = dayjs.tz(fecha, "YYYY-MM-DD", "America/Santiago");
 
-    // ✅ LOGS AQUÍ, después de declarar las variables
-    console.log("🕐 UTC servidor:", new Date().toISOString());
-    console.log("🇨🇱 ahora Chile:", ahora.format("YYYY-MM-DD HH:mm"));
-    console.log("📅 fechaConsulta:", fechaConsulta.format("YYYY-MM-DD"));
-    console.log("¿mismo día?:", fechaConsulta.isSame(ahora, "day"));
-
-    
     if (!fechaConsulta.isValid()) {
       return res.status(400).json({ message: "Fecha inválida" });
     }
