@@ -13,7 +13,7 @@ const procesarRecordatorios = async () => {
   console.log("🔍 Buscando clientes...");
   const clientes = await detectarRecordatorios();
   console.log(`📊 Clientes encontrados: ${clientes.length}`); // ← agrega esto
-  
+
   let enviados = 0,
     errores = 0;
 
@@ -54,10 +54,13 @@ const procesarRecordatorios = async () => {
 
 const init = () => {
   cron.schedule(
-    "* * * * *",
+    "0 8 * * *", // minuto 0, hora 8, todos los días
     async () => {
-      console.log("🔔 CRON TICK");
-      // ...
+      console.log("🔔 CRON TICK - Recordatorios diarios 8AM");
+      const result = await procesarRecordatorios();
+      console.log(
+        `Recordatorios: ${result.enviados} enviados, ${result.errores} errores`,
+      );
     },
     { timezone: "America/Santiago" },
   );
