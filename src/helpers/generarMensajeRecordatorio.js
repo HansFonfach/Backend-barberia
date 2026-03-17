@@ -1,28 +1,32 @@
 export const generarMensajeRecordatorio = (cliente, servicio, tipoCliente, empresa) => {
   const nombreEmpresa = empresa?.nombre || "nosotros";
+  const nombre = cliente.nombre.split(" ")[0]; // Solo el primer nombre, más cercano
 
   if (tipoCliente === "nuevo") {
     return {
-      titulo: "¿Listo para tu próxima visita?",
-      cuerpo: `Hola <strong>${cliente.nombre}</strong> 👋<br><br>
-        Notamos que ha pasado un tiempo desde tu último <strong>${servicio.nombre}</strong> con <strong>${nombreEmpresa}</strong>.<br>
-        Cuando quieras, estaremos listos para atenderte nuevamente. ✨`
+      titulo: "¿Cómo va el corte? 👀",
+      cuerpo: `Hola <strong>${nombre}</strong>,<br><br>
+        Ya debe estar empezando a crecer un poco tu <strong>${servicio.nombre}</strong> 😄<br>
+        En <strong>${nombreEmpresa}</strong> tenemos tu hora esperando. ¿La agendamos?`
     };
   }
 
   if (tipoCliente === "medio") {
     return {
-      titulo: "Te echamos de menos",
-      cuerpo: `Hola <strong>${cliente.nombre}</strong> 👋<br><br>
-        Hace un tiempo que no nos visitas para tu <strong>${servicio.nombre}</strong> en <strong>${nombreEmpresa}</strong>.<br>
-        Reserva cuando quieras, te esperamos con gusto. 😊`
+      titulo: "Tu corte está perdiendo forma ✂️",
+      cuerpo: `Hola <strong>${nombre}</strong>,<br><br>
+        Hace un tiempo que no pasas por <strong>${nombreEmpresa}</strong> y tu <strong>${servicio.nombre}</strong> 
+        ya lo debe estar notando 👀<br><br>
+        Agéndate antes de que el pelo mande. 😄`
     };
   }
 
+  // fiel / recurrente
   return {
-    titulo: "Ya es momento de tu próxima visita",
-    cuerpo: `Hola <strong>${cliente.nombre}</strong>,<br><br>
-      Según tu historial en <strong>${nombreEmpresa}</strong>, ya es un buen momento para agendar tu <strong>${servicio.nombre}</strong>.<br>
-      Reserva tu hora cuando quieras. 🗓️`
+    titulo: "Ya es hora, ${nombre} ✂️",
+    cuerpo: `Hola <strong>${nombre}</strong>,<br><br>
+      Conocemos tu ritmo y sabemos que ya es momento del <strong>${servicio.nombre}</strong> en 
+      <strong>${nombreEmpresa}</strong>.<br><br>
+      Reserva tu hora y llega como siempre: puntual y con estilo. 💈`
   };
 };
