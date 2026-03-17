@@ -30,7 +30,7 @@ router.post("/barbero/crearBarbero", validarToken, verificarRol("esAdmin"), uplo
 
 // 🆔 DINÁMICAS AL FINAL
 router.get("/:id", validarToken, getUsuarioById);
-router.put("/:id", validarToken, verificarRol("esAdmin"),  updateUsuario);
+router.put("/:id", validarToken, verificarRol("esAdmin"), upload.single("fotoPerfil"), updateUsuario);
 router.patch("/:id/estado", validarToken, verificarRol("esAdmin"),  cambiarEstadoUsuario);
 
 export default router;

@@ -5,6 +5,7 @@ import Usuario from "../models/usuario.model.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../config/cloudinary.js";
 
+
 //obtener todos los usuarios
 export const getUsuarios = async (req, res) => {
   try {
@@ -176,10 +177,16 @@ export const updatePerfil = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+
 export const updateUsuario = async (req, res) => {
   try {
     const { id } = req.params;
-    const { email, telefono, suscrito, rol, nombre, apellido } = req.body || {};
+    const {
+      email, telefono, suscrito, rol,
+      nombre, apellido, descripcion,
+      aniosExperiencia,
+    } = req.body || {};
 
     const data = {};
     if (nombre !== undefined) data.nombre = nombre;
@@ -188,22 +195,37 @@ export const updateUsuario = async (req, res) => {
     if (telefono !== undefined) data.telefono = telefono;
     if (suscrito !== undefined) data.suscrito = suscrito;
     if (rol !== undefined) data.rol = rol;
+    if (descripcion !== undefined) data.descripcion = descripcion;
 
-    if (Object.keys(data).length === 0) {
-      return res
-        .status(400)
-        .json({ message: "No hay datos válidos para actualizar." });
+    // Campos anidados de perfilProfesional
+    if (aniosExperiencia !== undefined)
+      data["perfilProfesional.aniosExperiencia"] = aniosExperiencia;
+
+    // Especialidades — vienen como especialidades[] en FormData
+    const especialidades = req.body["especialidades[]"];
+    if (especialidades !== undefined) {
+      data["perfilProfesional.especialidades"] = Array.isArray(especialidades)
+        ? especialidades
+        : [especialidades]; // si viene uno solo, multer lo da como string
     }
 
-    const emailExiste = await Usuario.findOne({
-      email: email,
-      _id: { $ne: id }, // Busca emails iguales pero que NO sean del usuario actual
-    });
+    // Foto — solo si se subió archivo
+    if (req.file) {
+      const resultado = await cloudinary(req.file);
+      data["perfilProfesional.fotoPerfil.url"] = resultado.secure_url;
+      data["perfilProfesional.fotoPerfil.publicId"] = resultado.public_id;
+    }
 
-    if (emailExiste) {
-      return res.status(400).json({
-        message: `El email ${email} ya se encuentra registrado en nuestra base de datos.`,
-      });
+    if (Object.keys(data).length === 0)
+      return res.status(400).json({ message: "No hay datos válidos para actualizar." });
+
+    // Validar email duplicado solo si se está cambiando
+    if (email) {
+      const emailExiste = await Usuario.findOne({ email, _id: { $ne: id } });
+      if (emailExiste)
+        return res.status(400).json({
+          message: `El email ${email} ya se encuentra registrado.`,
+        });
     }
 
     const usuarioActualizado = await Usuario.findByIdAndUpdate(id, data, {
@@ -211,13 +233,12 @@ export const updateUsuario = async (req, res) => {
       runValidators: true,
     });
 
-    if (!usuarioActualizado) {
+    if (!usuarioActualizado)
       return res.status(404).json({ message: "No se encontró al usuario" });
-    }
 
     res.json({
       message: "Usuario actualizado correctamente",
-      usuario: data, // solo devolvemos los campos cambiados
+      usuario: usuarioActualizado,
     });
   } catch (error) {
     console.error("Error al actualizar usuario:", error);

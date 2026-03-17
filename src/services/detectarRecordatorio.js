@@ -3,19 +3,26 @@ import clienteServicioStatsModel from "../models/clienteServicioStats.model.js";
 export const detectarRecordatorios = async () => {
   const hoy = new Date();
 
-  const stats = await clienteServicioStatsModel
-    .find({
-      ultimaReserva: { $ne: null },
-      promedioDias: { $gt: 0 },
-    })
+  const stats = await clienteServicioStatsModel.find({
+    ultimaReserva: { $ne: null },
+    promedioDias: { $gt: 0 },
+  })
     .populate({ path: "servicio", match: { recordatorioActivo: true } })
     .populate("cliente")
-    .populate("empresa"); 
+    .populate({
+      path: "empresa",
+      match: { recordatoriosRetencionActivo: true }, // 👈 solo empresas con toggle activo
+    });
   const clientesRecordar = [];
 
   for (const s of stats) {
     if (!s.servicio) {
-      console.log(`⚠️ Servicio inactivo o sin recordatorio: ${s._id}`); 
+      console.log(`⚠️ Servicio inactivo o sin recordatorio: ${s._id}`);
+      continue;
+    }
+
+    if (!s.empresa) {
+      console.log(`⚠️ Empresa sin retención activa: ${s._id}`);
       continue;
     }
 

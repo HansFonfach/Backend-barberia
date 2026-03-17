@@ -14,9 +14,13 @@ export const ingresarEmpresa = async (req, res) => {
       profesional,
       redes,
       horarios,
+      mensajeBienvenida,
+      anticipacionMinima,
+      anticipacionMaxima,
     } = req.body;
 
     const empresaExiste = await empresaModel.findOne({ rutEmpresa });
+
     if (empresaExiste) {
       return res.status(400).json({
         message: "La empresa ya se encuentra registrada",
@@ -27,21 +31,15 @@ export const ingresarEmpresa = async (req, res) => {
     let bannerUrl = "";
 
     if (req.files?.logo) {
-      const result = await cloudinary.uploader.upload_stream({
-        resource_type: "image",
-      });
-    }
-
-    if (req.files?.logo) {
       const uploadedLogo = await cloudinary.uploader.upload(
-        req.files.logo[0].path,
+        req.files.logo[0].path
       );
       logoUrl = uploadedLogo.secure_url;
     }
 
     if (req.files?.banner) {
       const uploadedBanner = await cloudinary.uploader.upload(
-        req.files.banner[0].path,
+        req.files.banner[0].path
       );
       bannerUrl = uploadedBanner.secure_url;
     }
@@ -60,13 +58,21 @@ export const ingresarEmpresa = async (req, res) => {
       profesional,
       redes,
       horarios,
+      mensajeBienvenida,
+      anticipacionMinima,
+      anticipacionMaxima,
     });
 
     await nuevaEmpresa.save();
 
-    res.status(200).json({ nuevaEmpresa });
+    res.status(201).json({
+      message: "Empresa creada correctamente",
+      empresa: nuevaEmpresa,
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      message: error.message,
+    });
   }
 };
 

@@ -117,6 +117,11 @@ const EmpresaSchema = new mongoose.Schema({
     horasLimite: { type: Number, default: 24 }, // hasta X horas antes puede cancelar
     mensajePolitica: { type: String, default: "" },
   },
+
+  recordatoriosRetencionActivo: {
+    type: Boolean,
+    default: false, // opt-in, no opt-out
+  },
 });
 
 export default mongoose.model("Empresa", EmpresaSchema);
