@@ -43,7 +43,7 @@ const procesarRecordatorios = async () => {
 
 const init = () => {
   cron.schedule(
-    "0 10 * * *",
+    "* * * * *",
     async () => {
       console.log("Buscando clientes para recordar...");
       const result = await procesarRecordatorios();
