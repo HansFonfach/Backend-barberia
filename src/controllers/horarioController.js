@@ -122,6 +122,16 @@ export const getHorasDisponibles = async (req, res) => {
     if (!fecha || !servicioId) {
       return res.status(400).json({ message: "Fecha y servicio requeridos" });
     }
+    console.log("🕐 UTC servidor:", new Date().toISOString());
+    console.log(
+      "🇨🇱 ahora Chile:",
+      dayjs().tz("America/Santiago").format("YYYY-MM-DD HH:mm"),
+    );
+    console.log("📅 fechaConsulta:", fechaConsulta.format("YYYY-MM-DD"));
+    console.log(
+      "¿mismo día?:",
+      fechaConsulta.isSame(dayjs().tz("America/Santiago"), "day"),
+    );
 
     const ahora = dayjs().tz("America/Santiago");
     const fechaConsulta = dayjs.tz(fecha, "YYYY-MM-DD", "America/Santiago");
