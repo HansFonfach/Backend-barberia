@@ -4,6 +4,7 @@ import {
   actualizarLogoEmpresa,
   getEmpresaPorId,
   getEmpresaPorSlug,
+  getEmpresasPublicas,
   ingresarEmpresa,
 } from "../controllers/empresaController.js";
 import { validarToken } from "../middlewares/validarToken.js";
@@ -21,8 +22,10 @@ router.post(
   ingresarEmpresa,
 );
 router.get("/slug/:slug", getEmpresaPorSlug);
+router.get("/publicas", getEmpresasPublicas); // sin middleware de auth
 router.get("/:id", validarToken, getEmpresaPorId);
 router.patch("/actualizar", validarToken, verificarRol("esAdmin"),  actualizarEmpresa);
 router.put("/:empresaId/logo", verificarRol("esAdmin"), actualizarLogoEmpresa);
+
 
 export default router;

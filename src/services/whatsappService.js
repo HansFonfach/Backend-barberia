@@ -23,18 +23,19 @@ class WhatsAppService {
      Convierte "912345678" → "56912345678"
   ============================== */
   formatearTelefono(telefono) {
-    // Limpiar todo lo que no sea número
     let clean = telefono.replace(/\D/g, "");
 
-    // Si empieza con 56 ya está bien
+    // Si ya tiene código de país
     if (clean.startsWith("56")) return clean;
 
-    // Si empieza con 9 (Chile) agregar 56
-    if (clean.startsWith("9")) return `56${clean}`;
+    // Número chileno completo (9 dígitos): 9XXXXXXXX
+    if (clean.startsWith("9") && clean.length === 9) return `56${clean}`;
+
+    // Número corto (8 dígitos): le falta el 9 inicial
+    if (clean.length === 8) return `569${clean}`;
 
     return clean;
   }
-
   /* =============================
      ENVIAR RECORDATORIO
   ============================== */

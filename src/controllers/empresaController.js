@@ -32,14 +32,14 @@ export const ingresarEmpresa = async (req, res) => {
 
     if (req.files?.logo) {
       const uploadedLogo = await cloudinary.uploader.upload(
-        req.files.logo[0].path
+        req.files.logo[0].path,
       );
       logoUrl = uploadedLogo.secure_url;
     }
 
     if (req.files?.banner) {
       const uploadedBanner = await cloudinary.uploader.upload(
-        req.files.banner[0].path
+        req.files.banner[0].path,
       );
       bannerUrl = uploadedBanner.secure_url;
     }
@@ -171,5 +171,18 @@ export const actualizarEmpresa = async (req, res) => {
   } catch (error) {
     console.error("❌ Error actualizarEmpresa:", error);
     res.status(500).json({ message: error.message });
+  }
+};
+
+export const getEmpresasPublicas = async (req, res) => {
+  try {
+    const empresas = await empresaModel
+      .find()
+      .select("nombre slug tipo descripcion direccion horarios logo colores");
+      
+    res.json(empresas);
+  } catch (error) {
+    console.error("Error en getEmpresasPublicas:", error);
+    res.status(500).json({ message: "Error del servidor", error });
   }
 };
