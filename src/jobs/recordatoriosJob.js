@@ -42,7 +42,7 @@ class RecordatoriosJob {
         nombreCliente: cliente.nombre,
         nombreBarbero:
           `${reserva.barbero?.nombre} ${reserva.barbero?.apellido || ""}`.trim(),
-        nombreEmpresa: reserva.empresa?.nombre || "La Barbería", // 👈
+        nombreEmpresa: reserva.empresa?.nombre || "La Barbería",
         servicio: reserva.servicio?.nombre || "Servicio",
         fecha: fechaChile.format("DD/MM/YYYY"),
         hora: fechaChile.format("HH:mm"),
@@ -51,16 +51,22 @@ class RecordatoriosJob {
   }
 
   /* =============================
-     ENVIAR POR EMAIL + WHATSAPP
+     ENVIAR POR EMAIL + WHATSAPP (controlado)
   ============================== */
-  async enviarPorTodosLosCanales(cliente, datos, tipo, reserva) {
-    // 👈 agrega reserva
+  async enviarPorTodosLosCanales(
+    cliente,
+    datos,
+    tipo,
+    reserva,
+    enviarWhatsApp = true,
+  ) {
+    // 📧 Email
     if (cliente.email) {
       try {
         const resEmail = await sendReminderEmail(cliente.email, {
           ...datos,
           tipo,
-          instrucciones: reserva.servicio?.instrucciones ?? null, // 👈
+          instrucciones: reserva.servicio?.instrucciones ?? null,
         });
         console.log("📧 Respuesta Resend:", resEmail);
       } catch (err) {
@@ -68,8 +74,8 @@ class RecordatoriosJob {
       }
     }
 
-    // ✅ WhatsApp
-    if (cliente.telefono) {
+    // 💬 WhatsApp (solo si está habilitado)
+    if (enviarWhatsApp && cliente.telefono) {
       await WhatsAppService.enviarRecordatorio({
         ...datos,
         telefono: cliente.telefono,
@@ -80,7 +86,7 @@ class RecordatoriosJob {
   }
 
   /* =============================
-     RECORDATORIO 24 HORAS ANTES
+     RECORDATORIO 24 HORAS ANTES (SIN WHATSAPP)
   ============================== */
   async enviarRecordatorios24h() {
     try {
@@ -93,9 +99,9 @@ class RecordatoriosJob {
         estado: { $in: ["pendiente", "confirmada"] },
         recordatorioEnviado: { $ne: true },
       })
-        .populate("servicio", "nombre instrucciones") //
+        .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre"); // 👈 agrega esto
+        .populate("empresa", "nombre");
 
       console.log(
         `📋 Recordatorios 24h: ${reservas.length} reservas encontradas`,
@@ -108,7 +114,14 @@ class RecordatoriosJob {
 
           const { cliente, datos } = resultado;
 
-          await this.enviarPorTodosLosCanales(cliente, datos, "24h", reserva); // 👈
+          // ❌ SIN WhatsApp
+          await this.enviarPorTodosLosCanales(
+            cliente,
+            datos,
+            "24h",
+            reserva,
+            false,
+          );
 
           await Reserva.findByIdAndUpdate(reserva._id, {
             recordatorioEnviado: true,
@@ -130,7 +143,7 @@ class RecordatoriosJob {
   }
 
   /* =============================
-     RECORDATORIO 3 HORAS ANTES
+     RECORDATORIO 3 HORAS ANTES (CON WHATSAPP)
   ============================== */
   async enviarRecordatorios3h() {
     try {
@@ -143,9 +156,9 @@ class RecordatoriosJob {
         estado: { $in: ["pendiente", "confirmada"] },
         recordatorio3hEnviado: { $ne: true },
       })
-        .populate("servicio", "nombre instrucciones") // 👈
+        .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre"); // 👈 falta aquí
+        .populate("empresa", "nombre");
 
       console.log(
         `📋 Recordatorios 3h: ${reservas.length} reservas encontradas`,
@@ -158,7 +171,14 @@ class RecordatoriosJob {
 
           const { cliente, datos } = resultado;
 
-          await this.enviarPorTodosLosCanales(cliente, datos, "3h", reserva); // 👈
+          // ✅ CON WhatsApp
+          await this.enviarPorTodosLosCanales(
+            cliente,
+            datos,
+            "3h",
+            reserva,
+            true,
+          );
 
           await Reserva.findByIdAndUpdate(reserva._id, {
             recordatorio3hEnviado: true,
@@ -177,13 +197,17 @@ class RecordatoriosJob {
       console.error("❌ Error en enviarRecordatorios3h:", error);
     }
   }
-  // Al final de la clase, antes del último }
+
+  /* =============================
+     TEST MANUAL
+  ============================== */
   async testEnviar(reservaId) {
     try {
       const reserva = await Reserva.findById(reservaId)
-        .populate("servicio", "nombre instrucciones") 
+        .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre"); 
+        .populate("empresa", "nombre");
+
       if (!reserva) return { error: "Reserva no encontrada" };
 
       const resultado = await this.obtenerDatosReserva(reserva);
@@ -191,7 +215,14 @@ class RecordatoriosJob {
 
       const { cliente, datos } = resultado;
 
-      await this.enviarPorTodosLosCanales(cliente, datos, "24h", reserva); 
+      // 👉 Aquí puedes probar con o sin WhatsApp
+      await this.enviarPorTodosLosCanales(
+        cliente,
+        datos,
+        "24h",
+        reserva,
+        true,
+      );
 
       return {
         success: true,
