@@ -40,12 +40,13 @@ const EmpresaSchema = new mongoose.Schema({
 
   // ====== THEME / PERSONALIZACIÓN ======
   colores: {
-    primario: { type: String, default: "#5e72e4" }, // Color principal
-    secundario: { type: String, default: "#2dce89" }, // Color secundario
-    fondo: { type: String, default: "#FFFFFF" }, // Color de fondo
-    texto: { type: String, default: "#172b4d" }, // Color de texto principal
-    textoMuted: { type: String, default: "#8898aa" }, // Color de texto secundario
-    heroBg: String, // Fondo del hero (puede ser gradiente)
+    primario: { type: String, default: "#5e72e4" },
+    secundario: { type: String, default: "#2dce89" },
+    fondo: { type: String, default: "#FFFFFF" },
+    texto: { type: String, default: "#172b4d" },
+    textoMuted: { type: String, default: "#8898aa" },
+    heroBg: String,
+    heroEsClaro: { type: Boolean, default: false }, // 👈 agregar esto
   },
 
   // ====== CONFIGURACIÓN VISUAL ======

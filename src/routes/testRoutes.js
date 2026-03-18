@@ -26,9 +26,18 @@ router.post("/test-recordatorios-hoy", async (req, res) => {
   }
 });
 
-router.get("/recordatorios-inteligentes", validarToken, obtenerEstadoLookCliente);
+router.get(
+  "/recordatorios-inteligentes",
+  validarToken,
+  obtenerEstadoLookCliente,
+);
 
 router.get("/test-recordatorio/:reservaId", async (req, res) => {
+  const resultado = await RecordatoriosJob.testEnviar(req.params.reservaId);
+  res.json(resultado);
+});
+
+router.get("/test-whatsapp/:reservaId", async (req, res) => {
   const resultado = await RecordatoriosJob.testEnviar(req.params.reservaId);
   res.json(resultado);
 });

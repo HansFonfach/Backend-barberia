@@ -38,7 +38,14 @@ class WhatsAppService {
   /* =============================
      ENVIAR RECORDATORIO
   ============================== */
-  async enviarRecordatorio({ nombreCliente, telefono, nombreBarbero, fecha, hora, servicio }) {
+  async enviarRecordatorio({
+    nombreCliente,
+    telefono,
+    nombreEmpresa,
+    fecha,
+    hora,
+    servicio,
+  }) {
     try {
       const telefonoFormateado = this.formatearTelefono(telefono);
 
@@ -47,14 +54,14 @@ class WhatsAppService {
         to: telefonoFormateado,
         type: "template",
         template: {
-          name: "recordatorio_cita", // ← nombre exacto del template en Meta
-         language: { code: "es_CL" },
+          name: "recodatorio_cita", //
+          language: { code: "es_CL" },
           components: [
             {
               type: "body",
               parameters: [
                 { type: "text", text: nombreCliente },
-                { type: "text", text: nombreBarbero },
+                { type: "text", text: nombreEmpresa }, // 👈 antes era nombreBarbero
                 { type: "text", text: fecha },
                 { type: "text", text: hora },
                 { type: "text", text: servicio },

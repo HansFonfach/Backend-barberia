@@ -42,6 +42,7 @@ class RecordatoriosJob {
         nombreCliente: cliente.nombre,
         nombreBarbero:
           `${reserva.barbero?.nombre} ${reserva.barbero?.apellido || ""}`.trim(),
+        nombreEmpresa: reserva.empresa?.nombre || "La Barbería", // 👈
         servicio: reserva.servicio?.nombre || "Servicio",
         fecha: fechaChile.format("DD/MM/YYYY"),
         hora: fechaChile.format("HH:mm"),
@@ -93,7 +94,8 @@ class RecordatoriosJob {
         recordatorioEnviado: { $ne: true },
       })
         .populate("servicio", "nombre instrucciones") //
-        .populate("barbero", "nombre apellido");
+        .populate("barbero", "nombre apellido")
+        .populate("empresa", "nombre"); // 👈 agrega esto
 
       console.log(
         `📋 Recordatorios 24h: ${reservas.length} reservas encontradas`,
@@ -141,8 +143,9 @@ class RecordatoriosJob {
         estado: { $in: ["pendiente", "confirmada"] },
         recordatorio3hEnviado: { $ne: true },
       })
-       .populate("servicio", "nombre instrucciones") // 👈
-        .populate("barbero", "nombre apellido");
+        .populate("servicio", "nombre instrucciones") // 👈
+        .populate("barbero", "nombre apellido")
+        .populate("empresa", "nombre"); // 👈 falta aquí
 
       console.log(
         `📋 Recordatorios 3h: ${reservas.length} reservas encontradas`,
@@ -178,9 +181,9 @@ class RecordatoriosJob {
   async testEnviar(reservaId) {
     try {
       const reserva = await Reserva.findById(reservaId)
-      .populate("servicio", "nombre instrucciones") // 👈
-        .populate("barbero", "nombre apellido");
-
+        .populate("servicio", "nombre instrucciones") 
+        .populate("barbero", "nombre apellido")
+        .populate("empresa", "nombre"); 
       if (!reserva) return { error: "Reserva no encontrada" };
 
       const resultado = await this.obtenerDatosReserva(reserva);
@@ -188,7 +191,7 @@ class RecordatoriosJob {
 
       const { cliente, datos } = resultado;
 
-      await this.enviarPorTodosLosCanales(cliente, datos, "24h", reserva); // 👈
+      await this.enviarPorTodosLosCanales(cliente, datos, "24h", reserva); 
 
       return {
         success: true,
