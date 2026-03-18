@@ -172,6 +172,18 @@ class RecordatoriosJob {
           const { cliente, datos } = resultado;
 
           // ✅ CON WhatsApp
+          const yaActualizada = await Reserva.findOneAndUpdate(
+            { _id: reserva._id, recordatorio3hEnviado: { $ne: true } },
+            { recordatorio3hEnviado: true },
+            { new: true },
+          );
+
+          if (!yaActualizada) {
+            console.log(`⚠️ Reserva ${reserva._id} ya procesada, saltando...`);
+            continue;
+          }
+
+          // ✅ CON WhatsApp (solo llega aquí si nadie más la procesó)
           await this.enviarPorTodosLosCanales(
             cliente,
             datos,
@@ -179,11 +191,6 @@ class RecordatoriosJob {
             reserva,
             true,
           );
-
-          await Reserva.findByIdAndUpdate(reserva._id, {
-            recordatorio3hEnviado: true,
-          });
-
           console.log(`✅ Recordatorio 3h enviado — ${cliente.nombre}`);
           await new Promise((r) => setTimeout(r, 500));
         } catch (error) {
@@ -216,13 +223,7 @@ class RecordatoriosJob {
       const { cliente, datos } = resultado;
 
       // 👉 Aquí puedes probar con o sin WhatsApp
-      await this.enviarPorTodosLosCanales(
-        cliente,
-        datos,
-        "24h",
-        reserva,
-        true,
-      );
+      await this.enviarPorTodosLosCanales(cliente, datos, "24h", reserva, true);
 
       return {
         success: true,
