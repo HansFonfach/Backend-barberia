@@ -610,6 +610,7 @@ export const postDeleteReserva = async (req, res) => {
     }
 
     // 6️⃣ Notificar lista de espera
+    // 6️⃣ Notificar lista de espera
     const fechaInicio = new Date(existeReserva.fecha);
     fechaInicio.setSeconds(0, 0);
     const fechaFin = new Date(existeReserva.fecha);
@@ -626,25 +627,54 @@ export const postDeleteReserva = async (req, res) => {
 
     await Promise.all(
       notificaciones.map(async (noti) => {
-        const usuario = noti.usuarioId;
         const barbero = noti.barberoId;
-
-        if (!usuario?.email) return;
-
         const fechaNoti = new Date(noti.fecha);
+
+        const fechaFormateadaNoti = fechaNoti.toLocaleDateString("es-CL", {
+          timeZone: "America/Santiago",
+        });
+        const horaFormateadaNoti = fechaNoti.toLocaleTimeString("es-CL", {
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "America/Santiago",
+        });
+
+        // ✅ INVITADO: usar emailInvitado directamente
+        if (noti.esInvitado && noti.emailInvitado) {
+          try {
+            const result = await sendWaitlistNotificationEmail(
+              noti.emailInvitado,
+              {
+                nombreCliente: "Cliente", // no tenemos nombre del invitado
+                nombreBarbero: barbero?.nombre || "Tu barbero",
+                fecha: fechaFormateadaNoti,
+                hora: horaFormateadaNoti,
+              },
+            );
+
+            if (!result?.error) {
+              noti.enviado = true;
+              await noti.save();
+            }
+          } catch (err) {
+            console.error(
+              `❌ Error notificando invitado ${noti.emailInvitado}:`,
+              err.message,
+            );
+          }
+          return;
+        }
+
+        // ✅ USUARIO REGISTRADO: lógica original
+        const usuario = noti.usuarioId;
+        if (!usuario?.email) return;
 
         try {
           const result = await sendWaitlistNotificationEmail(usuario.email, {
             nombreCliente: usuario.nombre,
             nombreBarbero: barbero?.nombre || "Tu barbero",
-            fecha: fechaNoti.toLocaleDateString("es-CL", {
-              timeZone: "America/Santiago",
-            }),
-            hora: fechaNoti.toLocaleTimeString("es-CL", {
-              hour: "2-digit",
-              minute: "2-digit",
-              timeZone: "America/Santiago",
-            }),
+            fecha: fechaFormateadaNoti,
+            hora: horaFormateadaNoti,
           });
 
           if (result?.error) {
