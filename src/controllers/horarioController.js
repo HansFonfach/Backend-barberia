@@ -475,8 +475,14 @@ export const getHorasDisponibles = async (req, res) => {
       const inicio = dayjs.tz(
         `${fecha} ${hora}`,
         "YYYY-MM-DD HH:mm",
-        "America/Santiago",
+        "America/Santiago", // ← asegúrate que esto esté así
       );
+
+      const ahora = dayjs().tz("America/Santiago");
+
+      console.log(inicio, ahora);
+
+      // En el reduce, cambia esto:
 
       const esPrivilegiado = rolUsuario === "barbero" || rolUsuario === "admin";
 
