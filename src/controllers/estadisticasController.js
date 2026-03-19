@@ -778,3 +778,438 @@ export const getHoraMasSolicitada = async (req, res) => {
     return err(res, "Error al obtener hora más solicitada");
   }
 };
+
+export const getDashboardResumen = async (req, res) => {
+  try {
+    const empresaId = new mongoose.Types.ObjectId(req.usuario.empresaId);
+    const ahora = new Date();
+    const PRECIO_SUSCRIPCION = 25000;
+ 
+    // ── Rangos de fecha ──────────────────────────────
+    const inicioHoy = new Date(ahora);
+    inicioHoy.setHours(0, 0, 0, 0);
+    const finHoy = new Date(ahora);
+    finHoy.setHours(23, 59, 59, 999);
+ 
+    const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+    inicioMes.setHours(0, 0, 0, 0);
+    const finMes = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0);
+    finMes.setHours(23, 59, 59, 999);
+ 
+    // ── Queries en paralelo ──────────────────────────
+    const [
+      reservasHoy,
+      totalClientes,
+      citasMes,
+      totalCompletadas,
+      totalCanceladas,
+      totalNoAsistio,
+      totalParaTasa,
+      horaMasCancelada,
+      horaMasSolicitada,
+      servicioMasPopular,
+      topAsistentes,
+      topCanceladores,
+      topNoAsistidos,
+      ingresoTotalAggregate,
+      reservasPasadasMes,
+      reservasFuturasMes,
+      suscripcionesMes,
+    ] = await Promise.all([
+      // 1. Reservas hoy
+      reservaModel.countDocuments({
+        empresa: empresaId,
+        fecha: { $gte: inicioHoy, $lte: finHoy },
+        estado: { $ne: "cancelada" },
+      }),
+ 
+      // 2. Total clientes
+      usuarioModel.countDocuments({
+        empresa: empresaId,
+        rol: "cliente",
+        estado: "activo",
+      }),
+ 
+      // 3. Citas este mes
+      reservaModel.countDocuments({
+        empresa: empresaId,
+        fecha: { $gte: inicioMes, $lt: finMes },
+        estado: { $ne: "cancelada" },
+      }),
+ 
+      // 4. Completadas
+      reservaModel.countDocuments({ empresa: empresaId, estado: "completada" }),
+ 
+      // 5. Canceladas
+      reservaModel.countDocuments({ empresa: empresaId, estado: "cancelada" }),
+ 
+      // 6. No asistió
+      reservaModel.countDocuments({ empresa: empresaId, estado: "no_asistio" }),
+ 
+      // 7. Total para tasas
+      reservaModel.countDocuments({
+        empresa: empresaId,
+        estado: { $in: ["completada", "cancelada", "no_asistio"] },
+      }),
+ 
+      // 8. Hora más cancelada
+      reservaModel.aggregate([
+        { $match: { empresa: empresaId, estado: "cancelada" } },
+        {
+          $group: {
+            _id: { $hour: { date: "$fecha", timezone: "America/Santiago" } },
+            total: { $sum: 1 },
+          },
+        },
+        { $sort: { total: -1 } },
+        { $limit: 1 },
+      ]),
+ 
+      // 9. Hora más solicitada
+      reservaModel.aggregate([
+        { $match: { empresa: empresaId } },
+        {
+          $addFields: {
+            hora: { $hour: { date: "$fecha", timezone: "America/Santiago" } },
+          },
+        },
+        { $group: { _id: "$hora", total: { $sum: 1 } } },
+        { $sort: { total: -1 } },
+        { $limit: 1 },
+      ]),
+ 
+      // 10. Servicio más popular
+      reservaModel.aggregate([
+        {
+          $match: {
+            empresa: empresaId,
+            estado: { $in: ["completada", "confirmada", "pendiente"] },
+          },
+        },
+        { $group: { _id: "$servicio", total: { $sum: 1 } } },
+        { $sort: { total: -1 } },
+        { $limit: 1 },
+        {
+          $lookup: {
+            from: "servicios",
+            localField: "_id",
+            foreignField: "_id",
+            as: "servicio",
+          },
+        },
+        { $unwind: "$servicio" },
+        {
+          $project: {
+            nombre: "$servicio.nombre",
+            precio: "$servicio.precio",
+            totalReservas: "$total",
+          },
+        },
+      ]),
+ 
+      // 11. Top 5 asistentes
+      reservaModel.aggregate([
+        { $match: { empresa: empresaId, estado: "completada" } },
+        {
+          $lookup: {
+            from: "usuarios",
+            localField: "cliente",
+            foreignField: "_id",
+            as: "clienteInfo",
+          },
+        },
+        { $unwind: "$clienteInfo" },
+        { $match: { "clienteInfo.rol": "cliente" } },
+        {
+          $lookup: {
+            from: "servicios",
+            localField: "servicio",
+            foreignField: "_id",
+            as: "servicioInfo",
+          },
+        },
+        { $unwind: "$servicioInfo" },
+        {
+          $group: {
+            _id: "$cliente",
+            totalReservas: { $sum: 1 },
+            totalGastado: { $sum: "$servicioInfo.precio" },
+            nombre: { $first: "$clienteInfo.nombre" },
+            apellido: { $first: "$clienteInfo.apellido" },
+          },
+        },
+        { $sort: { totalGastado: -1 } },
+        { $limit: 5 },
+      ]),
+ 
+      // 12. Top 5 canceladores
+      reservaModel.aggregate([
+        { $match: { empresa: empresaId, estado: "cancelada" } },
+        {
+          $lookup: {
+            from: "usuarios",
+            localField: "cliente",
+            foreignField: "_id",
+            as: "clienteInfo",
+          },
+        },
+        { $unwind: "$clienteInfo" },
+        { $match: { "clienteInfo.rol": "cliente" } },
+        {
+          $group: {
+            _id: "$cliente",
+            totalCancelaciones: { $sum: 1 },
+            nombre: { $first: "$clienteInfo.nombre" },
+            apellido: { $first: "$clienteInfo.apellido" },
+            email: { $first: "$clienteInfo.email" },
+          },
+        },
+        { $sort: { totalCancelaciones: -1 } },
+        { $limit: 5 },
+      ]),
+ 
+      // 13. Top 5 no asistidos
+      reservaModel.aggregate([
+        { $match: { empresa: empresaId, estado: "no_asistio" } },
+        {
+          $lookup: {
+            from: "usuarios",
+            localField: "cliente",
+            foreignField: "_id",
+            as: "clienteInfo",
+          },
+        },
+        { $unwind: "$clienteInfo" },
+        { $match: { "clienteInfo.rol": "cliente" } },
+        {
+          $group: {
+            _id: "$cliente",
+            totalNoAsistidos: { $sum: 1 },
+            nombre: { $first: "$clienteInfo.nombre" },
+            apellido: { $first: "$clienteInfo.apellido" },
+            email: { $first: "$clienteInfo.email" },
+          },
+        },
+        { $sort: { totalNoAsistidos: -1 } },
+        { $limit: 5 },
+      ]),
+ 
+      // 14. Ingreso total histórico
+      reservaModel.aggregate([
+        { $match: { empresa: empresaId, estado: "completada" } },
+        {
+          $lookup: {
+            from: "servicios",
+            localField: "servicio",
+            foreignField: "_id",
+            as: "servicioData",
+          },
+        },
+        { $unwind: "$servicioData" },
+        { $group: { _id: null, total: { $sum: "$servicioData.precio" } } },
+      ]),
+ 
+      // 15. Reservas pasadas del mes (para ingreso mensual)
+      reservaModel
+        .find({
+          empresa: empresaId,
+          fecha: { $gte: inicioMes, $lte: ahora },
+          estado: { $nin: ["cancelada", "no_asistio"] },
+        })
+        .populate("servicio", "precio")
+        .lean(),
+ 
+      // 16. Reservas futuras del mes (para posible ingreso)
+      reservaModel
+        .find({
+          empresa: empresaId,
+          fecha: { $gt: ahora, $lte: finMes },
+          estado: { $nin: ["cancelada", "no_asistio"] },
+        })
+        .populate("servicio", "precio")
+        .lean(),
+ 
+      // 17. Suscripciones nuevas del mes
+      suscripcionModel.countDocuments({
+        empresa: empresaId,
+        fechaInicio: { $gte: inicioMes, $lte: finMes },
+      }),
+    ]);
+ 
+    // ── Calcular ingreso mensual (fix N+1) ───────────
+    const calcularIngresoConSus = async (reservas) => {
+      if (!reservas.length) return 0;
+ 
+      // Una sola query para todas las suscripciones relevantes
+      const clienteIds = [...new Set(reservas.map((r) => r.cliente?.toString()))];
+      const todasLasSus = await suscripcionModel
+        .find({ usuario: { $in: clienteIds }, empresa: empresaId })
+        .lean();
+ 
+      // Map clienteId → suscripciones[]
+      const susMap = new Map();
+      for (const s of todasLasSus) {
+        const key = s.usuario.toString();
+        if (!susMap.has(key)) susMap.set(key, []);
+        susMap.get(key).push(s);
+      }
+ 
+      // Todas las reservas del mes de estos clientes (para contar servicios acumulados)
+      const todasReservasMes = await reservaModel
+        .find({
+          empresa: empresaId,
+          cliente: { $in: clienteIds },
+          fecha: { $gte: inicioMes, $lte: finMes },
+          estado: { $nin: ["cancelada", "no_asistio"] },
+        })
+        .sort({ fecha: 1 })
+        .lean();
+ 
+      // Map clienteId → reservas ordenadas
+      const reservasPorCliente = new Map();
+      for (const r of todasReservasMes) {
+        const key = r.cliente.toString();
+        if (!reservasPorCliente.has(key)) reservasPorCliente.set(key, []);
+        reservasPorCliente.get(key).push(r);
+      }
+ 
+      let ingreso = 0;
+      for (const reserva of reservas) {
+        const precio = reserva.precio || reserva.servicio?.precio || 0;
+        const clienteKey = reserva.cliente?.toString();
+        const suscripciones = susMap.get(clienteKey) || [];
+ 
+        const sus = suscripciones.find(
+          (s) =>
+            new Date(s.fechaInicio) <= new Date(reserva.fecha) &&
+            new Date(s.fechaFin) >= new Date(reserva.fecha),
+        );
+ 
+        if (!sus) {
+          ingreso += precio;
+          continue;
+        }
+ 
+        const reservasCliente = reservasPorCliente.get(clienteKey) || [];
+        let serviciosAcumulados = 0;
+        for (const r of reservasCliente) {
+          serviciosAcumulados += r.duracion >= 120 ? 2 : 1;
+          if (r._id.toString() === reserva._id.toString()) break;
+        }
+ 
+        if (serviciosAcumulados > sus.serviciosTotales) ingreso += precio;
+      }
+ 
+      return ingreso;
+    };
+ 
+    const [ingresoReservas, posibleIngreso] = await Promise.all([
+      calcularIngresoConSus(reservasPasadasMes),
+      calcularIngresoConSus(reservasFuturasMes),
+    ]);
+ 
+    const ingresoSuscripciones = suscripcionesMes * PRECIO_SUSCRIPCION;
+    const ingresoTotalHistorico = ingresoTotalAggregate[0]?.total || 0;
+ 
+    // ── Formatear tasas ──────────────────────────────
+    const tasaCancelacion =
+      totalParaTasa === 0
+        ? "0%"
+        : `${((totalCanceladas / totalParaTasa) * 100).toFixed(2)}%`;
+ 
+    const tasaAsistencia =
+      totalParaTasa === 0
+        ? "0%"
+        : `${((totalCompletadas / totalParaTasa) * 100).toFixed(2)}%`;
+ 
+    // ── Formatear hora más cancelada/solicitada ──────
+    const horaCancelada = horaMasCancelada[0]
+      ? {
+          rango: `${horaMasCancelada[0]._id}:00 - ${horaMasCancelada[0]._id + 1}:00`,
+          cantidad: horaMasCancelada[0].total,
+        }
+      : null;
+ 
+    const horaSolicitada = horaMasSolicitada[0]
+      ? {
+          rango: `${horaMasSolicitada[0]._id}:00 - ${horaMasSolicitada[0]._id + 1}:00`,
+          totalReservas: horaMasSolicitada[0].total,
+        }
+      : null;
+ 
+    // ── Formatear top clientes ───────────────────────
+    const formatter = new Intl.NumberFormat("es-CL", {
+      style: "currency",
+      currency: "CLP",
+      minimumFractionDigits: 0,
+    });
+ 
+    return ok(res, {
+      // Conteos generales
+      reservasHoy,
+      totalClientes,
+      citasMes,
+ 
+      // Reservas por estado
+      reservasCompletadas: totalCompletadas,
+      reservasCanceladas: totalCanceladas,
+      reservasNoAsistidas: totalNoAsistio,
+ 
+      // Tasas
+      tasaCancelacion: {
+        porcentaje: tasaCancelacion,
+        canceladas: totalCanceladas,
+        totalReservas: totalParaTasa,
+      },
+      tasaAsistencia: {
+        porcentaje: tasaAsistencia,
+        completadas: totalCompletadas,
+        noAsistio: totalNoAsistio,
+        totalReservas: totalParaTasa,
+      },
+ 
+      // Horas
+      horaMasCancelada: horaCancelada,
+      horaMasSolicitada: horaSolicitada,
+ 
+      // Servicio popular
+      servicioMasPopular: servicioMasPopular[0] || null,
+ 
+      // Ingresos
+      ingresoTotal: ingresoTotalHistorico,
+      ingresoMensual: {
+        ingresoTotal: ingresoReservas + ingresoSuscripciones,
+        detalle: {
+          ingresoReservas,
+          ingresoSuscripciones,
+          suscripcionesNuevas: suscripcionesMes,
+          posibleIngreso: ingresoReservas + ingresoSuscripciones + posibleIngreso,
+        },
+      },
+ 
+      // Top clientes
+      topAsistentes: topAsistentes.map((c) => ({
+        nombre: c.nombre,
+        apellido: c.apellido,
+        totalReservas: c.totalReservas,
+        totalGastado: c.totalGastado,
+        totalGastadoFormateado: formatter.format(c.totalGastado),
+      })),
+      topCanceladores: topCanceladores.map((c) => ({
+        nombre: c.nombre,
+        apellido: c.apellido,
+        email: c.email,
+        totalCancelaciones: c.totalCancelaciones,
+      })),
+      topNoAsistidos: topNoAsistidos.map((c) => ({
+        nombre: c.nombre,
+        apellido: c.apellido,
+        email: c.email,
+        totalNoAsistidos: c.totalNoAsistidos,
+      })),
+    });
+  } catch (error) {
+    console.error("❌ Error getDashboardResumen:", error);
+    return err(res, "Error al obtener resumen del dashboard");
+  }
+};

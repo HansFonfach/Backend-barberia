@@ -3,6 +3,7 @@ import { Router } from "express";
 import { validarToken } from "../middlewares/validarToken.js";
 import {
   citasEsteMes,
+  getDashboardResumen,
   getHoraMasSolicitada,
   getProximoCliente,
   getTop5ClientesAsistentes,
@@ -50,5 +51,8 @@ router.get("/hora-mas-cancelada", validarToken, horaMasCancelada);
 router.get("/servicio-mas-popular", validarToken, servicioMasPopular);
 router.get("/tasa-de-cancelacion", validarToken, tasaDeCancelacion);
 router.get("/tasa-de-asistencia", validarToken, tasaDeAsistencia);
+
+router.get("/dashboard/resumen", validarToken, getDashboardResumen); // 👈 validarToken, no verifyToken
+
 
 export default router;
