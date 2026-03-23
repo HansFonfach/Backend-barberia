@@ -5,7 +5,6 @@ import empresaModel from "../models/empresa.model.js";
 import Usuario from "../models/usuario.model.js";
 import { generarToken } from "../utils/generarToken.js";
 import { sendBienvenidaEmpresaEmail } from "./mailController.js";
-// import { sendBienvenidaEmail } from "../utils/mailer.js"; // tu función de mail
 
 const generarSlug = (nombre) => {
   return nombre
@@ -75,18 +74,24 @@ export const registroPublicoEmpresa = async (req, res) => {
       telefono: `569${telefono.replace(/\D/g, "").slice(-8)}`,
       password: hashedPassword,
       empresa: nuevaEmpresa._id,
-      rol: "admin",
+      rol: "barbero",
       esAdmin: true, // 👈 esto faltaba
     });
 
     await nuevoAdmin.save();
 
-    await sendBienvenidaEmpresaEmail(correo, {
-      nombreNegocio: nombre,
-      slug,
-      email: correo,
-      password: passwordPlana, // la que generaste antes del hash
-    });
+    try {
+      const resultado = await sendBienvenidaEmpresaEmail(correo, {
+        nombreNegocio: nombre,
+        slug,
+        email: correo,
+        password: passwordPlana,
+      });
+      console.log("✅ Email enviado:", resultado);
+    } catch (emailError) {
+      console.error("❌ Error enviando email:", emailError);
+      // No lanzamos el error para que igual responda 201
+    }
 
     // Opcionalmente loguear directo
     const token = generarToken(nuevoAdmin);

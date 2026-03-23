@@ -5,7 +5,6 @@ import Usuario from "../models/usuario.model.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../config/cloudinary.js";
 
-
 //obtener todos los usuarios
 export const getUsuarios = async (req, res) => {
   try {
@@ -178,13 +177,17 @@ export const updatePerfil = async (req, res) => {
   }
 };
 
-
 export const updateUsuario = async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      email, telefono, suscrito, rol,
-      nombre, apellido, descripcion,
+      email,
+      telefono,
+      suscrito,
+      rol,
+      nombre,
+      apellido,
+      descripcion,
       aniosExperiencia,
     } = req.body || {};
 
@@ -211,13 +214,31 @@ export const updateUsuario = async (req, res) => {
 
     // Foto — solo si se subió archivo
     if (req.file) {
-      const resultado = await cloudinary(req.file);
+      const resultado = await new Promise((resolve, reject) => {
+        cloudinary.uploader
+          .upload_stream(
+            {
+              folder: "profesionales",
+              transformation: [
+                { width: 500, height: 500, crop: "fill", gravity: "face" },
+              ],
+            },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            },
+          )
+          .end(req.file.buffer);
+      });
+
       data["perfilProfesional.fotoPerfil.url"] = resultado.secure_url;
       data["perfilProfesional.fotoPerfil.publicId"] = resultado.public_id;
     }
 
     if (Object.keys(data).length === 0)
-      return res.status(400).json({ message: "No hay datos válidos para actualizar." });
+      return res
+        .status(400)
+        .json({ message: "No hay datos válidos para actualizar." });
 
     // Validar email duplicado solo si se está cambiando
     if (email) {
