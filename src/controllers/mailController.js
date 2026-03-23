@@ -77,7 +77,7 @@ const detalles = ({
 
 export const sendReservationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora, servicio, instrucciones } =
-    data; 
+    data;
   return await sendBaseEmail({
     to,
     subject: "Reserva confirmada – Agenda Fonfach",
@@ -220,7 +220,7 @@ export const sendReminderEmail = async (to, data) => {
     hora,
     tipo,
     instrucciones,
-  } = data; 
+  } = data;
 
   const es24h = tipo === "24h";
 
@@ -297,5 +297,54 @@ export const sendRetentionEmail = async (to, data) => {
       </p>
     `),
     text: `${titulo}\n\n${cuerpo.replace(/<[^>]*>/g, "")}`,
+  });
+};
+
+export const sendBienvenidaEmpresaEmail = async (to, data) => {
+  const { nombreNegocio, slug, email, password } = data;
+  const panelUrl = `https://www.agendafonfach.cl/admin/login`;
+  const agendaUrl = `https://www.agendafonfach.cl/${slug}`;
+
+  return await sendBaseEmail({
+    to,
+    subject: "¡Tu negocio está listo! – Agenda Fonfach",
+    html: layout(`
+      <h2 style="margin-top:0;">¡Bienvenido a Agenda Fonfach! 🎉</h2>
+      <p>Tu negocio <strong>${nombreNegocio}</strong> fue creado exitosamente. Tienes <strong>7 días gratis</strong> para probarlo sin límites.</p>
+
+      <table cellpadding="8" cellspacing="0" border="0" width="100%"
+             style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
+        <tr>
+          <td style="font-size:14px;color:#555;width:40%;">Tu agenda pública</td>
+          <td style="font-weight:bold;">
+            <a href="${agendaUrl}" style="color:#4361ee;">${agendaUrl}</a>
+          </td>
+        </tr>
+        <tr>
+          <td style="font-size:14px;color:#555;">Correo</td>
+          <td style="font-weight:bold;">${email}</td>
+        </tr>
+        <tr>
+          <td style="font-size:14px;color:#555;">Contraseña temporal</td>
+          <td style="font-weight:bold;letter-spacing:2px;">${password}</td>
+        </tr>
+      </table>
+
+      <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:0;font-size:14px;color:#555;">
+          🔒 Por seguridad, te recomendamos cambiar tu contraseña después de iniciar sesión por primera vez.
+        </p>
+      </div>
+
+      ${ctaButton(panelUrl, "Ir a mi panel de administración", "#4361ee")}
+
+      <p style="color:#555;font-size:14px;">
+        Si tienes alguna duda, responde este correo o escríbenos por WhatsApp. Estamos para ayudarte.
+      </p>
+      <p style="color:#555;font-size:14px;">
+        Atentamente,<br/><strong>Equipo 🗓️ Agenda Fonfach</strong>
+      </p>
+    `),
+    text: `¡Bienvenido a Agenda Fonfach!\n\nTu negocio "${nombreNegocio}" fue creado exitosamente. Tienes 7 días gratis para probarlo.\n\nTu agenda pública: ${agendaUrl}\nCorreo: ${email}\nContraseña temporal: ${password}\n\nInicia sesión en: ${panelUrl}\n\nTe recomendamos cambiar tu contraseña después del primer ingreso.\n\nEquipo 🗓️ Agenda Fonfach`,
   });
 };

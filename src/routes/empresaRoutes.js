@@ -10,6 +10,7 @@ import {
 import { validarToken } from "../middlewares/validarToken.js";
 import { upload } from "../middlewares/upload.js";
 import { verificarRol } from "../middlewares/verificarRol.js";
+import { registroPublicoEmpresa } from "../controllers/registroPublicoEmpresa.js";
 
 const router = Router();
 
@@ -21,6 +22,8 @@ router.post(
   ]),
   ingresarEmpresa,
 );
+
+router.post("/registro-negocio", registroPublicoEmpresa)
 router.get("/slug/:slug", getEmpresaPorSlug);
 router.get("/publicas", getEmpresasPublicas); // sin middleware de auth
 router.get("/:id", validarToken, getEmpresaPorId);

@@ -3,7 +3,6 @@ import mongoose from "mongoose";
 const EmpresaSchema = new mongoose.Schema({
   rutEmpresa: {
     type: String,
-    required: true,
   },
   nombre: {
     type: String,
@@ -122,6 +121,24 @@ const EmpresaSchema = new mongoose.Schema({
   recordatoriosRetencionActivo: {
     type: Boolean,
     default: false, // opt-in, no opt-out
+  },
+
+  trial: {
+    activo: { type: Boolean, default: true },
+    inicio: { type: Date, default: Date.now },
+    fin: {
+      type: Date,
+      default: () => {
+        const fecha = new Date();
+        fecha.setDate(fecha.getDate() + 7);
+        return fecha;
+      },
+    },
+  },
+
+  plan: {
+    type: String,
+    default: "trial", // trial | activo | vencido
   },
 });
 

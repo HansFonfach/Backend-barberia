@@ -8,7 +8,7 @@ const UsuarioSchema = new Schema(
       required: true,
     },
 
-    rut: { type: String, required: true },
+    rut: { type: String },
     nombre: { type: String, required: true },
     apellido: { type: String },
     email: { type: String, required: true },
@@ -25,7 +25,7 @@ const UsuarioSchema = new Schema(
       enum: ["cliente", "barbero", "admin", "invitado"],
       default: "cliente",
     },
-    esAdmin: { type: Boolean, default: false }, 
+    esAdmin: { type: Boolean, default: false },
     plan: {
       type: String,
       enum: ["gratis", "premium"],
@@ -54,7 +54,7 @@ const UsuarioSchema = new Schema(
   { timestamps: true },
 );
 
-UsuarioSchema.index({ empresa: 1, rut: 1 }, { unique: true });
+UsuarioSchema.index({ empresa: 1, rut: 1 }, { unique: true, sparse: true });
 UsuarioSchema.index({ empresa: 1, email: 1 }, { unique: true });
 UsuarioSchema.index({ empresa: 1, rol: 1 });
 
