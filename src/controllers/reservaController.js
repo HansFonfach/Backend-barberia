@@ -197,8 +197,8 @@ export const createReserva = async (req, res) => {
         const suscripcionActiva = await suscripcionModel.findOne({
           usuario: cliente,
           activa: true,
-          fechaInicio: { $lte: new Date() },
-          fechaFin: { $gte: new Date() },
+          fechaInicio: { $lte: inicioReservaUTC.toDate() }, // ← fecha reserva
+          fechaFin: { $gte: inicioReservaUTC.toDate() }, // ← fecha reserva
         });
 
         if (!suscripcionActiva) {

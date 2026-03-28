@@ -23,13 +23,18 @@ const EmpresaSchema = new mongoose.Schema({
     enum: ["activo", "inactivo"],
     default: "activo",
   },
-  logo: String,
-  banner: String,
+  logo: {
+    url: { type: String, default: null },
+    publicId: { type: String, default: null },
+  },
+
   descripcion: String,
   direccion: String,
   telefono: String,
   correo: String,
-  profesional: String,
+  horarios: String,
+
+  
   redes: {
     instagram: String,
     facebook: String,
@@ -62,7 +67,6 @@ const EmpresaSchema = new mongoose.Schema({
     usaHorasAncla: { type: Boolean, default: false }, // 👈 aquí dentro
   },
 
-  horarios: String,
   creadoEn: {
     type: Date,
     default: Date.now,
@@ -77,15 +81,6 @@ const EmpresaSchema = new mongoose.Schema({
     default: 15,
   },
   envioNotificacionReserva: { type: Boolean, default: false },
-
-  perfilProfesional: {
-    aniosExperiencia: { type: Number, default: null },
-    especialidades: [{ type: String }],
-    fotoPerfil: {
-      url: { type: String, default: null }, // URL de Cloudinary
-      publicId: { type: String, default: null }, // Para poder eliminarla/reemplazarla
-    },
-  },
 
   pagos: {
     requiereAbono: { type: Boolean, default: false },
