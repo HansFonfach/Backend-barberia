@@ -197,11 +197,28 @@ export const createReserva = async (req, res) => {
         const suscripcionActiva = await suscripcionModel.findOne({
           usuario: cliente,
           activa: true,
-          fechaInicio: { $lte: inicioReservaUTC.toDate() }, // ← fecha reserva
-          fechaFin: { $gte: inicioReservaUTC.toDate() }, // ← fecha reserva
+          fechaInicio: { $lte: inicioReservaUTC.toDate() },
+          fechaFin: { $gte: inicioReservaUTC.toDate() },
         });
 
         if (!suscripcionActiva) {
+          // Buscar si tiene una suscripción vencida
+          const suscripcionVencida = await suscripcionModel
+            .findOne({
+              usuario: cliente,
+            })
+            .sort({ fechaFin: -1 }); // la más reciente
+
+          if (suscripcionVencida) {
+            const fechaVencimiento = dayjs(suscripcionVencida.fechaFin)
+              .tz("America/Santiago")
+              .format("DD/MM/YYYY");
+
+            return res.status(403).json({
+              message: `Tu suscripción venció el ${fechaVencimiento}, por lo que no puedes reservar este sábado`,
+            });
+          }
+
           return res.status(403).json({
             message:
               "Las reservas del sábado son solo para suscriptores o barberos",
