@@ -473,7 +473,6 @@ export const createReserva = async (req, res) => {
     const limiteMinimoSeguro = ahoraChile.add(30, "minute");
 
     const horaNoValidaParaEmail =
-      inicioReservaChile.isSame(ahoraChile, "day") &&
       inicioReservaChile.isBefore(limiteMinimoSeguro);
 
     if (!horaNoValidaParaEmail) {
@@ -495,31 +494,6 @@ export const createReserva = async (req, res) => {
     }
 
     // Email al barbero — siempre, independiente de si la hora pasó
-    if (empresaDoc?.envioNotificacionReserva && barberoDoc?.email) {
-      sendProfesionalNewReservationEmail(barberoDoc.email, {
-        ...emailData,
-        nombreBarbero: barberoDoc.nombre,
-      }).catch(console.error);
-    }
-
-    // Email al cliente
-    if (req.crearTokenCancelacion && cancelToken) {
-      sendGuestReservationEmail(clienteDoc.email, {
-        ...emailData,
-        instrucciones: barberoServicio.servicio.instrucciones ?? null,
-        cancelUrl: `www.agendafonfach.cl/${empresaDoc.slug}/cancelar-reserva-invitado?token=${cancelToken}`,
-        permiteCancelacion:
-          empresaDoc.politicaCancelacion?.permiteCancelacion ?? true, // ✅
-        horasLimite: empresaDoc.politicaCancelacion?.horasLimite ?? 24, // ✅
-      }).catch(console.error);
-    } else {
-      sendReservationEmail(clienteDoc.email, {
-        ...emailData,
-        instrucciones: barberoServicio.servicio.instrucciones ?? null,
-      }).catch(console.error);
-    }
-
-    // Email al barbero ✅ NUEVO
     if (empresaDoc?.envioNotificacionReserva && barberoDoc?.email) {
       sendProfesionalNewReservationEmail(barberoDoc.email, {
         ...emailData,

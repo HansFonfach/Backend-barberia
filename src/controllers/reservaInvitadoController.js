@@ -78,7 +78,7 @@ export const cancelarReservaPorLink = async (req, res) => {
     const reserva = await Reserva.findOne({
       _id: accessToken.reserva,
       estado: { $in: ["pendiente", "confirmada"] },
-    }).populate("barbero servicio");
+    }).populate("barbero servicio empresa"); // 👈 IMPORTANTE
 
     if (!reserva) {
       return res.status(404).json({
@@ -87,17 +87,41 @@ export const cancelarReservaPorLink = async (req, res) => {
     }
 
     /* =============================
-       3️⃣ REGLA HORAS (CHILE)
+       3️⃣ REGLAS CANCELACIÓN (EMPRESA)
     ============================== */
     const ahoraChile = dayjs().tz("America/Santiago");
     const inicioReservaChile = dayjs(reserva.fecha).tz("America/Santiago");
 
-    const horasDiff = inicioReservaChile.diff(ahoraChile, "hour", true);
+    const empresaDoc = reserva.empresa;
 
-    if (horasDiff < 0) {
-      // 👈 solo bloquea si la reserva ya pasó
+    const permiteCancelacion =
+      empresaDoc?.politicaCancelacion?.permiteCancelacion ?? true;
+
+    const horasLimite = empresaDoc?.politicaCancelacion?.horasLimite ?? 24;
+
+    // Diferencia en minutos (más preciso)
+    const minutosDiff = inicioReservaChile.diff(ahoraChile, "minute");
+
+    // ❌ Empresa no permite cancelar
+    if (!permiteCancelacion) {
+      return res.status(403).json({
+        message: "Esta empresa no permite cancelar reservas",
+      });
+    }
+
+    // ❌ Reserva ya pasó
+    if (minutosDiff < 0) {
       return res.status(403).json({
         message: "No puedes cancelar una reserva que ya pasó",
+      });
+    }
+
+    // ❌ No cumple política de anticipación
+    if (minutosDiff < horasLimite * 60) {
+      const horasRestantes = Math.floor(minutosDiff / 60);
+
+      return res.status(403).json({
+        message: `Debes cancelar con al menos ${horasLimite} horas de anticipación. Te quedan ${horasRestantes} horas`,
       });
     }
 
