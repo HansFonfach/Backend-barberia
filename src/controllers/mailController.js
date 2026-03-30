@@ -78,15 +78,22 @@ const detalles = ({
   </table>`;
 
 export const sendReservationEmail = async (to, data) => {
-  const { nombreCliente, nombreBarbero, fecha, hora, servicio, instrucciones, direccion } =
-    data;
+  const {
+    nombreCliente,
+    nombreBarbero,
+    fecha,
+    hora,
+    servicio,
+    instrucciones,
+    direccion,
+  } = data;
   return await sendBaseEmail({
     to,
     subject: "Reserva confirmada – Agenda Fonfach",
     html: layout(`
       <h2 style="margin-top:0;">Reserva Confirmada 🗓️</h2>
       <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido confirmada.</p>
-      ${detalles({ nombreBarbero, servicio, fecha, hora ,direccion})}
+      ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
 
       ${
         instrucciones
@@ -116,7 +123,7 @@ export const sendGuestReservationEmail = async (to, data) => {
     instrucciones,
     permiteCancelacion, // ✅ nuevo
     horasLimite, // ✅ nuevo
-    direccion
+    direccion,
   } = data;
 
   return await sendBaseEmail({
@@ -125,9 +132,7 @@ export const sendGuestReservationEmail = async (to, data) => {
     html: layout(`
       <h2 style="margin-top:0;">Reserva Confirmada 🗓️</h2>
       <p>Hola <strong>${nombreCliente}</strong>, tu reserva fue creada exitosamente.</p>
-      ${detalles({ nombreBarbero, servicio, fecha, hora, direccion
-
-       })}
+      ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
 
       ${
         instrucciones
@@ -159,7 +164,15 @@ export const sendGuestReservationEmail = async (to, data) => {
 };
 
 export const sendCancelReservationEmail = async (to, data) => {
-  const { nombreCliente, nombreBarbero, fecha, hora, servicio, motivo, direccion } = data;
+  const {
+    nombreCliente,
+    nombreBarbero,
+    fecha,
+    hora,
+    servicio,
+    motivo,
+    direccion,
+  } = data;
   return await sendBaseEmail({
     to,
     subject: "Tu reserva ha sido cancelada – Agenda Fonfach",
@@ -167,7 +180,7 @@ export const sendCancelReservationEmail = async (to, data) => {
       <h2 style="margin-top:0;">Reserva Cancelada</h2>
       <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido cancelada correctamente.</p>
       ${motivo ? `<p><strong>Motivo:</strong> ${motivo}</p>` : ""}
-      ${detalles({ nombreBarbero, servicio, fecha, hora , direccion})}
+      ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
     `),
     text: `Reserva cancelada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${motivo ? `\nMotivo: ${motivo}` : ""}`,
   });
@@ -238,7 +251,7 @@ export const sendReminderEmail = async (to, data) => {
     hora,
     tipo,
     instrucciones,
-    direccion
+    direccion,
   } = data;
 
   const es24h = tipo === "24h";
@@ -253,7 +266,7 @@ export const sendReminderEmail = async (to, data) => {
         ${es24h ? "⏰ Tu cita es mañana" : "⏰ Tu cita es en 3 horas"}
       </h2>
       <p>Hola <strong>${nombreCliente}</strong>, te recordamos que tienes una cita agendada.</p>
-      ${detalles({ nombreBarbero, servicio, fecha, hora, direccion})}
+      ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
 
       ${
         instrucciones
@@ -275,7 +288,8 @@ export const sendReminderEmail = async (to, data) => {
 };
 
 export const sendProfesionalNewReservationEmail = async (to, data) => {
-  const { nombreCliente, nombreBarbero, fecha, hora, servicio } = data;
+  const { nombreCliente, nombreBarbero, fecha, hora, servicio, direccion } =
+    data;
   return await sendBaseEmail({
     to,
     subject: "Nueva reserva recibida – Agenda Fonfach",
@@ -289,16 +303,17 @@ export const sendProfesionalNewReservationEmail = async (to, data) => {
 };
 
 export const sendProfesionalCancelReservationEmail = async (to, data) => {
-  const { nombreCliente, nombreBarbero, fecha, hora, servicio } = data;
+  const { nombreCliente, nombreBarbero, fecha, hora, servicio, direccion } =
+    data;
   return await sendBaseEmail({
     to,
     subject: "Reserva cancelada – Agenda Fonfach",
     html: layout(`
       <h2 style="margin-top:0;">Reserva Cancelada</h2>
       <p>Hola <strong>${nombreBarbero}</strong>, una reserva ha sido cancelada.</p>
-      ${detalles({ nombreBarbero: nombreCliente, servicio, fecha, hora, direccion, labelProfesional: "Cliente" })}
+    ${detalles({ nombreBarbero: nombreCliente, servicio, fecha, hora, direccion, labelProfesional: "Cliente" })}
     `),
-    text: `Reserva cancelada\n\nHola ${nombreBarbero}\n\nCliente: ${nombreCliente}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
+    text: `Nueva reserva\n\nHola ${nombreBarbero}\n\nCliente: ${nombreCliente}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\nDirección: ${direccion ?? "No especificada"}`,
   });
 };
 
