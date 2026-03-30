@@ -14,12 +14,9 @@ class RecordatoriosJob {
   init() {
     // ✅ Corre cada 15 minutos
     cron.schedule("*/15 * * * *", async () => {
-    
       await this.enviarRecordatorios24h();
       await this.enviarRecordatorios3h();
     });
-
-   
   }
 
   /* =============================
@@ -43,6 +40,7 @@ class RecordatoriosJob {
         servicio: reserva.servicio?.nombre || "Servicio",
         fecha: fechaChile.format("DD/MM/YYYY"),
         hora: fechaChile.format("HH:mm"),
+        direccion: reserva.empresa?.direccion || null, // ✅ agregar esto
       },
     };
   }
@@ -65,7 +63,6 @@ class RecordatoriosJob {
           tipo,
           instrucciones: reserva.servicio?.instrucciones ?? null,
         });
-      
       } catch (err) {
         console.error(`❌ Error email ${cliente.email}:`, err.message);
       }
@@ -98,9 +95,7 @@ class RecordatoriosJob {
       })
         .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre");
-
-    
+        .populate("empresa", "nombre direccion"); // ✅
 
       for (const reserva of reservas) {
         try {
@@ -123,7 +118,6 @@ class RecordatoriosJob {
             fechaRecordatorio: new Date(),
           });
 
-         
           await new Promise((r) => setTimeout(r, 500));
         } catch (error) {
           console.error(
@@ -153,9 +147,7 @@ class RecordatoriosJob {
       })
         .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre");
-
-    
+        .populate("empresa", "nombre direccion")  // ✅
 
       for (const reserva of reservas) {
         try {
@@ -172,7 +164,6 @@ class RecordatoriosJob {
           );
 
           if (!yaActualizada) {
-          
             continue;
           }
 
@@ -184,7 +175,7 @@ class RecordatoriosJob {
             reserva,
             true,
           );
-         
+
           await new Promise((r) => setTimeout(r, 500));
         } catch (error) {
           console.error(
