@@ -632,9 +632,14 @@ export const postDeleteReserva = async (req, res) => {
         const fechaReservaChile = dayjs(existeReserva.fecha).tz(
           "America/Santiago",
         );
-        const horasRestantes = fechaReservaChile.diff(ahoraChile, "hour", true);
 
-        if (horasRestantes < politica.horasLimite) {
+        const limiteCancelacion = fechaReservaChile.subtract(
+          politica.horasLimite,
+          "hour",
+        );
+
+        // 🔥 CLAVE: comparar fechas directamente (más limpio)
+        if (ahoraChile.isAfter(limiteCancelacion)) {
           return res.status(403).json({
             message:
               politica.mensajePolitica ||

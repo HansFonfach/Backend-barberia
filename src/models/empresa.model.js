@@ -16,7 +16,7 @@ const EmpresaSchema = new mongoose.Schema({
   tipo: {
     type: String,
     required: true,
-    enum: ["barberia", "peluqueria", "salon_belleza", "spa", "centro_estetica"],
+    enum: ["barberia", "peluqueria", "salon_belleza", "spa", "centro_estetica" ,"otros"],
   },
   estado: {
     type: String,
