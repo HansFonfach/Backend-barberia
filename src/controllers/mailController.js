@@ -112,7 +112,10 @@ export const sendGuestReservationEmail = async (to, data) => {
     servicio,
     cancelUrl,
     instrucciones,
-  } = data; // 👈
+    permiteCancelacion, // ✅ nuevo
+    horasLimite, // ✅ nuevo
+  } = data;
+
   return await sendBaseEmail({
     to,
     subject: "Reserva confirmada – Agenda Fonfach",
@@ -126,19 +129,30 @@ export const sendGuestReservationEmail = async (to, data) => {
           ? `
         <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
           <p style="margin:0 0 8px;font-weight:bold;color:#555;">📋 Instrucciones para tu cita:</p>
-         <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;text-align:justify;">${instrucciones}</p>
+          <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;text-align:justify;">${instrucciones}</p>
         </div>
       `
           : ""
       }
 
-      <p style="color:#555;font-size:14px;">Puedes cancelar hasta <strong>3 horas antes</strong> del horario agendado.</p>
-      ${ctaButton(cancelUrl, "Cancelar mi reserva", "#c0392b")}
-      <p style="font-size:12px;color:#aaa;">Este enlace es personal y expira automáticamente.</p>
+      ${
+        permiteCancelacion && cancelUrl
+          ? `
+        <p style="color:#555;font-size:14px;">
+          Puedes cancelar hasta <strong>${horasLimite} hora${horasLimite !== 1 ? "s" : ""} antes</strong> del horario agendado.
+        </p>
+        ${ctaButton(cancelUrl, "Cancelar mi reserva", "#c0392b")}
+        <p style="font-size:12px;color:#aaa;">Este enlace es personal y expira automáticamente.</p>
+      `
+          : `
+        <p style="color:#555;font-size:14px;">Esta reserva no admite cancelaciones.</p>
+      `
+      }
     `),
-    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}\n\nCancelar reserva (hasta 3h antes):\n${cancelUrl}`,
+    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${permiteCancelacion && cancelUrl ? `\n\nCancelar reserva (hasta ${horasLimite}h antes):\n${cancelUrl}` : "\n\nEsta reserva no admite cancelaciones."}`,
   });
 };
+
 
 export const sendCancelReservationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora, servicio, motivo } = data;

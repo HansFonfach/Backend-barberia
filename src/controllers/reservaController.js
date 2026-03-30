@@ -466,12 +466,44 @@ export const createReserva = async (req, res) => {
       horaFin: finReservaChile.format("HH:mm"),
     };
 
+    // ✅ Solo enviar emails si la hora NO ha pasado
+    const horaYaPaso = inicioReservaChile.isBefore(ahoraChile);
+
+    if (!horaYaPaso) {
+      if (req.crearTokenCancelacion && cancelToken) {
+        sendGuestReservationEmail(clienteDoc.email, {
+          ...emailData,
+          instrucciones: barberoServicio.servicio.instrucciones ?? null,
+          cancelUrl: `www.agendafonfach.cl/${empresaDoc.slug}/cancelar-reserva-invitado?token=${cancelToken}`,
+          permiteCancelacion:
+            empresaDoc.politicaCancelacion?.permiteCancelacion ?? true,
+          horasLimite: empresaDoc.politicaCancelacion?.horasLimite ?? 24,
+        }).catch(console.error);
+      } else {
+        sendReservationEmail(clienteDoc.email, {
+          ...emailData,
+          instrucciones: barberoServicio.servicio.instrucciones ?? null,
+        }).catch(console.error);
+      }
+    }
+
+    // Email al barbero — siempre, independiente de si la hora pasó
+    if (empresaDoc?.envioNotificacionReserva && barberoDoc?.email) {
+      sendProfesionalNewReservationEmail(barberoDoc.email, {
+        ...emailData,
+        nombreBarbero: barberoDoc.nombre,
+      }).catch(console.error);
+    }
+
     // Email al cliente
     if (req.crearTokenCancelacion && cancelToken) {
       sendGuestReservationEmail(clienteDoc.email, {
         ...emailData,
         instrucciones: barberoServicio.servicio.instrucciones ?? null,
         cancelUrl: `www.agendafonfach.cl/${empresaDoc.slug}/cancelar-reserva-invitado?token=${cancelToken}`,
+        permiteCancelacion:
+          empresaDoc.politicaCancelacion?.permiteCancelacion ?? true, // ✅
+        horasLimite: empresaDoc.politicaCancelacion?.horasLimite ?? 24, // ✅
       }).catch(console.error);
     } else {
       sendReservationEmail(clienteDoc.email, {
@@ -570,15 +602,47 @@ export const postDeleteReserva = async (req, res) => {
         .json({ message: "La reserva ya se encuentra cancelada." });
     }
 
-    // 1️⃣ Cancelar reserva
+    // 1️⃣ Cargar empresa (movido arriba para usar en política)
+    const empresaDoc = await empresaModel.findById(existeReserva.empresa);
+
+    // 2️⃣ Validar política de cancelación (solo para clientes e invitados)
+    const rolUsuario = req.usuario?.rol;
+    const esClienteOInvitado = !rolUsuario || rolUsuario === "cliente";
+
+    if (esClienteOInvitado) {
+      const politica = empresaDoc?.politicaCancelacion;
+
+      if (politica?.permiteCancelacion === false) {
+        return res.status(403).json({
+          message:
+            politica.mensajePolitica ||
+            "Esta empresa no permite cancelaciones.",
+        });
+      }
+
+      if (politica?.horasLimite > 0) {
+        const ahoraChile = dayjs().tz("America/Santiago");
+        const fechaReservaChile = dayjs(existeReserva.fecha).tz(
+          "America/Santiago",
+        );
+        const horasRestantes = fechaReservaChile.diff(ahoraChile, "hour", true);
+
+        if (horasRestantes < politica.horasLimite) {
+          return res.status(403).json({
+            message:
+              politica.mensajePolitica ||
+              `No puedes cancelar con menos de ${politica.horasLimite} horas de anticipación.`,
+          });
+        }
+      }
+    }
+
+    // 3️⃣ Cancelar reserva
     existeReserva.estado = "cancelada";
     existeReserva.motivoCancelacion = motivo || "Cancelada por el usuario";
     await existeReserva.save();
 
-    // 2️⃣ Cargar empresa
-    const empresaDoc = await empresaModel.findById(existeReserva.empresa);
-
-    // 3️⃣ Datos compartidos para emails
+    // 4️⃣ Datos compartidos para emails
     const emailCliente =
       existeReserva.cliente?.email || existeReserva.invitado?.email;
     const nombreCliente =
@@ -603,7 +667,7 @@ export const postDeleteReserva = async (req, res) => {
       motivo: existeReserva.motivoCancelacion,
     };
 
-    // 4️⃣ Email al cliente
+    // 5️⃣ Email al cliente
     if (emailCliente) {
       sendCancelReservationEmail(emailCliente, emailData).catch((error) =>
         console.error(
@@ -613,7 +677,7 @@ export const postDeleteReserva = async (req, res) => {
       );
     }
 
-    // 5️⃣ Email al barbero — solo si la empresa tiene activada la notificación
+    // 6️⃣ Email al barbero — solo si la empresa tiene activada la notificación
     if (empresaDoc?.envioNotificacionReserva && existeReserva.barbero?.email) {
       sendProfesionalCancelReservationEmail(
         existeReserva.barbero.email,
@@ -626,8 +690,7 @@ export const postDeleteReserva = async (req, res) => {
       );
     }
 
-    // 6️⃣ Notificar lista de espera
-    // 6️⃣ Notificar lista de espera
+    // 7️⃣ Notificar lista de espera
     const fechaInicio = new Date(existeReserva.fecha);
     fechaInicio.setSeconds(0, 0);
     const fechaFin = new Date(existeReserva.fecha);
@@ -662,7 +725,7 @@ export const postDeleteReserva = async (req, res) => {
             const result = await sendWaitlistNotificationEmail(
               noti.emailInvitado,
               {
-                nombreCliente: "Cliente", // no tenemos nombre del invitado
+                nombreCliente: "Cliente",
                 nombreBarbero: barbero?.nombre || "Tu barbero",
                 fecha: fechaFormateadaNoti,
                 hora: horaFormateadaNoti,
@@ -682,7 +745,7 @@ export const postDeleteReserva = async (req, res) => {
           return;
         }
 
-        // ✅ USUARIO REGISTRADO: lógica original
+        // ✅ USUARIO REGISTRADO
         const usuario = noti.usuarioId;
         if (!usuario?.email) return;
 
@@ -724,6 +787,7 @@ export const postDeleteReserva = async (req, res) => {
       .json({ message: "Error del servidor al eliminar la reserva." });
   }
 };
+
 export const getReservasActivas = async (req, res) => {
   try {
     const { userId } = req.params;
