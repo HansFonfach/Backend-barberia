@@ -14,15 +14,12 @@ class RecordatoriosJob {
   init() {
     // ✅ Corre cada 15 minutos
     cron.schedule("*/15 * * * *", async () => {
-      console.log(
-        "🔔 Verificando recordatorios...",
-        dayjs().tz("America/Santiago").format("HH:mm"),
-      );
+    
       await this.enviarRecordatorios24h();
       await this.enviarRecordatorios3h();
     });
 
-    console.log("✅ Job de recordatorios iniciado");
+   
   }
 
   /* =============================
@@ -68,7 +65,7 @@ class RecordatoriosJob {
           tipo,
           instrucciones: reserva.servicio?.instrucciones ?? null,
         });
-        console.log("📧 Respuesta Resend:", resEmail);
+      
       } catch (err) {
         console.error(`❌ Error email ${cliente.email}:`, err.message);
       }
@@ -179,7 +176,7 @@ class RecordatoriosJob {
           );
 
           if (!yaActualizada) {
-            console.log(`⚠️ Reserva ${reserva._id} ya procesada, saltando...`);
+          
             continue;
           }
 
@@ -191,7 +188,7 @@ class RecordatoriosJob {
             reserva,
             true,
           );
-          console.log(`✅ Recordatorio 3h enviado — ${cliente.nombre}`);
+         
           await new Promise((r) => setTimeout(r, 500));
         } catch (error) {
           console.error(

@@ -18,12 +18,12 @@ export const detectarRecordatorios = async () => {
 
   for (const s of stats) {
     if (!s.servicio) {
-      console.log(`⚠️ Servicio inactivo o sin recordatorio: ${s._id}`);
+    
       continue;
     }
 
     if (!s.empresa) {
-      console.log(`⚠️ Empresa sin retención activa: ${s._id}`);
+    
       continue;
     }
 
