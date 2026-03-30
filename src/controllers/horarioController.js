@@ -480,7 +480,7 @@ export const getHorasDisponibles = async (req, res) => {
 
       const ahora = dayjs().tz("America/Santiago");
 
-      console.log(inicio, ahora);
+
 
       // En el reduce, cambia esto:
 
@@ -542,7 +542,7 @@ export const createHorario = async (req, res) => {
       });
     }
 
-    console.log("📥 body recibido:", JSON.stringify(req.body, null, 2));
+ 
 
     let horario = await Horario.findOne({ barbero, diaSemana });
 

@@ -10,9 +10,9 @@ import ClienteServicioStats from "../models/clienteServicioStats.model.js";
 
 // Lógica central reutilizable
 const procesarRecordatorios = async () => {
-  console.log("🔍 Buscando clientes...");
+ 
   const clientes = await detectarRecordatorios();
-  console.log(`📊 Clientes encontrados: ${clientes.length}`); // ← agrega esto
+
 
   let enviados = 0,
     errores = 0;
@@ -27,19 +27,14 @@ const procesarRecordatorios = async () => {
         c.empresa,
       );
 
-      console.log(
-        `📨 Enviando recordatorio a: ${c.cliente?.nombre} (${c.cliente?.email})`,
-      );
+   
 
       await sendRetentionEmail(c.cliente.email, {
         ...mensaje,
         nombreEmpresa: c.empresa?.nombre,
       });
 
-      console.log(
-        `✅ Enviado a: ${c.cliente?.email} | Servicio: ${c.servicio?.nombre}`,
-      );
-
+  
       c.ultimaNotificacion = new Date();
       await c.save();
       enviados++;
@@ -66,7 +61,7 @@ const init = () => {
   );
 
   // Disparo inmediato para verificar que funciona
-  console.log("🚀 Ejecutando primer ciclo al arrancar...");
+ 
   procesarRecordatorios().then((r) =>
     console.log(`Primer ciclo: ${r.enviados} enviados, ${r.errores} errores`),
   );

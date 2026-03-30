@@ -88,7 +88,7 @@ class WhatsAppService {
         return { success: false, error: data };
       }
 
-      console.log(`✅ Recordatorio enviado a ${telefonoFormateado}`);
+   
       return { success: true, data };
     } catch (error) {
       console.error("❌ Error enviando WhatsApp:", error.message);

@@ -100,9 +100,7 @@ class RecordatoriosJob {
         .populate("barbero", "nombre apellido")
         .populate("empresa", "nombre");
 
-      console.log(
-        `📋 Recordatorios 24h: ${reservas.length} reservas encontradas`,
-      );
+    
 
       for (const reserva of reservas) {
         try {
@@ -125,7 +123,7 @@ class RecordatoriosJob {
             fechaRecordatorio: new Date(),
           });
 
-          console.log(`✅ Recordatorio 24h enviado — ${cliente.nombre}`);
+         
           await new Promise((r) => setTimeout(r, 500));
         } catch (error) {
           console.error(
@@ -157,9 +155,7 @@ class RecordatoriosJob {
         .populate("barbero", "nombre apellido")
         .populate("empresa", "nombre");
 
-      console.log(
-        `📋 Recordatorios 3h: ${reservas.length} reservas encontradas`,
-      );
+    
 
       for (const reserva of reservas) {
         try {

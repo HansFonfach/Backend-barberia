@@ -175,14 +175,14 @@ export const obtenerExcepcionesPorDia = async (req, res) => {
 
 export const crearBloqueoVacaciones = async (req, res) => {
   const { barbero, fechaInicio, fechaFin, motivo } = req.body;
-  console.log(fechaInicio, fechaFin);
+ 
 
   if (!barbero || !fechaInicio || !fechaFin) {
     return res.status(400).json({
       message: "barbero, fechaInicio y fechaFin son requeridos",
     });
   }
-  console.log(fechaInicio, fechaFin);
+ 
 
   try {
     // Convertir fecha Chile → UTC
