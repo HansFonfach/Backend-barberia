@@ -182,12 +182,51 @@ export const getHorasDisponibles = async (req, res) => {
       }
 
       // Hay horas extra habilitadas, mostrar solo esas
+      // ✅ REEMPLAZA CON ESTO
       const horasHabilitadas = excepcionesFeriado.map((e) => e.horaInicio);
 
-      const horas = horasHabilitadas.sort().map((hora) => ({
-        hora,
-        estado: "disponible",
-      }));
+      const inicioBusqueda = fechaConsulta
+        .startOf("day")
+        .subtract(4, "hour")
+        .utc()
+        .toDate();
+      const finBusqueda = fechaConsulta
+        .endOf("day")
+        .add(4, "hour")
+        .utc()
+        .toDate();
+
+      const reservas = await Reserva.find({
+        barbero: barberoId,
+        fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
+        estado: { $in: ["pendiente", "confirmada"] },
+      });
+
+      const horasReservadas = new Set(
+        reservas.map((r) =>
+          dayjs(r.fecha).tz("America/Santiago").format("HH:mm"),
+        ),
+      );
+
+      const ahora = dayjs().tz("America/Santiago");
+      const esPrivilegiado =
+        req.usuario?.rol === "barbero" || req.usuario?.rol === "admin";
+
+      const horas = horasHabilitadas
+        .sort()
+        .filter((hora) => {
+          const inicio = dayjs.tz(
+            `${fecha} ${hora}`,
+            "YYYY-MM-DD HH:mm",
+            "America/Santiago",
+          );
+          if (!esPrivilegiado && inicio.isBefore(ahora)) return false;
+          return true;
+        })
+        .map((hora) => ({
+          hora,
+          estado: horasReservadas.has(hora) ? "reservada" : "disponible",
+        }));
 
       return res.json({
         fecha,
@@ -480,8 +519,6 @@ export const getHorasDisponibles = async (req, res) => {
 
       const ahora = dayjs().tz("America/Santiago");
 
-
-
       // En el reduce, cambia esto:
 
       const esPrivilegiado = rolUsuario === "barbero" || rolUsuario === "admin";
@@ -541,8 +578,6 @@ export const createHorario = async (req, res) => {
         message: "Faltan campos obligatorios",
       });
     }
-
- 
 
     let horario = await Horario.findOne({ barbero, diaSemana });
 
