@@ -3,10 +3,11 @@ import clienteServicioStatsModel from "../models/clienteServicioStats.model.js";
 export const detectarRecordatorios = async () => {
   const hoy = new Date();
 
-  const stats = await clienteServicioStatsModel.find({
-    ultimaReserva: { $ne: null },
-    promedioDias: { $gt: 0 },
-  })
+  const stats = await clienteServicioStatsModel
+    .find({
+      ultimaReserva: { $ne: null },
+      promedioDias: { $gt: 0 },
+    })
     .populate({ path: "servicio", match: { recordatorioActivo: true } })
     .populate("cliente")
     .populate({
@@ -30,7 +31,8 @@ export const detectarRecordatorios = async () => {
       (hoy - new Date(s.ultimaReserva)) / (1000 * 60 * 60 * 24);
 
     const diasObjetivo =
-      s.servicio.diasRecomendadosRepeticion || s.promedioDias;
+      s.servicio.diasRecomendadosRepeticion || s.promedioDias || 15;
+
 
     if (!diasObjetivo) continue;
     if (diasDesdeUltima < diasObjetivo) continue;
