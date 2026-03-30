@@ -296,9 +296,9 @@ export const sendProfesionalNewReservationEmail = async (to, data) => {
     html: layout(`
       <h2 style="margin-top:0;">Nueva Reserva 🗓️</h2>
       <p>Hola <strong>${nombreBarbero}</strong>, tienes una nueva reserva.</p>
-      ${detalles({ nombreBarbero: nombreCliente, servicio, fecha, hora, labelProfesional: "Cliente" })}
+      ${detalles({ nombreBarbero: nombreCliente, servicio, fecha, hora, direccion, labelProfesional: "Cliente" })}
     `),
-    text: `Nueva reserva\n\nHola ${nombreBarbero}\n\nCliente: ${nombreCliente}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}`,
+    text: `Nueva reserva\n\nHola ${nombreBarbero}\n\nCliente: ${nombreCliente}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora} \nDirección: ${direccion}`,
   });
 };
 
