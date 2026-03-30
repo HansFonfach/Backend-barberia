@@ -65,6 +65,7 @@ const detalles = ({
   servicio,
   fecha,
   hora,
+  direccion,
   labelProfesional = "Profesional",
 }) => `
   <table cellpadding="8" cellspacing="0" border="0" width="100%"
@@ -73,6 +74,7 @@ const detalles = ({
     <tr><td style="font-size:14px;color:#555;">Servicio</td><td style="font-weight:bold;">${servicio}</td></tr>
     <tr><td style="font-size:14px;color:#555;">Fecha</td><td style="font-weight:bold;">${fecha}</td></tr>
     <tr><td style="font-size:14px;color:#555;">Hora</td><td style="font-weight:bold;">${hora}</td></tr>
+    <tr><td style="font-size:14px;color:#555;">Dirección</td><td style="font-weight:bold;">${direccion}</td></tr>
   </table>`;
 
 export const sendReservationEmail = async (to, data) => {
@@ -152,7 +154,6 @@ export const sendGuestReservationEmail = async (to, data) => {
     text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${permiteCancelacion && cancelUrl ? `\n\nCancelar reserva (hasta ${horasLimite}h antes):\n${cancelUrl}` : "\n\nEsta reserva no admite cancelaciones."}`,
   });
 };
-
 
 export const sendCancelReservationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora, servicio, motivo } = data;
