@@ -357,8 +357,6 @@ export const createReserva = async (req, res) => {
        HORAS PASADAS
     ============================== */
     if (rolUsuario !== "barbero") {
-    
-
       // ✅ correcto de verdad:
       const limiteMinimoSeguro = ahoraChile.add(30, "minute");
 
@@ -472,9 +470,13 @@ export const createReserva = async (req, res) => {
     };
 
     // ✅ Solo enviar emails si la hora NO ha pasado
-    const horaYaPaso = inicioReservaChile.isBefore(ahoraChile);
+    const limiteMinimoSeguro = ahoraChile.add(30, "minute");
 
-    if (!horaYaPaso) {
+    const horaNoValidaParaEmail =
+      inicioReservaChile.isSame(ahoraChile, "day") &&
+      inicioReservaChile.isBefore(limiteMinimoSeguro);
+
+    if (!horaNoValidaParaEmail) {
       if (req.crearTokenCancelacion && cancelToken) {
         sendGuestReservationEmail(clienteDoc.email, {
           ...emailData,
