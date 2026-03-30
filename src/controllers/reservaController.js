@@ -357,9 +357,14 @@ export const createReserva = async (req, res) => {
        HORAS PASADAS
     ============================== */
     if (rolUsuario !== "barbero") {
+    
+
+      // ✅ correcto de verdad:
+      const limiteMinimoSeguro = ahoraChile.add(30, "minute");
+
       if (
         inicioReservaChile.isSame(ahoraChile, "day") &&
-        inicioReservaChile.isBefore(ahoraChile.add(30, "minute"))
+        inicioReservaChile.isBefore(limiteMinimoSeguro)
       ) {
         return res.status(400).json({
           message:
