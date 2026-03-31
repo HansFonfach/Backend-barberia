@@ -23,6 +23,7 @@ import isSameOrBefore from "dayjs/plugin/isSameOrBefore.js";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter.js";
 import notificacionModel from "../models/notificacion.Model.js";
 import { actualizarClienteServicioStats } from "../helpers/actualizarClienteServicioStats.js";
+import WhatsappService from "../services/whatsappService.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -503,7 +504,7 @@ export const createReserva = async (req, res) => {
     }
 
     if (empresaDoc?.envioNotificacionReserva && barberoDoc?.telefono) {
-      whatsappService.enviarNotificacionProfesional({
+      WhatsappService.enviarNotificacionProfesional({
         telefono: barberoDoc.telefono,
         nombreProfesional: barberoDoc.nombre,
         nombreCliente: clienteDoc.nombre,
@@ -693,7 +694,7 @@ export const postDeleteReserva = async (req, res) => {
     }
 
     if (existeReserva.barbero?.telefono) {
-      WhatsAppService.enviarNotificacionProfesional({
+      WhatsappService.enviarNotificacionProfesional({
         telefono: existeReserva.barbero.telefono,
         nombreProfesional: existeReserva.barbero.nombre,
         nombreCliente,
