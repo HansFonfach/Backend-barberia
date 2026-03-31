@@ -503,7 +503,7 @@ export const createReserva = async (req, res) => {
     }
 
     if (empresaDoc?.envioNotificacionReserva && barberoDoc?.telefono) {
-      WhatsAppService.enviarNotificacionProfesional({
+      whatsappService.enviarNotificacionProfesional({
         telefono: barberoDoc.telefono,
         nombreProfesional: barberoDoc.nombre,
         nombreCliente: clienteDoc.nombre,
