@@ -501,6 +501,20 @@ export const createReserva = async (req, res) => {
         nombreBarbero: barberoDoc.nombre,
       }).catch(console.error);
     }
+
+    if (empresaDoc?.envioNotificacionReserva && barberoDoc?.telefono) {
+      WhatsAppService.enviarNotificacionProfesional({
+        telefono: barberoDoc.telefono,
+        nombreProfesional: barberoDoc.nombre,
+        nombreCliente: clienteDoc.nombre,
+        fecha,
+        hora: horaFormateada,
+        servicio: nombreServicio,
+        plantilla: "notificacion_reserva", // ← esto
+      }).catch((err) =>
+        console.error(`❌ Error WhatsApp barbero nueva reserva:`, err.message),
+      );
+    }
   } catch (error) {
     console.error("❌ Error createReserva:", error);
     res.status(500).json({ message: "Error al crear la reserva" });
@@ -569,7 +583,7 @@ export const postDeleteReserva = async (req, res) => {
 
     const existeReserva = await Reserva.findById(id)
       .populate("cliente")
-      .populate("barbero")
+      .populate("barbero", "nombre email telefono")
       .populate("servicio");
 
     if (!existeReserva) {
@@ -675,6 +689,19 @@ export const postDeleteReserva = async (req, res) => {
           "❌ Error enviando notificación al barbero:",
           error.message,
         ),
+      );
+    }
+
+    if (existeReserva.barbero?.telefono) {
+      WhatsAppService.enviarNotificacionProfesional({
+        telefono: existeReserva.barbero.telefono,
+        nombreProfesional: existeReserva.barbero.nombre,
+        nombreCliente,
+        fecha: fechaFormateada,
+        hora: horaFormateada,
+        servicio: existeReserva.servicio?.nombre || "Servicio",
+      }).catch((err) =>
+        console.error(`❌ Error WhatsApp barbero:`, err.message),
       );
     }
 
@@ -912,5 +939,198 @@ export const updateMarcarNoAsistioReserva = async (req, res) => {
     return res.status(500).json({
       message: "Error del servidor al actualizar la reserva.",
     });
+  }
+};
+
+export const responderConfirmacionAsistencia = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { respuesta } = req.query; // "confirma" o "cancela"
+
+    // Validar respuesta
+    if (!["confirma", "cancela"].includes(respuesta)) {
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/confirmacion-resultado?error=invalido`,
+      );
+    }
+
+    // Buscar reserva por token
+    const reserva = await Reserva.findOne({
+      "confirmacionAsistencia.token": token,
+    })
+      .populate("cliente", "nombre email telefono")
+      .populate("barbero", "nombre apellido email")
+      .populate("servicio", "nombre")
+      .populate("empresa");
+
+    if (!reserva) {
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/confirmacion-resultado?error=token`,
+      );
+    }
+
+    // Ya respondió antes
+    if (reserva.confirmacionAsistencia.respondida) {
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/confirmacion-resultado?respuesta=${reserva.confirmacionAsistencia.respuesta}&ya_respondida=true`,
+      );
+    }
+
+    // La reserva ya ocurrió
+    if (reserva.fecha < new Date()) {
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/confirmacion-resultado?error=expirado`,
+      );
+    }
+
+    // Marcar como respondida
+    reserva.confirmacionAsistencia.respondida = true;
+    reserva.confirmacionAsistencia.respuesta = respuesta;
+    reserva.confirmacionAsistencia.respondidaEn = new Date();
+    reserva.confirmacionUsuario = true;
+    reserva.fechaConfirmacion = new Date();
+
+    // ── CONFIRMA ──────────────────────────────────────────
+    if (respuesta === "confirma") {
+      reserva.estado = "confirmada";
+      await reserva.save();
+
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/confirmacion-resultado?respuesta=confirma`,
+      );
+    }
+
+    // ── CANCELA ───────────────────────────────────────────
+    if (respuesta === "cancela") {
+      // Validar política de cancelación
+      const empresaDoc = reserva.empresa;
+      const politica = empresaDoc?.politicaCancelacion;
+
+      if (politica?.permiteCancelacion === false) {
+        return res.redirect(
+          `${process.env.FRONTEND_URL}/confirmacion-resultado?error=politica`,
+        );
+      }
+
+      if (politica?.horasLimite > 0) {
+        const ahoraChile = dayjs().tz("America/Santiago");
+        const fechaReservaChile = dayjs(reserva.fecha).tz("America/Santiago");
+        const limiteCancelacion = fechaReservaChile.subtract(
+          politica.horasLimite,
+          "hour",
+        );
+
+        if (ahoraChile.isAfter(limiteCancelacion)) {
+          return res.redirect(
+            `${process.env.FRONTEND_URL}/confirmacion-resultado?error=politica`,
+          );
+        }
+      }
+
+      reserva.estado = "cancelada";
+      reserva.motivoCancelacion = "Cancelada por el cliente desde recordatorio";
+      await reserva.save();
+
+      // Email al cliente
+      const emailCliente = reserva.cliente?.email || reserva.invitado?.email;
+      const nombreCliente = reserva.cliente?.nombre || reserva.invitado?.nombre;
+      const fechaChile = dayjs(reserva.fecha).tz("America/Santiago");
+
+      const emailData = {
+        nombreCliente,
+        nombreBarbero:
+          `${reserva.barbero?.nombre} ${reserva.barbero?.apellido || ""}`.trim(),
+        fecha: fechaChile.format("DD/MM/YYYY"),
+        hora: fechaChile.format("HH:mm"),
+        servicio: reserva.servicio?.nombre || "Servicio",
+        motivo: "Cancelada por el cliente desde el recordatorio",
+        direccion: empresaDoc?.direccion || null,
+      };
+
+      if (emailCliente) {
+        sendCancelReservationEmail(emailCliente, emailData).catch((err) =>
+          console.error("❌ Email cancelación:", err.message),
+        );
+      }
+
+      // Email al barbero (si la empresa tiene notificaciones activas)
+      if (empresaDoc?.envioNotificacionReserva && reserva.barbero?.email) {
+        sendProfesionalCancelReservationEmail(
+          reserva.barbero.email,
+          emailData,
+        ).catch((err) => console.error("❌ Email barbero:", err.message));
+      }
+
+      // Notificar lista de espera — reutilizando tu lógica existente
+      const fechaInicio = new Date(reserva.fecha);
+      fechaInicio.setSeconds(0, 0);
+      const fechaFin = new Date(reserva.fecha);
+      fechaFin.setSeconds(59, 999);
+
+      const notificaciones = await notificacionModel
+        .find({
+          barberoId: reserva.barbero._id,
+          fecha: { $gte: fechaInicio, $lte: fechaFin },
+          enviado: false,
+        })
+        .populate("usuarioId")
+        .populate("barberoId");
+
+      await Promise.all(
+        notificaciones.map(async (noti) => {
+          const barbero = noti.barberoId;
+          const fechaNoti = dayjs(noti.fecha).tz("America/Santiago");
+
+          const datosNoti = {
+            nombreBarbero: barbero?.nombre || "Tu profesional",
+            fecha: fechaNoti.format("DD/MM/YYYY"),
+            hora: fechaNoti.format("HH:mm"),
+          };
+
+          try {
+            // Invitado
+            if (noti.esInvitado && noti.emailInvitado) {
+              const result = await sendWaitlistNotificationEmail(
+                noti.emailInvitado,
+                {
+                  nombreCliente: "Cliente",
+                  ...datosNoti,
+                },
+              );
+              if (!result?.error) {
+                noti.enviado = true;
+                await noti.save();
+              }
+              return;
+            }
+
+            // Registrado
+            const usuario = noti.usuarioId;
+            if (!usuario?.email) return;
+
+            const result = await sendWaitlistNotificationEmail(usuario.email, {
+              nombreCliente: usuario.nombre,
+              ...datosNoti,
+            });
+
+            if (!result?.error) {
+              noti.enviado = true;
+              await noti.save();
+            }
+          } catch (err) {
+            console.error(`❌ Error lista de espera:`, err.message);
+          }
+        }),
+      );
+
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/confirmacion-resultado?respuesta=cancela`,
+      );
+    }
+  } catch (error) {
+    console.error("❌ Error en confirmación asistencia:", error);
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/confirmacion-resultado?error=servidor`,
+    );
   }
 };

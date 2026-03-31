@@ -104,19 +104,32 @@ class RecordatoriosJob {
 
           const { cliente, datos } = resultado;
 
-          // ❌ SIN WhatsApp
-          await this.enviarPorTodosLosCanales(
-            cliente,
-            datos,
-            "24h",
-            reserva,
-            false,
-          );
+          // Generar token de confirmación
+          const token = crypto.randomUUID();
+          const baseUrl =
+            process.env.FRONTEND_URL || "https://www.agendafonfach.cl";
 
           await Reserva.findByIdAndUpdate(reserva._id, {
             recordatorioEnviado: true,
             fechaRecordatorio: new Date(),
+            confirmacionAsistenciaEnviada: true,
+            "confirmacionAsistencia.solicitada": true,
+            "confirmacionAsistencia.token": token,
+            "confirmacionAsistencia.enviadaEn": new Date(),
           });
+
+          // Pasar los URLs al email
+          await this.enviarPorTodosLosCanales(
+            cliente,
+            {
+              ...datos,
+              confirmarUrl: `${baseUrl}/confirmacion/${token}?respuesta=confirma`,
+              cancelarUrl: `${baseUrl}/confirmacion/${token}?respuesta=cancela`,
+            },
+            "24h",
+            reserva,
+            false,
+          );
 
           await new Promise((r) => setTimeout(r, 500));
         } catch (error) {
@@ -147,7 +160,7 @@ class RecordatoriosJob {
       })
         .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre direccion")  // ✅
+        .populate("empresa", "nombre direccion"); // ✅
 
       for (const reserva of reservas) {
         try {

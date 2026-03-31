@@ -235,6 +235,7 @@ export const getHorasDisponibles = async (req, res) => {
         nombreFeriado: feriado.nombre,
         mensaje: `Feriado: ${feriado.nombre}. Horas habilitadas por el barbero.`,
       });
+      
     }
 
     /* ================= BARBERO ================= */

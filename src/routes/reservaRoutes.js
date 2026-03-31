@@ -8,6 +8,7 @@ import {
   getReservasActivas,
   getReservasPorFechaBarbero,
   updateMarcarNoAsistioReserva,
+  responderConfirmacionAsistencia,
 } from "../controllers/reservaController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 import { optionalAuth } from "../middlewares/optionalAuth.js";
@@ -21,6 +22,7 @@ router.get("/", validarToken, getReservas);
 router.get("/barbero", validarToken, getReservasByBarberId);
 router.get("/:id", validarToken, getReservasByUserId);
 router.get("/activas/:userId", getReservasActivas);
+router.get("/confirmacion/:token", responderConfirmacionAsistencia);
 
 
 router.get("/barbero/por-fecha", validarToken, getReservasPorFechaBarbero);

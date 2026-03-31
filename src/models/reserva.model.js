@@ -105,6 +105,16 @@ const ReservaSchema = new Schema(
     },
     recordatorioEnviado: { type: Boolean, default: false }, // 24h — ya existe
     recordatorio3hEnviado: { type: Boolean, default: false }, // 3h — agregar esto
+
+    confirmacionAsistencia: {
+      solicitada: { type: Boolean, default: false },
+      respondida: { type: Boolean, default: false },
+      respuesta: { type: String, enum: ["confirma", "cancela"], default: null },
+      token: { type: String, default: null }, // para el link del correo
+      enviadaEn: { type: Date },
+      respondidaEn: { type: Date },
+    },
+    confirmacionAsistenciaEnviada: { type: Boolean, default: false }, // flag para el cron
   },
 
   { timestamps: true },
