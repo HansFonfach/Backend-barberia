@@ -507,7 +507,7 @@ export const createReserva = async (req, res) => {
       WhatsappService.enviarNotificacionProfesional({
         telefono: barberoDoc.telefono,
         nombreProfesional: barberoDoc.nombre,
-        nombreCliente: clienteDoc.nombre,
+        nombreCliente: `${clienteDoc.nombre} ${clienteDoc.apellido}`,
         fecha,
         hora: horaFormateada,
         servicio: nombreServicio,
@@ -697,7 +697,7 @@ export const postDeleteReserva = async (req, res) => {
       WhatsappService.enviarNotificacionProfesional({
         telefono: existeReserva.barbero.telefono,
         nombreProfesional: existeReserva.barbero.nombre,
-        nombreCliente,
+        nombreCliente: `${clienteDoc.nombre} ${clienteDoc.apellido}`,
         fecha: fechaFormateada,
         hora: horaFormateada,
         servicio: existeReserva.servicio?.nombre || "Servicio",
