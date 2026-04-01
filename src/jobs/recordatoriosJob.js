@@ -6,14 +6,18 @@ import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
 import { sendReminderEmail } from "../controllers/mailController.js";
 import WhatsAppService from "../services/whatsappService.js";
+import crypto from "crypto";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
 class RecordatoriosJob {
   init() {
-    // ✅ Corre cada 15 minutos
+    console.log("🚀 Iniciando CRON de recordatorios...");
+
     cron.schedule("*/15 * * * *", async () => {
+      console.log("⏰ Ejecutando CRON:", new Date().toISOString());
+
       await this.enviarRecordatorios24h();
       await this.enviarRecordatorios3h();
     });
@@ -24,9 +28,13 @@ class RecordatoriosJob {
   ============================== */
   async obtenerDatosReserva(reserva) {
     const cliente = await Usuario.findById(reserva.cliente).select(
-      "nombre email telefono",
+      "nombre email telefono"
     );
-    if (!cliente) return null;
+
+    if (!cliente) {
+      console.warn("⚠️ Cliente no encontrado:", reserva._id);
+      return null;
+    }
 
     const fechaChile = dayjs(reserva.fecha).tz("America/Santiago");
 
@@ -40,53 +48,78 @@ class RecordatoriosJob {
         servicio: reserva.servicio?.nombre || "Servicio",
         fecha: fechaChile.format("DD/MM/YYYY"),
         hora: fechaChile.format("HH:mm"),
-        direccion: reserva.empresa?.direccion || null, // ✅ agregar esto
+        direccion: reserva.empresa?.direccion || null,
         horasLimite: reserva.empresa?.politicaCancelacion?.horasLimite ?? null,
-        telefonoEmpresa: reserva.empresa?.telefono ?? null, // ← de empresa, no barbero
+        telefonoEmpresa: reserva.empresa?.telefono ?? null,
       },
     };
   }
 
   /* =============================
-     ENVIAR POR EMAIL + WHATSAPP (controlado)
+     ENVIAR POR TODOS LOS CANALES
   ============================== */
   async enviarPorTodosLosCanales(
     cliente,
     datos,
     tipo,
     reserva,
-    enviarWhatsApp = true,
+    enviarWhatsApp = true
   ) {
-    // 📧 Email
+    console.log(`📨 Enviando ${tipo} → Reserva ${reserva._id}`);
+
+    // 📧 EMAIL
     if (cliente.email) {
       try {
-        const resEmail = await sendReminderEmail(cliente.email, {
+        console.log("📧 Enviando email a:", cliente.email);
+
+        await sendReminderEmail(cliente.email, {
           ...datos,
           tipo,
           instrucciones: reserva.servicio?.instrucciones ?? null,
         });
+
+        console.log("✅ Email enviado:", cliente.email);
       } catch (err) {
         console.error(`❌ Error email ${cliente.email}:`, err.message);
       }
+    } else {
+      console.warn("⚠️ Cliente sin email:", reserva._id);
     }
 
-    // 💬 WhatsApp (solo si está habilitado)
+    // 💬 WHATSAPP
     if (enviarWhatsApp && cliente.telefono) {
-      await WhatsAppService.enviarRecordatorio({
-        ...datos,
+      try {
+        console.log("💬 Enviando WhatsApp a:", cliente.telefono);
+
+        const res = await WhatsAppService.enviarRecordatorio({
+          ...datos,
+          telefono: cliente.telefono,
+          nombreProfesional: datos.nombreBarbero,
+        });
+
+        if (res.success) {
+          console.log("✅ WhatsApp enviado:", cliente.telefono);
+        } else {
+          console.error("❌ Falló WhatsApp:", res.error);
+        }
+      } catch (err) {
+        console.error(`❌ Error WhatsApp ${cliente.telefono}:`, err.message);
+      }
+    } else {
+      console.warn("⚠️ WhatsApp no enviado (condición):", {
+        enviarWhatsApp,
         telefono: cliente.telefono,
-        nombreProfesional: datos.nombreBarbero, // ← agregar esto
-      }).catch((err) =>
-        console.error(`❌ Error WhatsApp ${cliente.telefono}:`, err.message),
-      );
+      });
     }
   }
 
   /* =============================
-     RECORDATORIO 24 HORAS ANTES (SIN WHATSAPP)
+     RECORDATORIO 24H
   ============================== */
   async enviarRecordatorios24h() {
     try {
+      console.log("🔍 Buscando recordatorios 24h...");
+
       const ahora = dayjs().tz("America/Santiago");
       const desde = ahora.add(23, "hour").toDate();
       const hasta = ahora.add(25, "hour").toDate();
@@ -100,14 +133,17 @@ class RecordatoriosJob {
         .populate("barbero", "nombre apellido")
         .populate("empresa", "nombre direccion telefono politicaCancelacion");
 
+      console.log(`📊 Reservas encontradas (24h): ${reservas.length}`);
+
       for (const reserva of reservas) {
         try {
+          console.log("➡️ Procesando reserva:", reserva._id);
+
           const resultado = await this.obtenerDatosReserva(reserva);
           if (!resultado) continue;
 
           const { cliente, datos } = resultado;
 
-          // Generar token de confirmación
           const token = crypto.randomUUID();
           const baseUrl =
             process.env.FRONTEND_URL || "https://www.agendafonfach.cl";
@@ -121,7 +157,8 @@ class RecordatoriosJob {
             "confirmacionAsistencia.enviadaEn": new Date(),
           });
 
-          // Pasar los URLs al email
+          console.log("🔐 Token generado:", token);
+
           await this.enviarPorTodosLosCanales(
             cliente,
             {
@@ -131,14 +168,14 @@ class RecordatoriosJob {
             },
             "24h",
             reserva,
-            false,
+            false // ❌ sin WhatsApp
           );
 
           await new Promise((r) => setTimeout(r, 500));
         } catch (error) {
           console.error(
             `❌ Error procesando reserva ${reserva._id}:`,
-            error.message,
+            error.message
           );
         }
       }
@@ -148,10 +185,12 @@ class RecordatoriosJob {
   }
 
   /* =============================
-     RECORDATORIO 3 HORAS ANTES (CON WHATSAPP)
+     RECORDATORIO 3H
   ============================== */
   async enviarRecordatorios3h() {
     try {
+      console.log("🔍 Buscando recordatorios 3h...");
+
       const ahora = dayjs().tz("America/Santiago");
       const desde = ahora.add(2, "hour").add(45, "minute").toDate();
       const hasta = ahora.add(3, "hour").add(15, "minute").toDate();
@@ -165,38 +204,41 @@ class RecordatoriosJob {
         .populate("barbero", "nombre apellido")
         .populate("empresa", "nombre direccion telefono politicaCancelacion");
 
+      console.log(`📊 Reservas encontradas (3h): ${reservas.length}`);
+
       for (const reserva of reservas) {
         try {
+          console.log("➡️ Procesando reserva:", reserva._id);
+
           const resultado = await this.obtenerDatosReserva(reserva);
           if (!resultado) continue;
 
           const { cliente, datos } = resultado;
 
-          // ✅ CON WhatsApp
           const yaActualizada = await Reserva.findOneAndUpdate(
             { _id: reserva._id, recordatorio3hEnviado: { $ne: true } },
             { recordatorio3hEnviado: true },
-            { new: true },
+            { new: true }
           );
 
           if (!yaActualizada) {
+            console.warn("⚠️ Ya fue procesada por otro proceso");
             continue;
           }
 
-          // ✅ CON WhatsApp (solo llega aquí si nadie más la procesó)
           await this.enviarPorTodosLosCanales(
             cliente,
             datos,
             "3h",
             reserva,
-            true,
+            true // ✅ con WhatsApp
           );
 
           await new Promise((r) => setTimeout(r, 500));
         } catch (error) {
           console.error(
             `❌ Error procesando reserva ${reserva._id}:`,
-            error.message,
+            error.message
           );
         }
       }
@@ -210,10 +252,12 @@ class RecordatoriosJob {
   ============================== */
   async testEnviar(reservaId) {
     try {
+      console.log("🧪 TEST envío manual:", reservaId);
+
       const reserva = await Reserva.findById(reservaId)
         .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre");
+        .populate("empresa", "nombre direccion telefono");
 
       if (!reserva) return { error: "Reserva no encontrada" };
 
@@ -222,14 +266,20 @@ class RecordatoriosJob {
 
       const { cliente, datos } = resultado;
 
-      // 👉 Aquí puedes probar con o sin WhatsApp
-      await this.enviarPorTodosLosCanales(cliente, datos, "24h", reserva, true);
+      await this.enviarPorTodosLosCanales(
+        cliente,
+        datos,
+        "test",
+        reserva,
+        true
+      );
 
       return {
         success: true,
         mensaje: `Enviado a ${cliente.email} y ${cliente.telefono}`,
       };
     } catch (error) {
+      console.error("❌ Error en testEnviar:", error);
       return { error: error.message };
     }
   }
