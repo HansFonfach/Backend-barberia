@@ -20,22 +20,17 @@ class WhatsAppService {
 
   /* =============================
      UTIL: formatear teléfono
-     Convierte "912345678" → "56912345678"
   ============================== */
   formatearTelefono(telefono) {
     let clean = telefono.replace(/\D/g, "");
 
-    // Si ya tiene código de país
     if (clean.startsWith("56")) return clean;
-
-    // Número chileno completo (9 dígitos): 9XXXXXXXX
     if (clean.startsWith("9") && clean.length === 9) return `56${clean}`;
-
-    // Número corto (8 dígitos): le falta el 9 inicial
     if (clean.length === 8) return `569${clean}`;
 
     return clean;
   }
+
   /* =============================
      ENVIAR RECORDATORIO
   ============================== */
@@ -43,14 +38,28 @@ class WhatsAppService {
     nombreCliente,
     telefono,
     nombreEmpresa,
-    nombreProfesional, // ← nuevo
+    nombreProfesional,
     fecha,
     hora,
     servicio,
-    direccion, // ← nuevo
+    direccion,
   }) {
     try {
       const telefonoFormateado = this.formatearTelefono(telefono);
+
+      // 🔥 LOG 1: Datos de entrada
+      console.log("📤 Enviando recordatorio WhatsApp...");
+      console.log({
+        nombreCliente,
+        telefono,
+        telefonoFormateado,
+        nombreEmpresa,
+        nombreProfesional,
+        fecha,
+        hora,
+        servicio,
+        direccion,
+      });
 
       const body = {
         messaging_product: "whatsapp",
@@ -58,24 +67,28 @@ class WhatsAppService {
         type: "template",
         template: {
           name: "recordatorio3_cita",
-          language: { code: "en" },
+          language: { code: "es_CL" }, // ⚠️ importante
           components: [
             {
               type: "body",
               parameters: [
                 { type: "text", text: nombreCliente || "-" },
                 { type: "text", text: nombreEmpresa || "-" },
-                { type: "text", text: nombreProfesional || "-" }, // ← fallback
+                { type: "text", text: nombreProfesional || "-" },
                 { type: "text", text: fecha || "-" },
                 { type: "text", text: hora || "-" },
                 { type: "text", text: servicio || "-" },
-                { type: "text", text: direccion || "-" }, // ← fallback
+                { type: "text", text: direccion || "-" },
               ],
             },
           ],
         },
       };
-      // ... resto igual
+
+      // 🔥 LOG 2: Body enviado
+      console.log("📦 Body enviado a Meta:");
+      console.log(JSON.stringify(body, null, 2));
+
       const res = await fetch(this.apiUrl, {
         method: "POST",
         headers: {
@@ -87,10 +100,19 @@ class WhatsAppService {
 
       const data = await res.json();
 
+      // 🔥 LOG 3: Status + respuesta
+      console.log("📊 Status:", res.status);
+      console.log("📥 Respuesta Meta:", data);
+
       if (!res.ok) {
         console.error("❌ Error Meta API:", data);
         return { success: false, error: data };
       }
+
+      // 🔥 LOG 4: éxito claro
+      console.log(
+        `✅ WhatsApp enviado correctamente a ${telefonoFormateado} (${nombreCliente})`
+      );
 
       return { success: true, data };
     } catch (error) {
@@ -99,6 +121,9 @@ class WhatsAppService {
     }
   }
 
+  /* =============================
+     NOTIFICAR PROFESIONAL
+  ============================== */
   async enviarNotificacionProfesional({
     telefono,
     nombreProfesional,
@@ -111,6 +136,17 @@ class WhatsAppService {
     try {
       const telefonoFormateado = this.formatearTelefono(telefono);
 
+      console.log("📤 Enviando notificación a profesional...");
+      console.log({
+        telefonoFormateado,
+        nombreProfesional,
+        nombreCliente,
+        fecha,
+        hora,
+        servicio,
+        plantilla,
+      });
+
       const body = {
         messaging_product: "whatsapp",
         to: telefonoFormateado,
@@ -122,16 +158,19 @@ class WhatsAppService {
             {
               type: "body",
               parameters: [
-                { type: "text", text: nombreProfesional },
-                { type: "text", text: nombreCliente },
-                { type: "text", text: fecha },
-                { type: "text", text: hora },
-                { type: "text", text: servicio },
+                { type: "text", text: nombreProfesional || "-" },
+                { type: "text", text: nombreCliente || "-" },
+                { type: "text", text: fecha || "-" },
+                { type: "text", text: hora || "-" },
+                { type: "text", text: servicio || "-" },
               ],
             },
           ],
         },
       };
+
+      console.log("📦 Body profesional:");
+      console.log(JSON.stringify(body, null, 2));
 
       const res = await fetch(this.apiUrl, {
         method: "POST",
@@ -144,14 +183,24 @@ class WhatsAppService {
 
       const data = await res.json();
 
+      console.log("📊 Status:", res.status);
+      console.log("📥 Respuesta Meta:", data);
+
       if (!res.ok) {
         console.error("❌ Error Meta API (profesional):", data);
         return { success: false, error: data };
       }
 
+      console.log(
+        `✅ Notificación enviada al profesional ${nombreProfesional}`
+      );
+
       return { success: true, data };
     } catch (error) {
-      console.error("❌ Error enviando WhatsApp profesional:", error.message);
+      console.error(
+        "❌ Error enviando WhatsApp profesional:",
+        error.message
+      );
       return { success: false, error: error.message };
     }
   }
