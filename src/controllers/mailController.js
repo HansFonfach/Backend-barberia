@@ -164,9 +164,7 @@ export const sendGuestReservationEmail = async (to, data) => {
         ${
           permiteCancelacion && cancelUrl
             ? `
-          <p style="color:#555;font-size:14px;">
-            Puedes cancelar hasta <strong>${horasLimite} hora${horasLimite !== 1 ? "s" : ""} antes</strong> del horario agendado.
-          </p>
+        
           ${ctaButton(cancelUrl, "Cancelar mi reserva", "#c0392b")}
           <p style="font-size:12px;color:#aaa;">Este enlace es personal y expira automáticamente.</p>
         `
