@@ -120,7 +120,7 @@ class RecordatoriosJob {
     try {
       console.log("🔍 Buscando recordatorios 24h...");
 
-    const ahora = dayjs().utc();
+      const ahora = dayjs().utc();
       const desde = ahora.add(23, "hour").toDate();
       const hasta = ahora.add(25, "hour").toDate();
 
@@ -155,8 +155,8 @@ class RecordatoriosJob {
             cliente,
             {
               ...datos,
-              confirmarUrl: `${baseUrl}/confirmacion/${token}?respuesta=confirma`,
-              cancelarUrl: `${baseUrl}/confirmacion/${token}?respuesta=cancela`,
+              confirmarUrl: `${process.env.BACKEND_URL}/api/reservas/confirmacion/${token}?respuesta=confirma`,
+              cancelarUrl: `${process.env.BACKEND_URL}/api/reservas/confirmacion/${token}?respuesta=cancela`,
             },
             "24h",
             reserva,
