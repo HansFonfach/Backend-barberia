@@ -469,6 +469,8 @@ export const createReserva = async (req, res) => {
       duracion: duracionServicio,
       horaFin: finReservaChile.format("HH:mm"),
       direccion: empresaDoc.direccion,
+      horasLimite: empresaDoc.politicaCancelacion?.horasLimite ?? null, // ← nuevo
+      telefonoEmpresa: empresaDoc.telefono ?? null, // ← nuevo
     };
 
     // ✅ Solo enviar emails si la hora NO ha pasado

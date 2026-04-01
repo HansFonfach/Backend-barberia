@@ -86,6 +86,8 @@ export const sendReservationEmail = async (to, data) => {
     servicio,
     instrucciones,
     direccion,
+    horasLimite, // ← nuevo
+    telefonoEmpresa, // ← nuevo
   } = data;
   return await sendBaseEmail({
     to,
@@ -106,9 +108,22 @@ export const sendReservationEmail = async (to, data) => {
             : ""
         }
 
+        ${
+          horasLimite != null
+            ? `
+          <div style="background:#f0f7ff;border-left:4px solid #1a73e8;padding:16px;border-radius:4px;margin:16px 0;">
+            <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
+              ⚠️ Cancelaciones con al menos <strong>${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación</strong>.
+              ${telefonoEmpresa ? `¿Algún imprevisto? Contáctate con tu profesional: 📞 <a href="tel:${telefonoEmpresa}" style="color:#1a73e8;font-weight:bold;text-decoration:none;">${telefonoEmpresa}</a>` : ""}
+            </p>
+          </div>
+        `
+            : ""
+        }
+
         <p style="color:#555;font-size:14px;">Si necesitas cancelar o reagendar, ingresa a tu perfil.</p>
       `),
-    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\nDirección: ${direccion ?? "No especificada"}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}`,
+    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\nDirección: ${direccion ?? "No especificada"}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${horasLimite != null ? `\n\n⚠️ Cancelaciones con al menos ${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación.${telefonoEmpresa ? ` ¿Algún imprevisto? Contáctate con tu profesional: ${telefonoEmpresa}` : ""}` : ""}`,
   });
 };
 
@@ -124,6 +139,7 @@ export const sendGuestReservationEmail = async (to, data) => {
     permiteCancelacion, // ✅ nuevo
     horasLimite, // ✅ nuevo
     direccion,
+    telefonoEmpresa, // ← nuevo
   } = data;
 
   return await sendBaseEmail({
@@ -157,6 +173,18 @@ export const sendGuestReservationEmail = async (to, data) => {
             : `
           <p style="color:#555;font-size:14px;">Esta reserva no admite cancelaciones.</p>
         `
+        }
+        ${
+          horasLimite != null
+            ? `
+  <div style="background:#f0f7ff;border-left:4px solid #1a73e8;padding:16px;border-radius:4px;margin:16px 0;">
+    <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
+      ⚠️ Cancelaciones con al menos <strong>${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación</strong>.
+      ${telefonoEmpresa ? `¿Algún imprevisto? Contáctate con tu profesional: 📞 <a href="tel:${telefonoEmpresa}" style="color:#1a73e8;font-weight:bold;text-decoration:none;">${telefonoEmpresa}</a>` : ""}
+    </p>
+  </div>
+`
+            : ""
         }
       `),
     text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${permiteCancelacion && cancelUrl ? `\n\nCancelar reserva (hasta ${horasLimite}h antes):\n${cancelUrl}` : "\n\nEsta reserva no admite cancelaciones."}`,
