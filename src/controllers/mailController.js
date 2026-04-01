@@ -327,7 +327,7 @@ export const sendReminderEmail = async (to, data) => {
       `
       }
     `),
-    text: `Recordatorio de cita\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${horasLimite != null ? `\n\nRecuerda que tu reserva se puede cancelar hasta solo ${horasLimite} hora${horasLimite !== 1 ? "s" : ""} antes de tu cita.${telefonoBarbero ? ` Ante cualquier eventualidad, comunícate con el/la profesional al ${telefonoEmpresa}.` : ""}` : ""}${es24h && confirmarUrl ? `\n\nConfirmar asistencia: ${confirmarUrl}\nCancelar: ${cancelarUrl}` : ""}`,
+    text: `Recordatorio de cita\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${horasLimite != null ? `\n\nRecuerda que tu reserva se puede cancelar hasta solo ${horasLimite} hora${horasLimite !== 1 ? "s" : ""} antes de tu cita.${telefonoEmpresa ? ` Ante cualquier eventualidad, comunícate con el/la profesional al ${telefonoEmpresa}.` : ""}` : ""}${es24h && confirmarUrl ? `\n\nConfirmar asistencia: ${confirmarUrl}\nCancelar: ${cancelarUrl}` : ""}`,
   });
 };
 
