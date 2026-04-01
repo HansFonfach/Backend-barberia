@@ -63,13 +63,13 @@ class WhatsAppService {
             {
               type: "body",
               parameters: [
-                { type: "text", text: nombreCliente },
-                { type: "text", text: nombreEmpresa },
-                { type: "text", text: nombreProfesional }, // ← nuevo
-                { type: "text", text: fecha },
-                { type: "text", text: hora },
-                { type: "text", text: servicio },
-                { type: "text", text: direccion }, // ← nuevo
+                { type: "text", text: nombreCliente || "-" },
+                { type: "text", text: nombreEmpresa || "-" },
+                { type: "text", text: nombreProfesional || "-" }, // ← fallback
+                { type: "text", text: fecha || "-" },
+                { type: "text", text: hora || "-" },
+                { type: "text", text: servicio || "-" },
+                { type: "text", text: direccion || "-" }, // ← fallback
               ],
             },
           ],

@@ -75,6 +75,7 @@ class RecordatoriosJob {
       await WhatsAppService.enviarRecordatorio({
         ...datos,
         telefono: cliente.telefono,
+        nombreProfesional: datos.nombreBarbero, // ← agregar esto
       }).catch((err) =>
         console.error(`❌ Error WhatsApp ${cliente.telefono}:`, err.message),
       );
@@ -97,7 +98,7 @@ class RecordatoriosJob {
       })
         .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre direccion telefono politicaCancelacion")
+        .populate("empresa", "nombre direccion telefono politicaCancelacion");
 
       for (const reserva of reservas) {
         try {
@@ -162,7 +163,7 @@ class RecordatoriosJob {
       })
         .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-       .populate("empresa", "nombre direccion telefono politicaCancelacion")
+        .populate("empresa", "nombre direccion telefono politicaCancelacion");
 
       for (const reserva of reservas) {
         try {
