@@ -67,7 +67,7 @@ class WhatsAppService {
         type: "template",
         template: {
           name: "recordatorio3_cita",
-          language: { code: "es_CL" }, // ⚠️ importante
+          language: { code: "en" },
           components: [
             {
               type: "body",
