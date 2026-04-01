@@ -28,7 +28,7 @@ class RecordatoriosJob {
   ============================== */
   async obtenerDatosReserva(reserva) {
     const cliente = await Usuario.findById(reserva.cliente).select(
-      "nombre email telefono"
+      "nombre email telefono",
     );
 
     if (!cliente) {
@@ -63,7 +63,7 @@ class RecordatoriosJob {
     datos,
     tipo,
     reserva,
-    enviarWhatsApp = true
+    enviarWhatsApp = true,
   ) {
     console.log(`📨 Enviando ${tipo} → Reserva ${reserva._id}`);
 
@@ -120,7 +120,7 @@ class RecordatoriosJob {
     try {
       console.log("🔍 Buscando recordatorios 24h...");
 
-      const ahora = dayjs().tz("America/Santiago");
+    const ahora = dayjs().utc();
       const desde = ahora.add(23, "hour").toDate();
       const hasta = ahora.add(25, "hour").toDate();
 
@@ -148,17 +148,9 @@ class RecordatoriosJob {
           const baseUrl =
             process.env.FRONTEND_URL || "https://www.agendafonfach.cl";
 
-          await Reserva.findByIdAndUpdate(reserva._id, {
-            recordatorioEnviado: true,
-            fechaRecordatorio: new Date(),
-            confirmacionAsistenciaEnviada: true,
-            "confirmacionAsistencia.solicitada": true,
-            "confirmacionAsistencia.token": token,
-            "confirmacionAsistencia.enviadaEn": new Date(),
-          });
-
           console.log("🔐 Token generado:", token);
 
+          // ✅ PRIMERO ENVÍAS
           await this.enviarPorTodosLosCanales(
             cliente,
             {
@@ -168,14 +160,24 @@ class RecordatoriosJob {
             },
             "24h",
             reserva,
-            false // ❌ sin WhatsApp
+            false,
           );
+
+          // ✅ DESPUÉS MARCAS COMO ENVIADO
+          await Reserva.findByIdAndUpdate(reserva._id, {
+            recordatorioEnviado: true,
+            fechaRecordatorio: new Date(),
+            confirmacionAsistenciaEnviada: true,
+            "confirmacionAsistencia.solicitada": true,
+            "confirmacionAsistencia.token": token,
+            "confirmacionAsistencia.enviadaEn": new Date(),
+          });
 
           await new Promise((r) => setTimeout(r, 500));
         } catch (error) {
           console.error(
             `❌ Error procesando reserva ${reserva._id}:`,
-            error.message
+            error.message,
           );
         }
       }
@@ -191,7 +193,7 @@ class RecordatoriosJob {
     try {
       console.log("🔍 Buscando recordatorios 3h...");
 
-      const ahora = dayjs().tz("America/Santiago");
+      const ahora = dayjs().utc();
       const desde = ahora.add(2, "hour").add(45, "minute").toDate();
       const hasta = ahora.add(3, "hour").add(15, "minute").toDate();
 
@@ -218,7 +220,7 @@ class RecordatoriosJob {
           const yaActualizada = await Reserva.findOneAndUpdate(
             { _id: reserva._id, recordatorio3hEnviado: { $ne: true } },
             { recordatorio3hEnviado: true },
-            { new: true }
+            { new: true },
           );
 
           if (!yaActualizada) {
@@ -231,14 +233,14 @@ class RecordatoriosJob {
             datos,
             "3h",
             reserva,
-            true // ✅ con WhatsApp
+            true, // ✅ con WhatsApp
           );
 
           await new Promise((r) => setTimeout(r, 500));
         } catch (error) {
           console.error(
             `❌ Error procesando reserva ${reserva._id}:`,
-            error.message
+            error.message,
           );
         }
       }
@@ -271,7 +273,7 @@ class RecordatoriosJob {
         datos,
         "test",
         reserva,
-        true
+        true,
       );
 
       return {
