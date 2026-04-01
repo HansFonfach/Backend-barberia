@@ -41,6 +41,8 @@ class RecordatoriosJob {
         fecha: fechaChile.format("DD/MM/YYYY"),
         hora: fechaChile.format("HH:mm"),
         direccion: reserva.empresa?.direccion || null, // ✅ agregar esto
+        horasLimite: reserva.empresa?.politicaCancelacion?.horasLimite ?? null,
+        telefonoEmpresa: reserva.empresa?.telefono ?? null, // ← de empresa, no barbero
       },
     };
   }
@@ -95,7 +97,7 @@ class RecordatoriosJob {
       })
         .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre direccion"); // ✅
+        .populate("empresa", "nombre direccion telefono politicaCancelacion")
 
       for (const reserva of reservas) {
         try {
@@ -160,7 +162,7 @@ class RecordatoriosJob {
       })
         .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre direccion"); // ✅
+       .populate("empresa", "nombre direccion telefono politicaCancelacion")
 
       for (const reserva of reservas) {
         try {

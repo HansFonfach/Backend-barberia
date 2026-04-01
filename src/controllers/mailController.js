@@ -252,8 +252,10 @@ export const sendReminderEmail = async (to, data) => {
     tipo,
     instrucciones,
     direccion,
-    confirmarUrl, // ← nuevo
-    cancelarUrl, // ← nuevo
+    confirmarUrl,
+    cancelarUrl,
+    horasLimite, // ← nuevo: horas que permite la empresa para cancelar
+    telefonoEmpresa, // ← nuevo: número del profesional
   } = data;
 
   const es24h = tipo === "24h";
@@ -280,6 +282,23 @@ export const sendReminderEmail = async (to, data) => {
       `
           : ""
       }
+
+  ${
+    horasLimite != null
+      ? `
+  <div style="background:#f0f7ff;border-left:4px solid #1a73e8;padding:16px;border-radius:4px;margin:16px 0;">
+    <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
+      ⚠️ Cancelaciones con al menos <strong>${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación</strong>.
+      ${
+        telefonoEmpresa
+          ? `¿Algún imprevisto? Contáctate con tu profesional: 📞 <a href="tel:${telefonoEmpresa}" style="color:#1a73e8;font-weight:bold;text-decoration:none;">${telefonoEmpresa}</a>`
+          : ""
+      }
+    </p>
+  </div>
+`
+      : ""
+  }
 
       ${
         es24h && confirmarUrl && cancelarUrl
@@ -308,10 +327,9 @@ export const sendReminderEmail = async (to, data) => {
       `
       }
     `),
-    text: `Recordatorio de cita\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${es24h && confirmarUrl ? `\n\nConfirmar asistencia: ${confirmarUrl}\nCancelar: ${cancelarUrl}` : ""}`,
+    text: `Recordatorio de cita\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${horasLimite != null ? `\n\nRecuerda que tu reserva se puede cancelar hasta solo ${horasLimite} hora${horasLimite !== 1 ? "s" : ""} antes de tu cita.${telefonoBarbero ? ` Ante cualquier eventualidad, comunícate con el/la profesional al ${telefonoEmpresa}.` : ""}` : ""}${es24h && confirmarUrl ? `\n\nConfirmar asistencia: ${confirmarUrl}\nCancelar: ${cancelarUrl}` : ""}`,
   });
 };
-
 
 export const sendProfesionalNewReservationEmail = async (to, data) => {
   const { nombreCliente, nombreBarbero, fecha, hora, servicio, direccion } =
