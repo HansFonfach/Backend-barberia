@@ -964,25 +964,25 @@ export const responderConfirmacionAsistencia = async (req, res) => {
 
     // Validar respuesta
     if (!["confirma", "cancela"].includes(respuesta)) {
-      return res.redirect(`${baseUrl}?error=invalido`);
+      return res.status(400).json({ error: "invalido" });
     }
 
     if (!reserva) {
-      return res.redirect(
-        `${process.env.FRONTEND_URL}/confirmar-reserva?error=token`
-      );
+      return res.status(404).json({ error: "token" });
     }
 
     // Ya respondió antes
     if (reserva.confirmacionAsistencia.respondida) {
-      return res.redirect(
-        `${baseUrl}?respuesta=${reserva.confirmacionAsistencia.respuesta}&ya_respondida=true`
-      );
+      return res.status(200).json({
+        success: true,
+        respuesta: reserva.confirmacionAsistencia.respuesta,
+        ya_respondida: true,
+      });
     }
 
     // La reserva ya ocurrió
     if (reserva.fecha < new Date()) {
-      return res.redirect(`${baseUrl}?error=expirado`);
+      return res.status(400).json({ error: "expirado" });
     }
 
     reserva.confirmacionAsistencia.respondida = true;
@@ -995,7 +995,7 @@ export const responderConfirmacionAsistencia = async (req, res) => {
     if (respuesta === "confirma") {
       reserva.estado = "confirmada";
       await reserva.save();
-      return res.redirect(`${baseUrl}?respuesta=confirma`);
+      return res.status(200).json({ success: true, respuesta: "confirma" });
     }
 
     // ── CANCELA ───────────────────────────────────────────
@@ -1004,7 +1004,7 @@ export const responderConfirmacionAsistencia = async (req, res) => {
       const politica = empresaDoc?.politicaCancelacion;
 
       if (politica?.permiteCancelacion === false) {
-        return res.redirect(`${baseUrl}?error=politica`);
+        return res.status(400).json({ error: "politica" });
       }
 
       if (politica?.horasLimite > 0) {
@@ -1012,10 +1012,10 @@ export const responderConfirmacionAsistencia = async (req, res) => {
         const fechaReservaChile = dayjs(reserva.fecha).tz("America/Santiago");
         const limiteCancelacion = fechaReservaChile.subtract(
           politica.horasLimite,
-          "hour"
+          "hour",
         );
         if (ahoraChile.isAfter(limiteCancelacion)) {
-          return res.redirect(`${baseUrl}?error=politica`);
+          return res.status(400).json({ error: "politica" });
         }
       }
 
@@ -1040,18 +1040,17 @@ export const responderConfirmacionAsistencia = async (req, res) => {
 
       if (emailCliente) {
         sendCancelReservationEmail(emailCliente, emailData).catch((err) =>
-          console.error("❌ Email cancelación:", err.message)
+          console.error("❌ Email cancelación:", err.message),
         );
       }
 
       if (empresaDoc?.envioNotificacionReserva && reserva.barbero?.email) {
         sendProfesionalCancelReservationEmail(
           reserva.barbero.email,
-          emailData
+          emailData,
         ).catch((err) => console.error("❌ Email barbero:", err.message));
       }
 
-      // Lista de espera (igual que antes)
       const fechaInicio = new Date(reserva.fecha);
       fechaInicio.setSeconds(0, 0);
       const fechaFin = new Date(reserva.fecha);
@@ -1079,9 +1078,12 @@ export const responderConfirmacionAsistencia = async (req, res) => {
             if (noti.esInvitado && noti.emailInvitado) {
               const result = await sendWaitlistNotificationEmail(
                 noti.emailInvitado,
-                { nombreCliente: "Cliente", ...datosNoti }
+                { nombreCliente: "Cliente", ...datosNoti },
               );
-              if (!result?.error) { noti.enviado = true; await noti.save(); }
+              if (!result?.error) {
+                noti.enviado = true;
+                await noti.save();
+              }
               return;
             }
             const usuario = noti.usuarioId;
@@ -1090,19 +1092,20 @@ export const responderConfirmacionAsistencia = async (req, res) => {
               nombreCliente: usuario.nombre,
               ...datosNoti,
             });
-            if (!result?.error) { noti.enviado = true; await noti.save(); }
+            if (!result?.error) {
+              noti.enviado = true;
+              await noti.save();
+            }
           } catch (err) {
             console.error(`❌ Error lista de espera:`, err.message);
           }
-        })
+        }),
       );
 
-      return res.redirect(`${baseUrl}?respuesta=cancela`);
+      return res.status(200).json({ success: true, respuesta: "cancela" });
     }
   } catch (error) {
     console.error("❌ Error en confirmación asistencia:", error);
-    return res.redirect(
-      `${process.env.FRONTEND_URL}/confirmar-reserva?error=servidor`
-    );
+    return res.status(500).json({ error: "servidor" });
   }
 };
