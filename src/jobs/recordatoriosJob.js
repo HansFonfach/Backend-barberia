@@ -131,7 +131,10 @@ class RecordatoriosJob {
       })
         .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre direccion telefono politicaCancelacion");
+        .populate(
+          "empresa",
+          "nombre direccion telefono politicaCancelacion slug",
+        ); // ✅ agregado slug
 
       console.log(`📊 Reservas encontradas (24h): ${reservas.length}`);
 
@@ -147,6 +150,7 @@ class RecordatoriosJob {
           const token = crypto.randomUUID();
           const baseUrl =
             process.env.FRONTEND_URL || "https://www.agendafonfach.cl";
+          const slug = reserva.empresa?.slug || ""; // ✅ agregado slug
 
           console.log("🔐 Token generado:", token);
 
@@ -155,8 +159,8 @@ class RecordatoriosJob {
             cliente,
             {
               ...datos,
-              confirmarUrl: `${baseUrl}/confirmacion/${token}?respuesta=confirma`,
-              cancelarUrl: `${baseUrl}/confirmacion/${token}?respuesta=cancela`,
+              confirmarUrl: `${baseUrl}/${slug}/confirmar-reserva?token=${token}&respuesta=confirma`,
+              cancelarUrl: `${baseUrl}/${slug}/confirmar-reserva?token=${token}&respuesta=cancela`,
             },
             "24h",
             reserva,
