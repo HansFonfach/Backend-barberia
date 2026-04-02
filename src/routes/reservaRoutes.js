@@ -20,14 +20,14 @@ const router = Router();
 router.post("/", validarToken, createReserva);
 router.get("/", validarToken, getReservas);
 router.get("/barbero", validarToken, getReservasByBarberId);
-router.get("/:id", validarToken, getReservasByUserId);
-router.get("/activas/:userId", getReservasActivas);
 router.get("/confirmacion/:token", responderConfirmacionAsistencia);
+router.get("/:id", validarToken, getReservasByUserId);
 
+router.get("/activas/:userId", getReservasActivas);
 
 router.get("/barbero/por-fecha", validarToken, getReservasPorFechaBarbero);
 
-router.delete("/:id", validarToken,  postDeleteReserva);
-router.patch("/:id/no-asistio", validarToken, updateMarcarNoAsistioReserva)
+router.delete("/:id", validarToken, postDeleteReserva);
+router.patch("/:id/no-asistio", validarToken, updateMarcarNoAsistioReserva);
 
 export default router;

@@ -155,8 +155,8 @@ class RecordatoriosJob {
             cliente,
             {
               ...datos,
-              confirmarUrl: `${process.env.BACKEND_URL}/api/reservas/confirmacion/${token}?respuesta=confirma`,
-              cancelarUrl: `${process.env.BACKEND_URL}/api/reservas/confirmacion/${token}?respuesta=cancela`,
+              confirmarUrl: `${baseUrl}/confirmacion/${token}?respuesta=confirma`,
+              cancelarUrl: `${baseUrl}/confirmacion/${token}?respuesta=cancela`,
             },
             "24h",
             reserva,
