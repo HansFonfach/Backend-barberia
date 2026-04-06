@@ -1,3 +1,4 @@
+import barberoServicioModel from "../models/barberoServicio.model.js";
 import empresaModel from "../models/empresa.model.js";
 import Servicio from "../models/servicio.model.js";
 
@@ -111,7 +112,7 @@ export const getServiciosPublicos = async (req, res) => {
   const { slug } = req.params;
 
   try {
-    // 1️⃣ Buscar empresa por slug
+    // 1️⃣ Buscar empresa
     const empresa = await empresaModel.findOne({ slug });
 
     if (!empresa) {
@@ -120,12 +121,44 @@ export const getServiciosPublicos = async (req, res) => {
       });
     }
 
-    // 2️⃣ Buscar servicios por ID de empresa
-    const servicios = await Servicio.find({
-      empresa: empresa._id,
-    }).sort({
-      precio: 1,
-    }); // 👈 ASC;
+    // 2️⃣ Buscar relaciones barbero-servicio
+    const barberoServicios = await barberoServicioModel.find({
+      activo: true,
+    })
+      .populate({
+        path: "servicio",
+        match: { empresa: empresa._id }, // 👈 FILTRAS POR EMPRESA AQUÍ
+      })
+      .lean();
+
+    // 3️⃣ Filtrar los que sí tienen servicio válido
+    const filtrados = barberoServicios.filter((bs) => bs.servicio);
+
+    // 4️⃣ Transformar data (🔥 aquí unes todo)
+    const serviciosMap = {};
+
+    filtrados.forEach((bs) => {
+      const id = bs.servicio._id.toString();
+
+      if (!serviciosMap[id]) {
+        serviciosMap[id] = {
+          ...bs.servicio,
+          duraciones: [],
+        };
+      }
+
+      serviciosMap[id].duraciones.push(bs.duracion);
+    });
+
+    // 5️⃣ Calcular duración final (puedes elegir estrategia)
+    const servicios = Object.values(serviciosMap).map((s) => ({
+      ...s,
+      duracionMin: Math.min(...s.duraciones),
+      duracionMax: Math.max(...s.duraciones),
+    }));
+
+    // 6️⃣ Ordenar por precio
+    servicios.sort((a, b) => a.precio - b.precio);
 
     res.json({
       servicios,
