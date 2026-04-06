@@ -24,6 +24,7 @@ import isSameOrAfter from "dayjs/plugin/isSameOrAfter.js";
 import notificacionModel from "../models/notificacion.Model.js";
 import { actualizarClienteServicioStats } from "../helpers/actualizarClienteServicioStats.js";
 import WhatsappService from "../services/whatsappService.js";
+import  {getHorasDisponibles} from "./horarioController.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -327,9 +328,34 @@ export const createReserva = async (req, res) => {
     /* =============================
        INTERVALO
     ============================== */
-    if (horaAminutos(horaFormateada) % intervaloMinimo !== 0) {
+    let horasDisponiblesData = null;
+
+    await getHorasDisponibles(
+      {
+        params: { id: barbero },
+        query: { fecha, servicioId: servicio },
+        usuario: req.usuario,
+      },
+      {
+        json: (data) => {
+          horasDisponiblesData = data;
+        },
+      },
+    );
+
+    if (!horasDisponiblesData || !horasDisponiblesData.horas) {
       return res.status(400).json({
-        message: `La hora debe ser múltiplo de ${intervaloMinimo} minutos`,
+        message: "No se pudo validar disponibilidad",
+      });
+    }
+
+    const horaDisponible = horasDisponiblesData.horas.find(
+      (h) => h.hora === horaFormateada && h.estado === "disponible",
+    );
+
+    if (!horaDisponible) {
+      return res.status(400).json({
+        message: "La hora seleccionada ya no está disponible",
       });
     }
 
