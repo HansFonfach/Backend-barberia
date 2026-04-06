@@ -92,8 +92,8 @@ const calcularHuecosDisponibles = (
 
   return huecos;
 };
+
 /**
- * 🔥 FUNCIÓN CLAVE CORREGIDA
  * Solo genera inicios donde el servicio COMPLETO cabe
  */
 const generarIniciosEnHueco = (hueco, intervalo, duracionServicio) => {
@@ -148,11 +148,9 @@ export const getHorasDisponibles = async (req, res) => {
     const duracionServicio = Number(barberoServicio.duracion);
 
     /* ================= FERIADOS ================= */
-    /* ================= FERIADOS ================= */
     const feriado = await verificarFeriadoConComportamiento(fecha);
 
     if (feriado?.comportamiento === "bloquear_todo") {
-      // Revisar si el barbero habilitó horas extra para este feriado
       const fechaConsultaInicio = fechaConsulta
         .startOf("day")
         .subtract(4, "hour")
@@ -171,7 +169,6 @@ export const getHorasDisponibles = async (req, res) => {
       });
 
       if (excepcionesFeriado.length === 0) {
-        // No hay horas habilitadas, bloquear todo
         return res.json({
           fecha,
           horas: [],
@@ -181,8 +178,6 @@ export const getHorasDisponibles = async (req, res) => {
         });
       }
 
-      // Hay horas extra habilitadas, mostrar solo esas
-      // ✅ REEMPLAZA CON ESTO
       const horasHabilitadas = excepcionesFeriado.map((e) => e.horaInicio);
 
       const inicioBusqueda = fechaConsulta
@@ -208,7 +203,6 @@ export const getHorasDisponibles = async (req, res) => {
         ),
       );
 
-      const ahora = dayjs().tz("America/Santiago");
       const esPrivilegiado =
         req.usuario?.rol === "barbero" || req.usuario?.rol === "admin";
 
@@ -235,7 +229,6 @@ export const getHorasDisponibles = async (req, res) => {
         nombreFeriado: feriado.nombre,
         mensaje: `Feriado: ${feriado.nombre}. Horas habilitadas por el barbero.`,
       });
-      
     }
 
     /* ================= BARBERO ================= */
@@ -321,6 +314,16 @@ export const getHorasDisponibles = async (req, res) => {
       estado: { $in: ["pendiente", "confirmada"] },
     });
 
+    // 🔍 DEBUG: Reservas encontradas
+    console.log("\n🔍 [DEBUG] ==============================");
+    console.log(`📅 Fecha consultada: ${fecha}`);
+    console.log(`⏱️  Duración servicio: ${duracionServicio} min`);
+    console.log(`🗂️  Reservas encontradas (${reservas.length}):`);
+    reservas.forEach((r) => {
+      const horaLocal = dayjs(r.fecha).tz("America/Santiago").format("HH:mm");
+      console.log(`   - ${horaLocal} | duración: ${r.duracion} min | estado: ${r.estado}`);
+    });
+
     const horasReservadas = reservas.map((r) =>
       dayjs(r.fecha).tz("America/Santiago").format("HH:mm"),
     );
@@ -347,7 +350,6 @@ export const getHorasDisponibles = async (req, res) => {
       fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
     });
 
-    // ← NUEVO: si hay bloqueo de día completo, retornar vacío
     const bloqueoDia = excepciones.find((e) => e.tipo === "bloqueo_dia");
     if (bloqueoDia) {
       return res.json({
@@ -366,16 +368,22 @@ export const getHorasDisponibles = async (req, res) => {
       .filter((e) => e.tipo === "extra")
       .map((e) => e.horaInicio);
 
+    // 🔍 DEBUG: Excepciones
+    console.log(`🚫 Horas bloqueadas: [${horasBloqueadas.join(", ") || "ninguna"}]`);
+    console.log(`➕ Horas extra: [${horasExtra.join(", ") || "ninguna"}]`);
+
     /* ================= HORAS DISPONIBLES ================= */
     const horasDisponibles = new Set();
     const horasBase = new Set();
-
-    // ✅ Mapa de hora → servicioExclusivo (se construye por horario)
     const mapaPermitidos = {};
 
     for (const horario of horariosDelDia) {
       const intervalo = Number(horario.duracionBloque);
 
+      // 🔍 DEBUG: Horario procesado
+      console.log(`\n📋 Horario diaSemana=${horario.diaSemana} | ${horario.horaInicio}-${horario.horaFin} | colación: ${horario.colacionInicio || "sin"}-${horario.colacionFin || "colación"} | bloque: ${intervalo}min`);
+
+      // ✅ Construir bloques de trabajo separando colación
       const bloquesTrabajo = horario.colacionInicio
         ? [
             {
@@ -418,11 +426,18 @@ export const getHorasDisponibles = async (req, res) => {
             },
           ];
 
+      // 🔍 DEBUG: Bloques de trabajo
+      console.log("🧱 Bloques de trabajo (antes de anclas):");
+      bloquesTrabajo.forEach((b) =>
+        console.log(`   ${b.inicio.format("HH:mm")} → ${b.fin.format("HH:mm")}`)
+      );
+
       const usaAncla =
         empresaDoc?.configuracion?.usaHorasAncla === true &&
         horario.horasAncla?.length > 0;
 
-      // ✅ Construir mapa de servicios exclusivos por hora ancla
+      console.log(`⚓ usaAncla: ${usaAncla}`);
+
       if (usaAncla) {
         horario.horasAncla.forEach((a) => {
           if (a.serviciosPermitidos?.length > 0) {
@@ -433,7 +448,6 @@ export const getHorasDisponibles = async (req, res) => {
         });
       }
 
-      // Función que convierte un bloque en sub-bloques según las anclas
       const dividirBloqueEnAnclas = (bloque, anclas, fecha) => {
         const anclasDentro = anclas
           .map((a) =>
@@ -468,9 +482,15 @@ export const getHorasDisponibles = async (req, res) => {
           : bloquesTrabajo
       ).filter((b) => b.inicio.isBefore(b.fin));
 
+      // 🔍 DEBUG: Bloques efectivos
+      console.log("✅ Bloques efectivos (post-anclas, filtrados):");
+      bloquesEfectivos.forEach((b) =>
+        console.log(`   ${b.inicio.format("HH:mm")} → ${b.fin.format("HH:mm")}`)
+      );
+
+      // ===== GENERAR horasBase =====
       if (usaAncla) {
         for (const subBloque of bloquesEfectivos) {
-          if (subBloque.inicio.isSame(subBloque.fin)) continue;
           let cursor = subBloque.inicio;
           while (cursor.isBefore(subBloque.fin)) {
             horasBase.add(cursor.format("HH:mm"));
@@ -478,7 +498,9 @@ export const getHorasDisponibles = async (req, res) => {
           }
         }
       } else {
-        for (const bloque of bloquesTrabajo) {
+        // ✅ FIX: usar bloquesEfectivos en lugar de bloquesTrabajo
+        // para que horasBase y horasDisponibles compartan la misma fuente
+        for (const bloque of bloquesEfectivos) {
           let cursor = bloque.inicio;
           while (cursor.isBefore(bloque.fin)) {
             horasBase.add(cursor.format("HH:mm"));
@@ -487,6 +509,7 @@ export const getHorasDisponibles = async (req, res) => {
         }
       }
 
+      // ===== GENERAR horasDisponibles =====
       for (const bloque of bloquesEfectivos) {
         const huecos = calcularHuecosDisponibles(
           reservas,
@@ -494,47 +517,70 @@ export const getHorasDisponibles = async (req, res) => {
           fecha,
           horasBloqueadas,
         );
+
+        // 🔍 DEBUG: Huecos por bloque
+        console.log(`\n   🕳️  Huecos en bloque ${bloque.inicio.format("HH:mm")}-${bloque.fin.format("HH:mm")}:`);
+        huecos.forEach((h) =>
+          console.log(
+            `      ${h.inicio.format("HH:mm")} → ${h.fin.format("HH:mm")} (${h.duracion} min) | servicio necesita ${duracionServicio} min → ${h.duracion >= duracionServicio ? "✅ CABE" : "❌ no cabe"}`
+          )
+        );
+
         for (const hueco of huecos) {
           if (hueco.duracion >= duracionServicio) {
-            generarIniciosEnHueco(hueco, intervalo, duracionServicio).forEach(
-              (hora) => {
-                if (!horasBloqueadas.includes(hora)) {
-                  horasDisponibles.add(hora);
-                }
-              },
-            );
+            const inicios = generarIniciosEnHueco(hueco, intervalo, duracionServicio);
+            console.log(`      → Inicios generados: [${inicios.join(", ")}]`);
+            inicios.forEach((hora) => {
+              if (!horasBloqueadas.includes(hora)) {
+                horasDisponibles.add(hora);
+              }
+            });
           }
         }
       }
     }
 
-    horasExtra.forEach((h) => horasBase.add(h));
+    // Agregar horas extra a horasDisponibles también
+    horasExtra.forEach((h) => horasDisponibles.add(h));
+
+    // 🔍 DEBUG: Resumen final
+    console.log("\n📊 Resumen:");
+    console.log(`   horasBase (${[...horasBase].length}): [${[...horasBase].sort().join(", ")}]`);
+    console.log(`   horasDisponibles (${horasDisponibles.size}): [${[...horasDisponibles].sort().join(", ")}]`);
+    console.log(`   horasReservadas: [${horasReservadas.join(", ")}]`);
+    console.log("🔍 [DEBUG] ==============================\n");
 
     /* ================= RESPUESTA FINAL ================= */
-    const horas = [...horasBase].sort().reduce((acc, hora) => {
+    const esPrivilegiado = rolUsuario === "barbero" || rolUsuario === "admin";
+
+    // ✅ FIX: iterar sobre la UNIÓN de horasDisponibles + horasReservadas
+    // horasBase tenía el grid fijo (ej: 15:00, 15:45) pero horasDisponibles
+    // genera inicios desde el hueco real (ej: 14:55, 15:40), que nunca coincidían.
+    const todasLasHoras = new Set([
+      ...horasDisponibles,
+      ...horasReservadas,
+    ]);
+
+    const horas = [...todasLasHoras].sort().reduce((acc, hora) => {
       const inicio = dayjs.tz(
         `${fecha} ${hora}`,
         "YYYY-MM-DD HH:mm",
-        "America/Santiago", // ← asegúrate que esto esté así
+        "America/Santiago",
       );
 
-      const ahora = dayjs().tz("America/Santiago");
-
-      // En el reduce, cambia esto:
-
-      const esPrivilegiado = rolUsuario === "barbero" || rolUsuario === "admin";
-
+      // Filtrar horas pasadas para usuarios normales
       if (!esPrivilegiado && inicio.isBefore(ahora)) return acc;
 
+      // Filtrar horas bloqueadas
       if (horasBloqueadas.includes(hora)) return acc;
 
-      // ✅ Si la hora tiene servicio exclusivo y no coincide con el solicitado, omitir
+      // Si la hora tiene servicio exclusivo y no coincide, omitir
       if (mapaPermitidos[hora] && !mapaPermitidos[hora].includes(servicioId))
         return acc;
 
       if (horasReservadas.includes(hora)) {
         acc.push({ hora, estado: "reservada" });
-      } else if (horasDisponibles.has(hora) || horasExtra.includes(hora)) {
+      } else {
         acc.push({ hora, estado: "disponible" });
       }
 
@@ -553,6 +599,7 @@ export const getHorasDisponibles = async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 };
+
 
 /** Crear horario y asignarlo al barbero */
 export const createHorario = async (req, res) => {
