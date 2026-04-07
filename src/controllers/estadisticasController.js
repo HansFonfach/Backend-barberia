@@ -63,8 +63,6 @@ export const totalSuscripcionesActivas = async (req, res) => {
   }
 };
 
-
-
 /* =====================================================
    ÚLTIMA RESERVA (CLIENTE)
 ===================================================== */
@@ -373,18 +371,18 @@ export const getDashboardResumen = async (req, res) => {
     const empresaId = new mongoose.Types.ObjectId(req.usuario.empresaId);
     const ahora = new Date();
     const PRECIO_SUSCRIPCION = 25000;
- 
+
     // ── Rangos de fecha ──────────────────────────────
     const inicioHoy = new Date(ahora);
     inicioHoy.setHours(0, 0, 0, 0);
     const finHoy = new Date(ahora);
     finHoy.setHours(23, 59, 59, 999);
- 
+
     const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
     inicioMes.setHours(0, 0, 0, 0);
     const finMes = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0);
     finMes.setHours(23, 59, 59, 999);
- 
+
     // ── Queries en paralelo ──────────────────────────
     const [
       reservasHoy,
@@ -411,36 +409,36 @@ export const getDashboardResumen = async (req, res) => {
         fecha: { $gte: inicioHoy, $lte: finHoy },
         estado: { $ne: "cancelada" },
       }),
- 
+
       // 2. Total clientes
       usuarioModel.countDocuments({
         empresa: empresaId,
         rol: "cliente",
         estado: "activo",
       }),
- 
+
       // 3. Citas este mes
       reservaModel.countDocuments({
         empresa: empresaId,
         fecha: { $gte: inicioMes, $lt: finMes },
         estado: { $ne: "cancelada" },
       }),
- 
+
       // 4. Completadas
       reservaModel.countDocuments({ empresa: empresaId, estado: "completada" }),
- 
+
       // 5. Canceladas
       reservaModel.countDocuments({ empresa: empresaId, estado: "cancelada" }),
- 
+
       // 6. No asistió
       reservaModel.countDocuments({ empresa: empresaId, estado: "no_asistio" }),
- 
+
       // 7. Total para tasas
       reservaModel.countDocuments({
         empresa: empresaId,
         estado: { $in: ["completada", "cancelada", "no_asistio"] },
       }),
- 
+
       // 8. Hora más cancelada
       reservaModel.aggregate([
         { $match: { empresa: empresaId, estado: "cancelada" } },
@@ -453,7 +451,7 @@ export const getDashboardResumen = async (req, res) => {
         { $sort: { total: -1 } },
         { $limit: 1 },
       ]),
- 
+
       // 9. Hora más solicitada
       reservaModel.aggregate([
         { $match: { empresa: empresaId } },
@@ -466,7 +464,7 @@ export const getDashboardResumen = async (req, res) => {
         { $sort: { total: -1 } },
         { $limit: 1 },
       ]),
- 
+
       // 10. Servicio más popular
       reservaModel.aggregate([
         {
@@ -495,7 +493,7 @@ export const getDashboardResumen = async (req, res) => {
           },
         },
       ]),
- 
+
       // 11. Top 5 asistentes
       reservaModel.aggregate([
         { $match: { empresa: empresaId, estado: "completada" } },
@@ -508,7 +506,7 @@ export const getDashboardResumen = async (req, res) => {
           },
         },
         { $unwind: "$clienteInfo" },
-        { $match: { "clienteInfo.rol": "cliente" } },
+        { $match: { "clienteInfo.rol": { $in: ["cliente", "invitado"] } } },
         {
           $lookup: {
             from: "servicios",
@@ -530,7 +528,7 @@ export const getDashboardResumen = async (req, res) => {
         { $sort: { totalGastado: -1 } },
         { $limit: 5 },
       ]),
- 
+
       // 12. Top 5 canceladores
       reservaModel.aggregate([
         { $match: { empresa: empresaId, estado: "cancelada" } },
@@ -543,7 +541,7 @@ export const getDashboardResumen = async (req, res) => {
           },
         },
         { $unwind: "$clienteInfo" },
-        { $match: { "clienteInfo.rol": "cliente" } },
+        { $match: { "clienteInfo.rol": { $in: ["cliente", "invitado"] } } },
         {
           $group: {
             _id: "$cliente",
@@ -556,7 +554,7 @@ export const getDashboardResumen = async (req, res) => {
         { $sort: { totalCancelaciones: -1 } },
         { $limit: 5 },
       ]),
- 
+
       // 13. Top 5 no asistidos
       reservaModel.aggregate([
         { $match: { empresa: empresaId, estado: "no_asistio" } },
@@ -569,7 +567,7 @@ export const getDashboardResumen = async (req, res) => {
           },
         },
         { $unwind: "$clienteInfo" },
-        { $match: { "clienteInfo.rol": "cliente" } },
+        { $match: { "clienteInfo.rol": { $in: ["cliente", "invitado"] } } },
         {
           $group: {
             _id: "$cliente",
@@ -582,7 +580,7 @@ export const getDashboardResumen = async (req, res) => {
         { $sort: { totalNoAsistidos: -1 } },
         { $limit: 5 },
       ]),
- 
+
       // 14. Ingreso total histórico
       reservaModel.aggregate([
         { $match: { empresa: empresaId, estado: "completada" } },
@@ -597,7 +595,7 @@ export const getDashboardResumen = async (req, res) => {
         { $unwind: "$servicioData" },
         { $group: { _id: null, total: { $sum: "$servicioData.precio" } } },
       ]),
- 
+
       // 15. Reservas pasadas del mes (para ingreso mensual)
       reservaModel
         .find({
@@ -607,7 +605,7 @@ export const getDashboardResumen = async (req, res) => {
         })
         .populate("servicio", "precio")
         .lean(),
- 
+
       // 16. Reservas futuras del mes (para posible ingreso)
       reservaModel
         .find({
@@ -617,24 +615,26 @@ export const getDashboardResumen = async (req, res) => {
         })
         .populate("servicio", "precio")
         .lean(),
- 
+
       // 17. Suscripciones nuevas del mes
       suscripcionModel.countDocuments({
         empresa: empresaId,
         fechaInicio: { $gte: inicioMes, $lte: finMes },
       }),
     ]);
- 
+
     // ── Calcular ingreso mensual (fix N+1) ───────────
     const calcularIngresoConSus = async (reservas) => {
       if (!reservas.length) return 0;
- 
+
       // Una sola query para todas las suscripciones relevantes
-      const clienteIds = [...new Set(reservas.map((r) => r.cliente?.toString()))];
+      const clienteIds = [
+        ...new Set(reservas.map((r) => r.cliente?.toString())),
+      ];
       const todasLasSus = await suscripcionModel
         .find({ usuario: { $in: clienteIds }, empresa: empresaId })
         .lean();
- 
+
       // Map clienteId → suscripciones[]
       const susMap = new Map();
       for (const s of todasLasSus) {
@@ -642,7 +642,7 @@ export const getDashboardResumen = async (req, res) => {
         if (!susMap.has(key)) susMap.set(key, []);
         susMap.get(key).push(s);
       }
- 
+
       // Todas las reservas del mes de estos clientes (para contar servicios acumulados)
       const todasReservasMes = await reservaModel
         .find({
@@ -653,7 +653,7 @@ export const getDashboardResumen = async (req, res) => {
         })
         .sort({ fecha: 1 })
         .lean();
- 
+
       // Map clienteId → reservas ordenadas
       const reservasPorCliente = new Map();
       for (const r of todasReservasMes) {
@@ -661,56 +661,56 @@ export const getDashboardResumen = async (req, res) => {
         if (!reservasPorCliente.has(key)) reservasPorCliente.set(key, []);
         reservasPorCliente.get(key).push(r);
       }
- 
+
       let ingreso = 0;
       for (const reserva of reservas) {
         const precio = reserva.precio || reserva.servicio?.precio || 0;
         const clienteKey = reserva.cliente?.toString();
         const suscripciones = susMap.get(clienteKey) || [];
- 
+
         const sus = suscripciones.find(
           (s) =>
             new Date(s.fechaInicio) <= new Date(reserva.fecha) &&
             new Date(s.fechaFin) >= new Date(reserva.fecha),
         );
- 
+
         if (!sus) {
           ingreso += precio;
           continue;
         }
- 
+
         const reservasCliente = reservasPorCliente.get(clienteKey) || [];
         let serviciosAcumulados = 0;
         for (const r of reservasCliente) {
           serviciosAcumulados += r.duracion >= 120 ? 2 : 1;
           if (r._id.toString() === reserva._id.toString()) break;
         }
- 
+
         if (serviciosAcumulados > sus.serviciosTotales) ingreso += precio;
       }
- 
+
       return ingreso;
     };
- 
+
     const [ingresoReservas, posibleIngreso] = await Promise.all([
       calcularIngresoConSus(reservasPasadasMes),
       calcularIngresoConSus(reservasFuturasMes),
     ]);
- 
+
     const ingresoSuscripciones = suscripcionesMes * PRECIO_SUSCRIPCION;
     const ingresoTotalHistorico = ingresoTotalAggregate[0]?.total || 0;
- 
+
     // ── Formatear tasas ──────────────────────────────
     const tasaCancelacion =
       totalParaTasa === 0
         ? "0%"
         : `${((totalCanceladas / totalParaTasa) * 100).toFixed(2)}%`;
- 
+
     const tasaAsistencia =
       totalParaTasa === 0
         ? "0%"
         : `${((totalCompletadas / totalParaTasa) * 100).toFixed(2)}%`;
- 
+
     // ── Formatear hora más cancelada/solicitada ──────
     const horaCancelada = horaMasCancelada[0]
       ? {
@@ -718,32 +718,32 @@ export const getDashboardResumen = async (req, res) => {
           cantidad: horaMasCancelada[0].total,
         }
       : null;
- 
+
     const horaSolicitada = horaMasSolicitada[0]
       ? {
           rango: `${horaMasSolicitada[0]._id}:00 - ${horaMasSolicitada[0]._id + 1}:00`,
           totalReservas: horaMasSolicitada[0].total,
         }
       : null;
- 
+
     // ── Formatear top clientes ───────────────────────
     const formatter = new Intl.NumberFormat("es-CL", {
       style: "currency",
       currency: "CLP",
       minimumFractionDigits: 0,
     });
- 
+
     return ok(res, {
       // Conteos generales
       reservasHoy,
       totalClientes,
       citasMes,
- 
+
       // Reservas por estado
       reservasCompletadas: totalCompletadas,
       reservasCanceladas: totalCanceladas,
       reservasNoAsistidas: totalNoAsistio,
- 
+
       // Tasas
       tasaCancelacion: {
         porcentaje: tasaCancelacion,
@@ -756,14 +756,14 @@ export const getDashboardResumen = async (req, res) => {
         noAsistio: totalNoAsistio,
         totalReservas: totalParaTasa,
       },
- 
+
       // Horas
       horaMasCancelada: horaCancelada,
       horaMasSolicitada: horaSolicitada,
- 
+
       // Servicio popular
       servicioMasPopular: servicioMasPopular[0] || null,
- 
+
       // Ingresos
       ingresoTotal: ingresoTotalHistorico,
       ingresoMensual: {
@@ -772,10 +772,11 @@ export const getDashboardResumen = async (req, res) => {
           ingresoReservas,
           ingresoSuscripciones,
           suscripcionesNuevas: suscripcionesMes,
-          posibleIngreso: ingresoReservas + ingresoSuscripciones + posibleIngreso,
+          posibleIngreso:
+            ingresoReservas + ingresoSuscripciones + posibleIngreso,
         },
       },
- 
+
       // Top clientes
       topAsistentes: topAsistentes.map((c) => ({
         nombre: c.nombre,

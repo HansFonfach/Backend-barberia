@@ -25,6 +25,10 @@ const UsuarioSchema = new Schema(
       enum: ["cliente", "barbero", "admin", "invitado"],
       default: "cliente",
     },
+    faltas: {
+      type: Number,
+      default: 0,
+    },
     esAdmin: { type: Boolean, default: false },
     plan: {
       type: String,

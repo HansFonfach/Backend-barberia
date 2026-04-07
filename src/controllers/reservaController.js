@@ -24,7 +24,8 @@ import isSameOrAfter from "dayjs/plugin/isSameOrAfter.js";
 import notificacionModel from "../models/notificacion.Model.js";
 import { actualizarClienteServicioStats } from "../helpers/actualizarClienteServicioStats.js";
 import WhatsappService from "../services/whatsappService.js";
-import  {getHorasDisponibles} from "./horarioController.js";
+import { getHorasDisponibles } from "./horarioController.js";
+import { validarDisponibilidad } from "../helpers/validarDisponibilidad.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -1133,5 +1134,96 @@ export const responderConfirmacionAsistencia = async (req, res) => {
   } catch (error) {
     console.error("❌ Error en confirmación asistencia:", error);
     return res.status(500).json({ error: "servidor" });
+  }
+};
+
+
+
+export const reagendarReserva = async (req, res) => {
+  try {
+    const { id } = req.params; // ID reserva original
+    const { fecha, hora } = req.body; // nuevo slot
+    const adminId = req.usuario?.id;
+
+    if (!fecha || !hora)
+      return res.status(400).json({ message: "Fecha y hora son requeridas" });
+
+    // 1. Buscar reserva original
+    const reservaOriginal = await Reserva.findById(id).populate(
+      "barbero servicio cliente",
+    );
+
+    if (!reservaOriginal)
+      return res.status(404).json({ message: "Reserva no encontrada" });
+
+    if (
+      ["cancelada", "completada", "reagendada"].includes(reservaOriginal.estado)
+    )
+      return res
+        .status(400)
+        .json({ message: "Esta reserva no puede reagendarse" });
+
+    const barberoDoc = await usuarioModel
+      .findById(reservaOriginal.barbero)
+      .populate("horariosDisponibles");
+
+    // 2. Validar disponibilidad del nuevo slot
+    const validacion = await validarDisponibilidad({
+      barberoDoc,
+      barbero: reservaOriginal.barbero._id,
+      servicio: reservaOriginal.servicio._id,
+      fecha,
+      hora,
+      duracionServicio: reservaOriginal.duracion,
+      excluirReservaId: reservaOriginal._id, // excluye la reserva actual de colisiones
+    });
+
+    if (!validacion.ok)
+      return res.status(400).json({ message: validacion.message });
+
+    const { inicioReservaChile, finReservaChile } = validacion;
+    const nuevaFechaUTC = inicioReservaChile.utc().toDate();
+    const fechaAnterior = reservaOriginal.fecha;
+
+    // 3. Marcar reserva original como reagendada
+    await Reserva.findByIdAndUpdate(id, {
+      estado: "reagendada",
+      "reagendamiento.fechaAnterior": fechaAnterior,
+      "reagendamiento.reagendadaEn": new Date(),
+      "reagendamiento.reagendadaPor": adminId,
+    });
+
+    // 4. Crear nueva reserva copiando los datos relevantes
+    const nuevaReserva = await Reserva.create({
+      empresa: reservaOriginal.empresa,
+      cliente: reservaOriginal.cliente,
+      invitado: reservaOriginal.invitado,
+      barbero: reservaOriginal.barbero._id,
+      servicio: reservaOriginal.servicio._id,
+      fecha: nuevaFechaUTC,
+      duracion: reservaOriginal.duracion,
+      estado:
+        reservaOriginal.estado === "confirmada" ? "confirmada" : "pendiente",
+      abono: reservaOriginal.abono,
+      reagendamiento: {
+        reagendadaDe: reservaOriginal._id,
+        reagendadaEn: new Date(),
+        reagendadaPor: adminId,
+      },
+    });
+
+    return res.status(200).json({
+      message: "Reserva reagendada correctamente",
+      reservaAnteriorId: id,
+      nuevaReserva,
+      fechaAnterior: dayjs(fechaAnterior)
+        .tz("America/Santiago")
+        .format("YYYY-MM-DD HH:mm"),
+      nuevaFecha: inicioReservaChile.format("YYYY-MM-DD HH:mm"),
+      horaFin: finReservaChile.format("HH:mm"),
+    });
+  } catch (error) {
+    console.error("❌ Error reagendarReserva:", error);
+    res.status(500).json({ message: "Error al reagendar la reserva" });
   }
 };

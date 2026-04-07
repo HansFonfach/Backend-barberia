@@ -34,8 +34,24 @@ const ReservaSchema = new Schema(
         "cancelada",
         "completada",
         "no_asistio",
+        "reagendada",
       ],
       default: "pendiente",
+    },
+
+    reagendamiento: {
+      reagendadaDe: {
+        type: Schema.Types.ObjectId,
+        ref: "Reserva",
+        default: null,
+      }, // ID de la reserva original
+      fechaAnterior: { type: Date, default: null }, // fecha antes del cambio
+      reagendadaEn: { type: Date, default: null }, // cuándo se hizo el cambio
+      reagendadaPor: {
+        type: Schema.Types.ObjectId,
+        ref: "Usuario",
+        default: null,
+      }, // admin que lo hizo
     },
 
     abono: {
