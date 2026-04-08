@@ -423,3 +423,71 @@ export const crearBarbero = async (req, res) => {
     res.status(500).json({ message: "Error al crear el barbero" });
   }
 };
+export const getUsuarioByRutPublico = async (req, res) => {
+  const { rut } = req.params;
+
+  try {
+    if (!rut || rut.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "RUT no proporcionado",
+      });
+    }
+
+    // 1. Primero intentar buscar exactamente como viene
+    let usuario = await Usuario.findOne({ rut: rut });
+
+    // 2. Si no encuentra, buscar con RUT limpio
+    if (!usuario) {
+      // Función para limpiar RUT (quitar puntos y guión, convertir a mayúsculas)
+      const limpiarRut = (rutStr) => {
+        return rutStr.replace(/[\.\-]/g, "").toUpperCase();
+      };
+
+      const rutLimpioBuscado = limpiarRut(rut);
+
+      // Buscar todos los usuarios y comparar RUTs limpios
+      const todosUsuarios = await Usuario.find({});
+      usuario = todosUsuarios.find((u) => {
+        if (!u.rut) return false;
+
+        const rutBDLimpio = limpiarRut(u.rut);
+        const encontrado = rutBDLimpio === rutLimpioBuscado;
+
+        if (encontrado) {
+        }
+
+        return encontrado;
+      });
+    }
+
+    if (!usuario) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+        rutBuscado: rut,
+      });
+    }
+
+    res.json({
+      success: true,
+      _id: usuario._id,
+      id: usuario._id,
+      nombre: usuario.nombre,
+      apellido: usuario.apellido,
+      email: usuario.email,
+      rut: usuario.rut,
+      telefono: usuario.telefono || "",
+      suscrito: usuario.suscrito || false,
+      rol: usuario.rol,
+      puntos: usuario.puntos || 0,
+    });
+  } catch (error) {
+    console.error("💥 Error en getUsuarioByRut:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error del servidor",
+      error: error.message,
+    });
+  }
+};

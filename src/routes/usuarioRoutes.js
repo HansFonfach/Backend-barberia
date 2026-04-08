@@ -10,6 +10,7 @@ import {
   cambiarEstadoUsuario,
   getBarberosPublicos,
   updatePerfil,
+  getUsuarioByRutPublico,
 } from "../controllers/usuarioController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 import { verificarRol } from "../middlewares/verificarRol.js";
@@ -19,6 +20,8 @@ const router = Router();
 
 // 🔒 RUTAS ESPECÍFICAS PRIMERO
 router.get("/rut/:rut", validarToken, getUsuarioByRut);
+router.get("/rutPublico/:rut",  getUsuarioByRutPublico);
+
 router.get("/todosLosUsuarios", validarToken, getAllUsersWithSuscripcion);
 router.get("/misPuntos", validarToken, verMisPuntos);
 router.put("/actualizarPerfil", validarToken, updatePerfil); // ✅ AQUÍ
