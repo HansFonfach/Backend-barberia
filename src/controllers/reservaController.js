@@ -1137,8 +1137,6 @@ export const responderConfirmacionAsistencia = async (req, res) => {
   }
 };
 
-
-
 export const reagendarReserva = async (req, res) => {
   try {
     const { id } = req.params; // ID reserva original
@@ -1211,6 +1209,35 @@ export const reagendarReserva = async (req, res) => {
         reagendadaPor: adminId,
       },
     });
+
+    // 5. Enviar correo
+    try {
+      const clienteEmail =
+        reservaOriginal.cliente?.email || reservaOriginal.invitado?.email;
+
+      if (clienteEmail) {
+        await sendReagendamientoEmail(clienteEmail, {
+          nombreCliente:
+            reservaOriginal.cliente?.nombre ||
+            reservaOriginal.invitado?.nombre ||
+            "Cliente",
+
+          nombreBarbero: reservaOriginal.barbero.nombre,
+          servicio: reservaOriginal.servicio.nombre,
+
+          fechaAnterior: dayjs(fechaAnterior)
+            .tz("America/Santiago")
+            .format("YYYY-MM-DD HH:mm"),
+
+          nuevaFecha: inicioReservaChile.format("YYYY-MM-DD"),
+          nuevaHora: inicioReservaChile.format("HH:mm"),
+
+          direccion: reservaOriginal.empresa?.direccion,
+        });
+      }
+    } catch (error) {
+      console.error("❌ Error enviando correo de reagendamiento:", error);
+    }
 
     return res.status(200).json({
       message: "Reserva reagendada correctamente",

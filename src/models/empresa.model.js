@@ -16,7 +16,14 @@ const EmpresaSchema = new mongoose.Schema({
   tipo: {
     type: String,
     required: true,
-    enum: ["barberia", "peluqueria", "salon_belleza", "spa", "centro_estetica" ,"otros"],
+    enum: [
+      "barberia",
+      "peluqueria",
+      "salon_belleza",
+      "spa",
+      "centro_estetica",
+      "otros",
+    ],
   },
   estado: {
     type: String,
@@ -34,7 +41,6 @@ const EmpresaSchema = new mongoose.Schema({
   correo: String,
   horarios: String,
 
-  
   redes: {
     instagram: String,
     facebook: String,
@@ -109,8 +115,9 @@ const EmpresaSchema = new mongoose.Schema({
   // Política de cancelación
   politicaCancelacion: {
     permiteCancelacion: { type: Boolean, default: true },
-    horasLimite: { type: Number, default: 24 }, // hasta X horas antes puede cancelar
+    horasLimite: { type: Number, default: 24 },
     mensajePolitica: { type: String, default: "" },
+    mensajeCancelacionRecordatorio: { type: String, default: "" }, // 👈 agrega esto
   },
 
   recordatoriosRetencionActivo: {

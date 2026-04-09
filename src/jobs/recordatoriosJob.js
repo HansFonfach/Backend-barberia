@@ -68,7 +68,7 @@ class RecordatoriosJob {
     console.log(`📨 Enviando ${tipo} → Reserva ${reserva._id}`);
 
     // 📧 EMAIL
-    if (cliente.email) {
+    if (cliente.email && tipo !== "3h") {
       try {
         console.log("📧 Enviando email a:", cliente.email);
 
@@ -82,8 +82,6 @@ class RecordatoriosJob {
       } catch (err) {
         console.error(`❌ Error email ${cliente.email}:`, err.message);
       }
-    } else {
-      console.warn("⚠️ Cliente sin email:", reserva._id);
     }
 
     // 💬 WHATSAPP

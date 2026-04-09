@@ -8,31 +8,30 @@ export const sendBaseEmail = async ({ to, subject, html, text }) => {
     to,
     subject,
     html,
-    text, // ← NUEVO: versión texto plano, reduce spam score
+    text,
   });
 };
 
-// ← NUEVO: botón sin target="_blank" (Apple Mail lo bloqueaba)
 const ctaButton = (href, label, color = "#1a73e8") => `
-    <table width="100%" cellpadding="0" cellspacing="0" border="0">
-      <tr>
-        <td align="center" style="padding:16px 0;">
-          <a href="${href}"
-            style="display:inline-block;padding:12px 24px;background-color:${color};color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;font-family:Arial,sans-serif;font-size:15px;">
-            ${label}
-          </a>
-        </td>
-      </tr>
-      <tr>
-        <td align="center">
-          <p style="font-size:12px;color:#888;font-family:Arial,sans-serif;">
-            O copia este enlace en tu navegador:<br/>
-            <a href="${href}" style="color:#1a73e8;word-break:break-all;">${href}</a>
-          </p>
-        </td>
-      </tr>
-    </table>
-  `;
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td align="center" style="padding:16px 0;">
+        <a href="${href}"
+          style="display:inline-block;padding:12px 24px;background-color:${color};color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;font-family:Arial,sans-serif;font-size:15px;">
+          ${label}
+        </a>
+      </td>
+    </tr>
+    <tr>
+      <td align="center">
+        <p style="font-size:12px;color:#888;font-family:Arial,sans-serif;">
+          O copia este enlace en tu navegador:<br/>
+          <a href="${href}" style="color:#1a73e8;word-break:break-all;">${href}</a>
+        </p>
+      </td>
+    </tr>
+  </table>
+`;
 
 const layout = (body) => `
   <!DOCTYPE html>
@@ -45,7 +44,7 @@ const layout = (body) => `
               style="border-radius:8px;max-width:600px;width:100%;">
           <tr>
             <td style="background:#1a1a1a;padding:20px 32px;">
-              <p style="margin:0;color:#fff;font-size:20px;font-weight:bold;">🗓️Agenda Fonfach</p>
+              <p style="margin:0;color:#fff;font-size:20px;font-weight:bold;">🗓️ Agenda Fonfach</p>
             </td>
           </tr>
           <tr><td style="padding:32px;">${body}</td></tr>
@@ -68,15 +67,53 @@ const detalles = ({
   direccion,
   labelProfesional = "Profesional",
 }) => `
-    <table cellpadding="8" cellspacing="0" border="0" width="100%"
-          style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
-      <tr><td style="font-size:14px;color:#555;width:40%;">${labelProfesional}</td><td style="font-weight:bold;">${nombreBarbero}</td></tr>
-      <tr><td style="font-size:14px;color:#555;">Servicio</td><td style="font-weight:bold;">${servicio}</td></tr>
-      <tr><td style="font-size:14px;color:#555;">Fecha</td><td style="font-weight:bold;">${fecha}</td></tr>
-      <tr><td style="font-size:14px;color:#555;">Hora</td><td style="font-weight:bold;">${hora}</td></tr>
-      <tr><td style="font-size:14px;color:#555;">Dirección</td><td style="font-weight:bold;">${direccion}</td></tr>
-    </table>`;
+  <table cellpadding="8" cellspacing="0" border="0" width="100%"
+        style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
+    <tr><td style="font-size:14px;color:#555;width:40%;">${labelProfesional}</td><td style="font-weight:bold;">${nombreBarbero}</td></tr>
+    <tr><td style="font-size:14px;color:#555;">Servicio</td><td style="font-weight:bold;">${servicio}</td></tr>
+    <tr><td style="font-size:14px;color:#555;">Fecha</td><td style="font-weight:bold;">${fecha}</td></tr>
+    <tr><td style="font-size:14px;color:#555;">Hora</td><td style="font-weight:bold;">${hora}</td></tr>
+    <tr><td style="font-size:14px;color:#555;">Dirección</td><td style="font-weight:bold;">${direccion ?? "No especificada"}</td></tr>
+  </table>`;
 
+// Bloque reutilizable: instrucciones del servicio
+const bloqueInstrucciones = (instrucciones) =>
+  instrucciones
+    ? `
+  <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
+    <p style="margin:0 0 8px;font-weight:bold;color:#555;">📋 Instrucciones para tu cita:</p>
+    <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;text-align:justify;">${instrucciones}</p>
+  </div>`
+    : "";
+
+// Bloque reutilizable: política de cancelación
+const bloquePolitica = ({
+  horasLimite,
+  telefonoEmpresa,
+  mensajeCancelacionRecordatorio,
+}) => {
+  // Si hay mensaje personalizado, lo mostramos en lugar de la política genérica
+  if (mensajeCancelacionRecordatorio) {
+    return `
+  <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
+    <p style="margin:0;color:#555;font-size:14px;line-height:1.6;white-space:pre-line;">${mensajeCancelacionRecordatorio}</p>
+  </div>`;
+  }
+
+  if (horasLimite == null) return "";
+
+  return `
+  <div style="background:#f0f7ff;border-left:4px solid #1a73e8;padding:16px;border-radius:4px;margin:16px 0;">
+    <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
+      ⚠️ Puedes cancelar tu cita con al menos <strong>${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación</strong>.
+      ${telefonoEmpresa ? `¿Algún imprevisto? Contáctate con tu profesional: 📞 <a href="tel:${telefonoEmpresa}" style="color:#1a73e8;font-weight:bold;text-decoration:none;">${telefonoEmpresa}</a>` : ""}
+    </p>
+  </div>`;
+};
+
+// ─────────────────────────────────────────────
+// EMAIL: Reserva confirmada (usuario registrado)
+// ─────────────────────────────────────────────
 export const sendReservationEmail = async (to, data) => {
   const {
     nombreCliente,
@@ -86,47 +123,29 @@ export const sendReservationEmail = async (to, data) => {
     servicio,
     instrucciones,
     direccion,
-    horasLimite, // ← nuevo
-    telefonoEmpresa, // ← nuevo
+    horasLimite,
+    telefonoEmpresa,
+    mensajeCancelacionRecordatorio,
   } = data;
+
   return await sendBaseEmail({
     to,
     subject: "Reserva confirmada – Agenda Fonfach",
     html: layout(`
-        <h2 style="margin-top:0;">Reserva Confirmada 🗓️</h2>
-        <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido confirmada.</p>
-        ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
-
-        ${
-          instrucciones
-            ? `
-          <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
-            <p style="margin:0 0 8px;font-weight:bold;color:#555;">📋 Instrucciones para tu cita:</p>
-            <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;text-align:justify;">${instrucciones}</p>
-          </div>
-        `
-            : ""
-        }
-
-        ${
-          horasLimite != null
-            ? `
-          <div style="background:#f0f7ff;border-left:4px solid #1a73e8;padding:16px;border-radius:4px;margin:16px 0;">
-            <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
-              ⚠️ Cancelaciones con al menos <strong>${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación</strong>.
-              ${telefonoEmpresa ? `¿Algún imprevisto? Contáctate con tu profesional: 📞 <a href="tel:${telefonoEmpresa}" style="color:#1a73e8;font-weight:bold;text-decoration:none;">${telefonoEmpresa}</a>` : ""}
-            </p>
-          </div>
-        `
-            : ""
-        }
-
-        <p style="color:#555;font-size:14px;">Si necesitas cancelar o reagendar, ingresa a tu perfil.</p>
-      `),
-    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\nDirección: ${direccion ?? "No especificada"}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${horasLimite != null ? `\n\n⚠️ Cancelaciones con al menos ${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación.${telefonoEmpresa ? ` ¿Algún imprevisto? Contáctate con tu profesional: ${telefonoEmpresa}` : ""}` : ""}`,
+      <h2 style="margin-top:0;">Reserva Confirmada 🗓️</h2>
+      <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido confirmada.</p>
+      ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
+      ${bloqueInstrucciones(instrucciones)}
+      ${bloquePolitica({ horasLimite, telefonoEmpresa, mensajeCancelacionRecordatorio })}
+      <p style="color:#555;font-size:14px;">Si necesitas cancelar o reagendar, ingresa a tu perfil.</p>
+    `),
+    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\nDirección: ${direccion ?? "No especificada"}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${mensajeCancelacionRecordatorio ? `\n\n${mensajeCancelacionRecordatorio}` : horasLimite != null ? `\n\n⚠️ Puedes cancelar con al menos ${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación.${telefonoEmpresa ? ` Contáctate con tu profesional: ${telefonoEmpresa}` : ""}` : ""}`,
   });
 };
 
+// ─────────────────────────────────────────────
+// EMAIL: Reserva confirmada (invitado/sin cuenta)
+// ─────────────────────────────────────────────
 export const sendGuestReservationEmail = async (to, data) => {
   const {
     nombreCliente,
@@ -136,58 +155,99 @@ export const sendGuestReservationEmail = async (to, data) => {
     servicio,
     cancelUrl,
     instrucciones,
-    permiteCancelacion, // ✅ nuevo
-    horasLimite, // ✅ nuevo
+    permiteCancelacion,
+    horasLimite,
     direccion,
-    telefonoEmpresa, // ← nuevo
+    telefonoEmpresa,
+    mensajeCancelacionRecordatorio,
   } = data;
 
   return await sendBaseEmail({
     to,
     subject: "Reserva confirmada – Agenda Fonfach",
     html: layout(`
-        <h2 style="margin-top:0;">Reserva Confirmada 🗓️</h2>
-        <p>Hola <strong>${nombreCliente}</strong>, tu reserva fue creada exitosamente.</p>
-        ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
-
-        ${
-          instrucciones
-            ? `
-          <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
-            <p style="margin:0 0 8px;font-weight:bold;color:#555;">📋 Instrucciones para tu cita:</p>
-            <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;text-align:justify;">${instrucciones}</p>
-          </div>
-        `
+      <h2 style="margin-top:0;">Reserva Confirmada 🗓️</h2>
+      <p>Hola <strong>${nombreCliente}</strong>, tu reserva fue creada exitosamente.</p>
+      ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
+      ${bloqueInstrucciones(instrucciones)}
+      ${bloquePolitica({ horasLimite, telefonoEmpresa, mensajeCancelacionRecordatorio })}
+      ${
+        permiteCancelacion && cancelUrl && !mensajeCancelacionRecordatorio
+          ? `
+        ${ctaButton(cancelUrl, "Cancelar mi reserva", "#c0392b")}
+        <p style="font-size:12px;color:#aaa;text-align:center;">Este enlace es personal y expira automáticamente.</p>
+      `
+          : !permiteCancelacion
+            ? `<p style="color:#555;font-size:14px;">Esta reserva no admite cancelaciones.</p>`
             : ""
-        }
-
-        ${
-          permiteCancelacion && cancelUrl
-            ? `
-        
-          ${ctaButton(cancelUrl, "Cancelar mi reserva", "#c0392b")}
-          <p style="font-size:12px;color:#aaa;">Este enlace es personal y expira automáticamente.</p>
-        `
-            : `
-          <p style="color:#555;font-size:14px;">Esta reserva no admite cancelaciones.</p>
-        `
-        }
-        ${
-          horasLimite != null
-            ? `
-  <div style="background:#f0f7ff;border-left:4px solid #1a73e8;padding:16px;border-radius:4px;margin:16px 0;">
-    <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
-      ⚠️ Cancelaciones con al menos <strong>${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación</strong>.
-      ${telefonoEmpresa ? `¿Algún imprevisto? Contáctate con tu profesional: 📞 <a href="tel:${telefonoEmpresa}" style="color:#1a73e8;font-weight:bold;text-decoration:none;">${telefonoEmpresa}</a>` : ""}
-    </p>
-  </div>
-`
-            : ""
-        }
-      `),
-    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${permiteCancelacion && cancelUrl ? `\n\nCancelar reserva (hasta ${horasLimite}h antes):\n${cancelUrl}` : "\n\nEsta reserva no admite cancelaciones."}`,
+      }
+    `),
+    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\nDirección: ${direccion ?? "No especificada"}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${mensajeCancelacionRecordatorio ? `\n\n${mensajeCancelacionRecordatorio}` : horasLimite != null ? `\n\n⚠️ Puedes cancelar con al menos ${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación.${telefonoEmpresa ? ` Contáctate con tu profesional: ${telefonoEmpresa}` : ""}` : ""}${permiteCancelacion && cancelUrl && !mensajeCancelacionRecordatorio ? `\n\nCancelar reserva:\n${cancelUrl}` : !permiteCancelacion ? "\n\nEsta reserva no admite cancelaciones." : ""}`,
   });
 };
+
+// ─────────────────────────────────────────────
+// EMAIL: Recordatorio de cita
+// ─────────────────────────────────────────────
+export const sendReminderEmail = async (to, data) => {
+  const {
+    nombreCliente,
+    nombreBarbero,
+    servicio,
+    fecha,
+    hora,
+    tipo,
+    instrucciones,
+    direccion,
+    confirmarUrl,
+    cancelarUrl,
+    horasLimite,
+    telefonoEmpresa,
+    mensajeCancelacionRecordatorio,
+  } = data;
+
+  const es24h = tipo === "24h";
+
+  return await sendBaseEmail({
+    to,
+    subject: es24h
+      ? "Recordatorio: tu cita es mañana – Agenda Fonfach"
+      : "Recordatorio: tu cita es en 3 horas – Agenda Fonfach",
+    html: layout(`
+      <h2 style="margin-top:0;">
+        ${es24h ? "⏰ Tu cita es mañana" : "⏰ Tu cita es en 3 horas"}
+      </h2>
+      <p>Hola <strong>${nombreCliente}</strong>, te recordamos que tienes una cita agendada.</p>
+      ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
+      ${bloqueInstrucciones(instrucciones)}
+
+      ${
+        es24h && confirmarUrl && cancelarUrl
+          ? mensajeCancelacionRecordatorio
+            ? bloquePolitica({ mensajeCancelacionRecordatorio })
+            : `
+          <p style="color:#555;font-size:14px;margin-top:24px;">¿Podrás asistir? Confirma o cancela con un clic:</p>
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td width="50%" style="padding:0 8px 0 0;">
+                ${ctaButton(confirmarUrl, "✅ Sí, voy a ir", "#2e7d32")}
+              </td>
+              <td width="50%" style="padding:0 0 0 8px;">
+                ${ctaButton(cancelarUrl, "❌ No podré ir", "#c0392b")}
+              </td>
+            </tr>
+          </table>
+          <p style="font-size:12px;color:#aaa;text-align:center;">Este enlace es personal y expira automáticamente.</p>
+          ${bloquePolitica({ horasLimite, telefonoEmpresa })}
+        `
+          : bloquePolitica({ horasLimite, telefonoEmpresa })
+      }
+    `),
+    text: `Recordatorio de cita\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\nDirección: ${direccion ?? "No especificada"}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${mensajeCancelacionRecordatorio ? `\n\n${mensajeCancelacionRecordatorio}` : horasLimite != null ? `\n\n⚠️ Puedes cancelar con al menos ${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación.${telefonoEmpresa ? ` Ante cualquier eventualidad, comunícate al ${telefonoEmpresa}.` : ""}` : ""}${es24h && confirmarUrl && !mensajeCancelacionRecordatorio ? `\n\nConfirmar asistencia: ${confirmarUrl}\nCancelar: ${cancelarUrl}` : ""}`,
+  });
+};
+
+
 
 export const sendCancelReservationEmail = async (to, data) => {
   const {
@@ -265,95 +325,6 @@ export const sendClaimAccountEmail = async (to, data) => {
         <p style="color:#aaa;font-size:13px;">Si no fuiste tú, ignora este correo.</p>
       `),
     text: `Activa tu cuenta\n\nHola ${nombreCliente}\n\nActiva tu cuenta aquí (expira en 1 hora):\n${claimUrl}\n\nSi no fuiste tú, ignora este correo.`,
-  });
-};
-
-export const sendReminderEmail = async (to, data) => {
-  const {
-    nombreCliente,
-    nombreBarbero,
-    servicio,
-    fecha,
-    hora,
-    tipo,
-    instrucciones,
-    direccion,
-    confirmarUrl,
-    cancelarUrl,
-    horasLimite, // ← nuevo: horas que permite la empresa para cancelar
-    telefonoEmpresa, // ← nuevo: número del profesional
-  } = data;
-
-  const es24h = tipo === "24h";
-
-  return await sendBaseEmail({
-    to,
-    subject: es24h
-      ? "Recordatorio: tu cita es mañana – Agenda Fonfach"
-      : "Recordatorio: tu cita es en 3 horas – Agenda Fonfach",
-    html: layout(`
-      <h2 style="margin-top:0;">
-        ${es24h ? "⏰ Tu cita es mañana" : "⏰ Tu cita es en 3 horas"}
-      </h2>
-      <p>Hola <strong>${nombreCliente}</strong>, te recordamos que tienes una cita agendada.</p>
-      ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
-
-      ${
-        instrucciones
-          ? `
-        <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
-          <p style="margin:0 0 8px;font-weight:bold;color:#555;">📋 Instrucciones para tu cita:</p>
-          <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;text-align:justify;">${instrucciones}</p>
-        </div>
-      `
-          : ""
-      }
-
-  ${
-    horasLimite != null
-      ? `
-  <div style="background:#f0f7ff;border-left:4px solid #1a73e8;padding:16px;border-radius:4px;margin:16px 0;">
-    <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
-      ⚠️ Cancelaciones con al menos <strong>${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación</strong>.
-      ${
-        telefonoEmpresa
-          ? `¿Algún imprevisto? Contáctate con tu profesional: 📞 <a href="tel:${telefonoEmpresa}" style="color:#1a73e8;font-weight:bold;text-decoration:none;">${telefonoEmpresa}</a>`
-          : ""
-      }
-    </p>
-  </div>
-`
-      : ""
-  }
-
-      ${
-        es24h && confirmarUrl && cancelarUrl
-          ? `
-        <p style="color:#555;font-size:14px;margin-top:24px;">
-          ¿Podrás asistir? Confirma o cancela con un clic:
-        </p>
-        <table width="100%" cellpadding="0" cellspacing="0" border="0">
-          <tr>
-            <td width="50%" style="padding:0 8px 0 0;">
-              ${ctaButton(confirmarUrl, "✅ Sí, voy a ir", "#2e7d32")}
-            </td>
-            <td width="50%" style="padding:0 0 0 8px;">
-              ${ctaButton(cancelarUrl, "❌ No podré ir", "#c0392b")}
-            </td>
-          </tr>
-        </table>
-        <p style="font-size:12px;color:#aaa;text-align:center;">
-          Este enlace es personal y expira automáticamente.
-        </p>
-      `
-          : `
-        <p style="color:#555;font-size:14px;">
-          Si necesitas cancelar, hazlo desde tu perfil.
-        </p>
-      `
-      }
-    `),
-    text: `Recordatorio de cita\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${horasLimite != null ? `\n\nRecuerda que tu reserva se puede cancelar hasta solo ${horasLimite} hora${horasLimite !== 1 ? "s" : ""} antes de tu cita.${telefonoEmpresa ? ` Ante cualquier eventualidad, comunícate con el/la profesional al ${telefonoEmpresa}.` : ""}` : ""}${es24h && confirmarUrl ? `\n\nConfirmar asistencia: ${confirmarUrl}\nCancelar: ${cancelarUrl}` : ""}`,
   });
 };
 
@@ -450,5 +421,46 @@ export const sendBienvenidaEmpresaEmail = async (to, data) => {
         </p>
       `),
     text: `¡Bienvenido a Agenda Fonfach!\n\nTu negocio "${nombreNegocio}" fue creado exitosamente. Tienes 7 días gratis para probarlo.\n\nTu agenda pública: ${agendaUrl}\nCorreo: ${email}\nContraseña temporal: ${password}\n\nInicia sesión en: ${panelUrl}\n\nTe recomendamos cambiar tu contraseña después del primer ingreso.\n\nEquipo 🗓️ Agenda Fonfach`,
+  });
+};
+
+export const sendReagendamientoEmail = async (to, data) => {
+  const {
+    nombreCliente,
+    nombreBarbero,
+    servicio,
+    fechaAnterior,
+    nuevaFecha,
+    nuevaHora,
+    direccion,
+  } = data;
+
+  return await sendBaseEmail({
+    to,
+    subject: "Tu reserva fue reagendada – Agenda Fonfach",
+    html: layout(`
+      <h2 style="margin-top:0;">Reserva Reagendada 🔄</h2>
+
+      <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido reagendada correctamente.</p>
+
+      <div style="background:#fff4f4;border-left:4px solid #e53935;padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:0;font-size:14px;color:#555;">
+          ⛔ <strong>Fecha anterior:</strong> ${fechaAnterior}
+        </p>
+      </div>
+
+      ${detalles({
+        nombreBarbero,
+        servicio,
+        fecha: nuevaFecha,
+        hora: nuevaHora,
+        direccion,
+      })}
+
+      <p style="color:#555;font-size:14px;">
+        Si no puedes asistir, recuerda cancelar o reagendar con anticipación.
+      </p>
+    `),
+    text: `Reserva reagendada\n\nHola ${nombreCliente}\n\nFecha anterior: ${fechaAnterior}\n\nNueva reserva:\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${nuevaFecha}\nHora: ${nuevaHora}\nDirección: ${direccion ?? "No especificada"}`,
   });
 };

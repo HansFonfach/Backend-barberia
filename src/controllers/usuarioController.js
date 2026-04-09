@@ -472,15 +472,18 @@ export const getUsuarioByRutPublico = async (req, res) => {
     res.json({
       success: true,
       _id: usuario._id,
-      id: usuario._id,
       nombre: usuario.nombre,
       apellido: usuario.apellido,
-      email: usuario.email,
+      // Enmascarar email: h***@gmail.com
+      email: usuario.email.replace(/(.{1}).+(@.+)/, "$1***$2"),
       rut: usuario.rut,
-      telefono: usuario.telefono || "",
-      suscrito: usuario.suscrito || false,
+      // Enmascarar teléfono: mostrar solo últimos 4 dígitos
+      telefono: usuario.telefono
+        ? "*".repeat(usuario.telefono.length - 4) + usuario.telefono.slice(-4)
+        : "",
       rol: usuario.rol,
       puntos: usuario.puntos || 0,
+      suscrito: usuario.suscrito || false,
     });
   } catch (error) {
     console.error("💥 Error en getUsuarioByRut:", error);
