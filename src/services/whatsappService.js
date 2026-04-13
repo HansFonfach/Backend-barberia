@@ -43,11 +43,11 @@ class WhatsAppService {
     hora,
     servicio,
     direccion,
+    slugEmpresa, // 👈 agrega este parámetro
   }) {
     try {
       const telefonoFormateado = this.formatearTelefono(telefono);
 
-      // 🔥 LOG 1: Datos de entrada
       console.log("📤 Enviando recordatorio WhatsApp...");
       console.log({
         nombreCliente,
@@ -59,15 +59,23 @@ class WhatsAppService {
         hora,
         servicio,
         direccion,
+        slugEmpresa,
       });
+
+      // 👇 Lógica para elegir plantilla según slug
+      const esLumyca = slugEmpresa === "lumicabeauty";
+      const templateName = esLumyca
+        ? "recordatorio_lumyca"
+        : "recordatorio3_cita";
+      const languageCode = esLumyca ? "en" : "en"; // ambas en "en" según lo que indicaste
 
       const body = {
         messaging_product: "whatsapp",
         to: telefonoFormateado,
         type: "template",
         template: {
-          name: "recordatorio3_cita",
-          language: { code: "en" },
+          name: templateName,
+          language: { code: languageCode },
           components: [
             {
               type: "body",
@@ -111,7 +119,7 @@ class WhatsAppService {
 
       // 🔥 LOG 4: éxito claro
       console.log(
-        `✅ WhatsApp enviado correctamente a ${telefonoFormateado} (${nombreCliente})`
+        `✅ WhatsApp enviado correctamente a ${telefonoFormateado} (${nombreCliente})`,
       );
 
       return { success: true, data };
@@ -192,15 +200,12 @@ class WhatsAppService {
       }
 
       console.log(
-        `✅ Notificación enviada al profesional ${nombreProfesional}`
+        `✅ Notificación enviada al profesional ${nombreProfesional}`,
       );
 
       return { success: true, data };
     } catch (error) {
-      console.error(
-        "❌ Error enviando WhatsApp profesional:",
-        error.message
-      );
+      console.error("❌ Error enviando WhatsApp profesional:", error.message);
       return { success: false, error: error.message };
     }
   }

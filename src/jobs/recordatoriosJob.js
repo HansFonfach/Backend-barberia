@@ -93,6 +93,7 @@ class RecordatoriosJob {
           ...datos,
           telefono: cliente.telefono,
           nombreProfesional: datos.nombreBarbero,
+          slugEmpresa: reserva.empresa?.slug || "", // 👈 agregar esto
         });
 
         if (res.success) {
@@ -132,7 +133,7 @@ class RecordatoriosJob {
         .populate(
           "empresa",
           "nombre direccion telefono politicaCancelacion slug",
-        ); // ✅ agregado slug
+        ); 
 
       console.log(`📊 Reservas encontradas (24h): ${reservas.length}`);
 
@@ -206,7 +207,10 @@ class RecordatoriosJob {
       })
         .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre direccion telefono politicaCancelacion");
+        .populate(
+          "empresa",
+          "nombre direccion telefono politicaCancelacion slug",
+        );
 
       console.log(`📊 Reservas encontradas (3h): ${reservas.length}`);
 

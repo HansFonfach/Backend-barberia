@@ -50,15 +50,21 @@ const EmpresaSchema = new mongoose.Schema({
 
   // ====== THEME / PERSONALIZACIÓN ======
   colores: {
-    primario: { type: String, default: "#5e72e4" },
-    secundario: { type: String, default: "#2dce89" },
-    fondo: { type: String, default: "#FFFFFF" },
-    texto: { type: String, default: "#172b4d" },
-    textoMuted: { type: String, default: "#8898aa" },
-    heroBg: String,
-    heroEsClaro: { type: Boolean, default: false }, // 👈 agregar esto
+    // los que ya tienes...
+    acento: { type: String, default: "#fb6340" }, // alerts, warnings
+    sidebar: { type: String, default: null }, // si quieren sidebar distinto al primario
+    navbar: { type: String, default: null },
+    tarjeta: { type: String, default: "#ffffff" }, // fondo de cards
+    bordeTarjeta: { type: String, default: "#e9ecef" },
   },
 
+  configuracion: {
+    // los que ya tienes...
+    modoOscuro: { type: Boolean, default: false },
+    compacto: { type: Boolean, default: false }, // sidebar colapsado por defecto
+  },
+
+  
   // ====== CONFIGURACIÓN VISUAL ======
   configuracion: {
     mostrarLogo: { type: Boolean, default: true },
