@@ -13,26 +13,43 @@ const EmpresaSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
-  tipo: {
+  rubro: {
     type: String,
     required: true,
     enum: [
+      // Belleza (lo que ya tienes)
       "barberia",
       "peluqueria",
       "salon_belleza",
       "spa",
       "centro_estetica",
+      // Salud (nuevo)
+      "nutricion",
+      "kinesiologia",
+      "psicologia",
+      "medicina_general",
+      // Genérico
       "otros",
     ],
   },
+
+  // Módulos activos para esta empresa
+  modulos: {
+    fichaClinica: { type: Boolean, default: false }, // nutrición, kinesi, etc.
+    historialControles: { type: Boolean, default: false },
+    planAlimentario: { type: Boolean, default: false }, // específico nutrición
+    examenesLab: { type: Boolean, default: false },
+    // En el futuro puedes agregar: recetas, derivaciones, etc.
+  },
+
   estado: {
     type: String,
     enum: ["activo", "inactivo"],
     default: "activo",
   },
   logo: {
-    url: { type: String, default: null },
-    publicId: { type: String, default: null },
+    type: String,
+    default: null,
   },
 
   descripcion: String,
@@ -48,25 +65,10 @@ const EmpresaSchema = new mongoose.Schema({
     youtube: String,
   },
 
-  // ====== THEME / PERSONALIZACIÓN ======
-  colores: {
-    // los que ya tienes...
-    acento: { type: String, default: "#fb6340" }, // alerts, warnings
-    sidebar: { type: String, default: null }, // si quieren sidebar distinto al primario
-    navbar: { type: String, default: null },
-    tarjeta: { type: String, default: "#ffffff" }, // fondo de cards
-    bordeTarjeta: { type: String, default: "#e9ecef" },
-  },
-
-  configuracion: {
-    // los que ya tienes...
-    modoOscuro: { type: Boolean, default: false },
-    compacto: { type: Boolean, default: false }, // sidebar colapsado por defecto
-  },
-
-  
   // ====== CONFIGURACIÓN VISUAL ======
   configuracion: {
+    modoOscuro: { type: Boolean, default: false },
+    compacto: { type: Boolean, default: false },
     mostrarLogo: { type: Boolean, default: true },
     mostrarEstadisticas: { type: Boolean, default: true },
     tipoHero: {
@@ -76,7 +78,36 @@ const EmpresaSchema = new mongoose.Schema({
     },
     fuente: { type: String, default: "default" },
     borderRadius: { type: String, default: "24px" },
-    usaHorasAncla: { type: Boolean, default: false }, // 👈 aquí dentro
+    usaHorasAncla: { type: Boolean, default: false },
+  },
+
+  configuracionRubro: {
+    // Para rubros de salud
+    salud: {
+      especialidad: { type: String }, // "nutrición deportiva", "clínica", etc.
+      requiereNumColegiado: { type: Boolean, default: false },
+      duracionControlDefault: { type: Number, default: 45 }, // minutos
+    },
+    // Para rubros de belleza (ya los manejas, pero lo explicitamos)
+    belleza: {
+      usaProductos: { type: Boolean, default: false },
+      usaFidelizacion: { type: Boolean, default: false },
+    },
+  },
+
+  colores: {
+    primario: String,
+    secundario: String,
+    fondo: String,
+    texto: String,
+    textoMuted: String,
+    heroBg: String,
+    heroEsClaro: Boolean,
+    acento: String,
+    sidebar: String,
+    navbar: String,
+    tarjeta: String,
+    bordeTarjeta: String,
   },
 
   creadoEn: {
@@ -149,5 +180,8 @@ const EmpresaSchema = new mongoose.Schema({
     default: "trial", // trial | activo | vencido
   },
 });
+
+EmpresaSchema.index({ rubro: 1 });
+EmpresaSchema.index({ rubro: 1, estado: 1 });
 
 export default mongoose.model("Empresa", EmpresaSchema);

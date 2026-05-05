@@ -355,7 +355,7 @@ export const me = async (req, res) => {
 
     // 2️⃣ Empresa
     const empresa = await Empresa.findById(usuario.empresa).select(
-      "_id nombre slug configuracion",
+      "_id nombre slug configuracion modulos",
     );
 
     // 3️⃣ Suscripción activa

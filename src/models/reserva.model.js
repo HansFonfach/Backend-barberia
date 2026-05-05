@@ -69,6 +69,12 @@ const ReservaSchema = new Schema(
         enum: ["pendiente", "pagado", "rechazado"],
         default: "pendiente",
       },
+
+      controlClinico: {
+        type: Schema.Types.ObjectId,
+        ref: "ControlNutricional",
+        default: null,
+      },
       metodo: {
         type: String,
         enum: ["transferencia", "mercadopago", "webpay", "efectivo"],

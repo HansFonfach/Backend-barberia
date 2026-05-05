@@ -143,33 +143,29 @@ export const actualizarLogoEmpresa = async (req, res) => {
 export const actualizarEmpresa = async (req, res) => {
   try {
     const empresaId = req.usuario?.empresaId;
+    if (!empresaId) return res.status(403).json({ message: "No autorizado" });
 
-    if (!empresaId) {
-      return res.status(403).json({ message: "No autorizado" });
-    }
+    const data = req.body;
 
-    const camposProtegidos = [
-      "rutEmpresa",
-      "slug",
-      "tipo",
-      "configuracion",
-      "permiteSuscripcion",
-    ];
-    camposProtegidos.forEach((campo) => delete req.body[campo]);
+    // ❌ eliminar campos que no quieres que rompan nada
+    delete data.rutEmpresa;
+    delete data.slug;
+    delete data.tipo;
+    delete data.plan;
+    delete data.trial;
 
     const empresaActualizada = await empresaModel.findByIdAndUpdate(
       empresaId,
-      { $set: req.body },
-      { new: true, runValidators: true },
+      data, // 👈 sin $set (mongoose igual lo hace)
+      {
+        new: true,
+        runValidators: true,
+      },
     );
-
-    if (!empresaActualizada) {
-      return res.status(404).json({ message: "Empresa no encontrada" });
-    }
 
     res.status(200).json(empresaActualizada);
   } catch (error) {
-    console.error("❌ Error actualizarEmpresa:", error);
+    console.error("❌ ERROR REAL:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -179,7 +175,7 @@ export const getEmpresasPublicas = async (req, res) => {
     const empresas = await empresaModel
       .find()
       .select("nombre slug tipo descripcion direccion horarios logo colores");
-      
+
     res.json(empresas);
   } catch (error) {
     console.error("Error en getEmpresasPublicas:", error);
