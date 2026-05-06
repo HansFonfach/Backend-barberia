@@ -19,6 +19,7 @@ class RecordatoriosJob {
       console.log("⏰ Ejecutando CRON:", new Date().toISOString());
 
       await this.enviarRecordatorios24h();
+      await this.enviarRecordatorios14h();
       await this.enviarRecordatorios3h();
     });
   }
@@ -38,8 +39,15 @@ class RecordatoriosJob {
 
     const fechaChile = dayjs(reserva.fecha).tz("America/Santiago");
 
+    const hora = fechaChile.hour();
+    const minuto = fechaChile.minute();
+
+    const esHorarioTemprano =
+      hora === 8 || hora === 9 || (hora === 10 && minuto <= 30);
+
     return {
       cliente,
+      esHorarioTemprano, // 👈 🔥 FALTABA ESTO
       datos: {
         nombreCliente: cliente.nombre,
         nombreBarbero:
@@ -112,6 +120,68 @@ class RecordatoriosJob {
     }
   }
 
+  async enviarRecordatorios14h() {
+    try {
+      console.log("🔍 Buscando recordatorios 14h (horario temprano)...");
+
+      const ahora = dayjs().utc();
+      const desde = ahora.add(13, "hour").add(45, "minute").toDate();
+      const hasta = ahora.add(14, "hour").add(15, "minute").toDate();
+
+      const reservas = await Reserva.find({
+        fecha: { $gte: desde, $lte: hasta },
+        estado: { $in: ["pendiente", "confirmada"] },
+        recordatorio14hEnviado: { $ne: true },
+      })
+        .populate("servicio", "nombre instrucciones")
+        .populate("barbero", "nombre apellido")
+        .populate(
+          "empresa",
+          "nombre direccion telefono politicaCancelacion slug",
+        );
+
+      console.log(`📊 Reservas encontradas (14h): ${reservas.length}`);
+
+      for (const reserva of reservas) {
+        try {
+          const resultado = await this.obtenerDatosReserva(reserva);
+          if (!resultado) continue;
+
+          const { cliente, datos, esHorarioTemprano } = resultado;
+
+          if (!esHorarioTemprano) continue; // 🔑 solo horarios temprano
+
+          // 🔥 FIX: actualización atómica (como en 3h)
+          const yaActualizada = await Reserva.findOneAndUpdate(
+            { _id: reserva._id, recordatorio14hEnviado: { $ne: true } },
+            { recordatorio14hEnviado: true },
+            { new: true },
+          );
+
+          if (!yaActualizada) {
+            console.warn("⚠️ Ya fue procesada (14h)");
+            continue;
+          }
+
+          // 👇 recién aquí envías
+          await this.enviarPorTodosLosCanales(
+            cliente,
+            datos,
+            "14h",
+            reserva,
+            true,
+          );
+
+          await new Promise((r) => setTimeout(r, 500));
+        } catch (err) {
+          console.error("❌ Error 14h:", err.message);
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error en enviarRecordatorios14h:", error);
+    }
+  }
+
   /* =============================
      RECORDATORIO 24H
   ============================== */
@@ -133,7 +203,7 @@ class RecordatoriosJob {
         .populate(
           "empresa",
           "nombre direccion telefono politicaCancelacion slug",
-        ); 
+        );
 
       console.log(`📊 Reservas encontradas (24h): ${reservas.length}`);
 
@@ -221,7 +291,7 @@ class RecordatoriosJob {
           const resultado = await this.obtenerDatosReserva(reserva);
           if (!resultado) continue;
 
-          const { cliente, datos } = resultado;
+          const { cliente, datos, esHorarioTemprano } = resultado;
 
           const yaActualizada = await Reserva.findOneAndUpdate(
             { _id: reserva._id, recordatorio3hEnviado: { $ne: true } },
@@ -239,7 +309,7 @@ class RecordatoriosJob {
             datos,
             "3h",
             reserva,
-            true, // ✅ con WhatsApp
+            !esHorarioTemprano, // ❌ si es temprano, no enviar WhatsApp
           );
 
           await new Promise((r) => setTimeout(r, 500));
