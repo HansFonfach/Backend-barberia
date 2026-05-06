@@ -76,7 +76,7 @@ class RecordatoriosJob {
     console.log(`📨 Enviando ${tipo} → Reserva ${reserva._id}`);
 
     // 📧 EMAIL
-    if (cliente.email && tipo !== "3h") {
+    if (cliente.email && tipo !== "3h" && tipo !== "14h") {
       try {
         console.log("📧 Enviando email a:", cliente.email);
 
@@ -293,6 +293,20 @@ class RecordatoriosJob {
 
           const { cliente, datos, esHorarioTemprano } = resultado;
 
+          // 🔥 AGREGAR ACÁ ↓
+          if (esHorarioTemprano) {
+            console.log(
+              "⏭️ Horario temprano, omitiendo recordatorio 3h completamente",
+            );
+            await Reserva.findOneAndUpdate(
+              { _id: reserva._id, recordatorio3hEnviado: { $ne: true } },
+              { recordatorio3hEnviado: true },
+              { new: true },
+            );
+            continue;
+          }
+          // 🔥 FIN DEL AGREGADO ↑
+
           const yaActualizada = await Reserva.findOneAndUpdate(
             { _id: reserva._id, recordatorio3hEnviado: { $ne: true } },
             { recordatorio3hEnviado: true },
@@ -309,7 +323,7 @@ class RecordatoriosJob {
             datos,
             "3h",
             reserva,
-            !esHorarioTemprano, // ❌ si es temprano, no enviar WhatsApp
+            !esHorarioTemprano,
           );
 
           await new Promise((r) => setTimeout(r, 500));
