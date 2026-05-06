@@ -321,7 +321,9 @@ export const getHorasDisponibles = async (req, res) => {
     console.log(`🗂️  Reservas encontradas (${reservas.length}):`);
     reservas.forEach((r) => {
       const horaLocal = dayjs(r.fecha).tz("America/Santiago").format("HH:mm");
-      console.log(`   - ${horaLocal} | duración: ${r.duracion} min | estado: ${r.estado}`);
+      console.log(
+        `   - ${horaLocal} | duración: ${r.duracion} min | estado: ${r.estado}`,
+      );
     });
 
     const horasReservadas = reservas.map((r) =>
@@ -345,9 +347,13 @@ export const getHorasDisponibles = async (req, res) => {
     }
 
     /* ================= EXCEPCIONES ================= */
+    const inicioDiaUTC = fechaConsulta.startOf("day").utc().toDate();
+
+    const finDiaUTC = fechaConsulta.endOf("day").utc().toDate();
+
     const excepciones = await ExcepcionHorarioModel.find({
       barbero: barberoId,
-      fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
+      fecha: { $gte: inicioDiaUTC, $lte: finDiaUTC },
     });
 
     const bloqueoDia = excepciones.find((e) => e.tipo === "bloqueo_dia");
@@ -369,7 +375,9 @@ export const getHorasDisponibles = async (req, res) => {
       .map((e) => e.horaInicio);
 
     // 🔍 DEBUG: Excepciones
-    console.log(`🚫 Horas bloqueadas: [${horasBloqueadas.join(", ") || "ninguna"}]`);
+    console.log(
+      `🚫 Horas bloqueadas: [${horasBloqueadas.join(", ") || "ninguna"}]`,
+    );
     console.log(`➕ Horas extra: [${horasExtra.join(", ") || "ninguna"}]`);
 
     /* ================= HORAS DISPONIBLES ================= */
@@ -381,7 +389,9 @@ export const getHorasDisponibles = async (req, res) => {
       const intervalo = Number(horario.duracionBloque);
 
       // 🔍 DEBUG: Horario procesado
-      console.log(`\n📋 Horario diaSemana=${horario.diaSemana} | ${horario.horaInicio}-${horario.horaFin} | colación: ${horario.colacionInicio || "sin"}-${horario.colacionFin || "colación"} | bloque: ${intervalo}min`);
+      console.log(
+        `\n📋 Horario diaSemana=${horario.diaSemana} | ${horario.horaInicio}-${horario.horaFin} | colación: ${horario.colacionInicio || "sin"}-${horario.colacionFin || "colación"} | bloque: ${intervalo}min`,
+      );
 
       // ✅ Construir bloques de trabajo separando colación
       const bloquesTrabajo = horario.colacionInicio
@@ -429,7 +439,9 @@ export const getHorasDisponibles = async (req, res) => {
       // 🔍 DEBUG: Bloques de trabajo
       console.log("🧱 Bloques de trabajo (antes de anclas):");
       bloquesTrabajo.forEach((b) =>
-        console.log(`   ${b.inicio.format("HH:mm")} → ${b.fin.format("HH:mm")}`)
+        console.log(
+          `   ${b.inicio.format("HH:mm")} → ${b.fin.format("HH:mm")}`,
+        ),
       );
 
       const usaAncla =
@@ -485,7 +497,9 @@ export const getHorasDisponibles = async (req, res) => {
       // 🔍 DEBUG: Bloques efectivos
       console.log("✅ Bloques efectivos (post-anclas, filtrados):");
       bloquesEfectivos.forEach((b) =>
-        console.log(`   ${b.inicio.format("HH:mm")} → ${b.fin.format("HH:mm")}`)
+        console.log(
+          `   ${b.inicio.format("HH:mm")} → ${b.fin.format("HH:mm")}`,
+        ),
       );
 
       // ===== GENERAR horasBase =====
@@ -519,16 +533,22 @@ export const getHorasDisponibles = async (req, res) => {
         );
 
         // 🔍 DEBUG: Huecos por bloque
-        console.log(`\n   🕳️  Huecos en bloque ${bloque.inicio.format("HH:mm")}-${bloque.fin.format("HH:mm")}:`);
+        console.log(
+          `\n   🕳️  Huecos en bloque ${bloque.inicio.format("HH:mm")}-${bloque.fin.format("HH:mm")}:`,
+        );
         huecos.forEach((h) =>
           console.log(
-            `      ${h.inicio.format("HH:mm")} → ${h.fin.format("HH:mm")} (${h.duracion} min) | servicio necesita ${duracionServicio} min → ${h.duracion >= duracionServicio ? "✅ CABE" : "❌ no cabe"}`
-          )
+            `      ${h.inicio.format("HH:mm")} → ${h.fin.format("HH:mm")} (${h.duracion} min) | servicio necesita ${duracionServicio} min → ${h.duracion >= duracionServicio ? "✅ CABE" : "❌ no cabe"}`,
+          ),
         );
 
         for (const hueco of huecos) {
           if (hueco.duracion >= duracionServicio) {
-            const inicios = generarIniciosEnHueco(hueco, intervalo, duracionServicio);
+            const inicios = generarIniciosEnHueco(
+              hueco,
+              intervalo,
+              duracionServicio,
+            );
             console.log(`      → Inicios generados: [${inicios.join(", ")}]`);
             inicios.forEach((hora) => {
               if (!horasBloqueadas.includes(hora)) {
@@ -545,8 +565,12 @@ export const getHorasDisponibles = async (req, res) => {
 
     // 🔍 DEBUG: Resumen final
     console.log("\n📊 Resumen:");
-    console.log(`   horasBase (${[...horasBase].length}): [${[...horasBase].sort().join(", ")}]`);
-    console.log(`   horasDisponibles (${horasDisponibles.size}): [${[...horasDisponibles].sort().join(", ")}]`);
+    console.log(
+      `   horasBase (${[...horasBase].length}): [${[...horasBase].sort().join(", ")}]`,
+    );
+    console.log(
+      `   horasDisponibles (${horasDisponibles.size}): [${[...horasDisponibles].sort().join(", ")}]`,
+    );
     console.log(`   horasReservadas: [${horasReservadas.join(", ")}]`);
     console.log("🔍 [DEBUG] ==============================\n");
 
@@ -556,10 +580,7 @@ export const getHorasDisponibles = async (req, res) => {
     // ✅ FIX: iterar sobre la UNIÓN de horasDisponibles + horasReservadas
     // horasBase tenía el grid fijo (ej: 15:00, 15:45) pero horasDisponibles
     // genera inicios desde el hueco real (ej: 14:55, 15:40), que nunca coincidían.
-    const todasLasHoras = new Set([
-      ...horasDisponibles,
-      ...horasReservadas,
-    ]);
+    const todasLasHoras = new Set([...horasDisponibles, ...horasReservadas]);
 
     const horas = [...todasLasHoras].sort().reduce((acc, hora) => {
       const inicio = dayjs.tz(
@@ -599,7 +620,6 @@ export const getHorasDisponibles = async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 };
-
 
 /** Crear horario y asignarlo al barbero */
 export const createHorario = async (req, res) => {
