@@ -8,12 +8,11 @@ dayjs.extend(timezone);
 
 // Función auxiliar para convertir fecha Chile a UTC
 const fechaChileToUTC = (fechaChileStr) => {
-  const fechaChile = dayjs.tz(
-    `${fechaChileStr} 00:00`,
-    "YYYY-MM-DD HH:mm",
-    "America/Santiago",
-  );
-  return fechaChile.utc().toDate();
+  return dayjs(fechaChileStr)
+    .tz("America/Santiago", true) // 👈 interpreta como hora Chile real
+    .startOf("day") // 👈 asegura 00:00
+    .utc()
+    .toDate();
 };
 
 // **FUNCIÓN PRINCIPAL ÚNICA - Maneja tanto cancelar como reactivar**
@@ -175,14 +174,12 @@ export const obtenerExcepcionesPorDia = async (req, res) => {
 
 export const crearBloqueoVacaciones = async (req, res) => {
   const { barbero, fechaInicio, fechaFin, motivo } = req.body;
- 
 
   if (!barbero || !fechaInicio || !fechaFin) {
     return res.status(400).json({
       message: "barbero, fechaInicio y fechaFin son requeridos",
     });
   }
- 
 
   try {
     // Convertir fecha Chile → UTC
