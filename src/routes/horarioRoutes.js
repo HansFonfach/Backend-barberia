@@ -5,6 +5,7 @@ import {
   getHorarioBasePorDia,
   getHorariosByBarbero,
   getHorasDisponibles,
+  getHorasProfesionalPorDia,
   getProximaHoraDisponible,
 } from "../controllers/horarioController.js";
 import { validarToken } from "../middlewares/validarToken.js";
@@ -38,6 +39,13 @@ router.get(
 
 router.get("/proximaHoraDisponible", validarToken, getProximaHoraDisponible);
 
+router.get(
+  "/admin/:id/horas",
+  validarToken,
+  verificarRol("esAdmin"),
+  getHorasProfesionalPorDia
+);
+
 router.post(
   "/vacaciones",
   
@@ -55,5 +63,7 @@ router.get(
   verificarRol("esAdmin"),
   obtenerVacaciones,
 );
+
+
 
 export default router;

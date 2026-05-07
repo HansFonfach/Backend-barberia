@@ -1005,3 +1005,225 @@ export const getProximaHoraDisponible = async (req, res) => {
     });
   }
 };
+
+export const getHorasProfesionalPorDia = async (req, res) => {
+  try {
+    const { id: barberoId } = req.params;
+    const { fecha, servicioId } = req.query;
+
+    if (!fecha) {
+      return res.status(400).json({ message: "Fecha requerida" });
+    }
+
+    const fechaConsulta = dayjs.tz(fecha, "YYYY-MM-DD", "America/Santiago");
+    if (!fechaConsulta.isValid()) {
+      return res.status(400).json({ message: "Fecha inválida" });
+    }
+
+    // ─── BARBERO ───
+    const barbero = await Usuario.findById(barberoId).populate(
+      "horariosDisponibles",
+    );
+    if (!barbero)
+      return res.status(404).json({ message: "Barbero no encontrado" });
+
+    const empresaDoc = await empresaModel.findById(barbero.empresa);
+    const diaSemana = fechaConsulta.day();
+
+    const horariosDelDia = barbero.horariosDisponibles.filter(
+      (h) => Number(h.diaSemana) === diaSemana,
+    );
+
+    // ─── FERIADO ───
+    const feriado = await verificarFeriadoConComportamiento(fecha);
+
+    // ─── RESERVAS DEL DÍA ───
+    const inicioBusqueda = fechaConsulta
+      .startOf("day")
+      .subtract(4, "hour")
+      .utc()
+      .toDate();
+    const finBusqueda = fechaConsulta
+      .endOf("day")
+      .add(4, "hour")
+      .utc()
+      .toDate();
+
+    const reservas = await Reserva.find({
+      barbero: barberoId,
+      fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
+      estado: { $in: ["pendiente", "confirmada"] },
+    })
+      .populate("cliente", "nombre email telefono")
+      .populate("servicio", "nombre");
+
+    // Map rápido hora → reserva
+    const mapaReservas = {};
+    reservas.forEach((r) => {
+      const hora = dayjs(r.fecha).tz("America/Santiago").format("HH:mm");
+      mapaReservas[hora] = r;
+    });
+
+    // ─── EXCEPCIONES ───
+    const inicioDiaUTC = fechaConsulta.startOf("day").utc().toDate();
+    const finDiaUTC = fechaConsulta.endOf("day").utc().toDate();
+
+    const excepciones = await ExcepcionHorarioModel.find({
+      barbero: barberoId,
+      fecha: { $gte: inicioDiaUTC, $lte: finDiaUTC },
+    });
+
+    const bloqueoDia = excepciones.find((e) => e.tipo === "bloqueo_dia");
+    const horasBloqueadas = excepciones
+      .filter((e) => e.tipo === "bloqueo")
+      .map((e) => e.horaInicio);
+    const horasExtra = excepciones
+      .filter((e) => e.tipo === "extra")
+      .map((e) => e.horaInicio);
+
+    // ─── VACACIONES ───
+    const vacacion = await ExcepcionHorarioModel.findOne({
+      barbero: barberoId,
+      tipo: "vacaciones",
+      fechaInicio: { $lte: fechaConsulta.endOf("day").utc().toDate() },
+      fechaFin: { $gte: fechaConsulta.startOf("day").utc().toDate() },
+    });
+
+    // ─── CONSTRUIR GRILLA ───
+    const resultado = new Map(); // hora → { hora, estado, meta }
+
+    // 1. Si día bloqueado o vacaciones → solo reservas existentes
+    if (bloqueoDia || vacacion) {
+      Object.entries(mapaReservas).forEach(([hora, r]) => {
+        resultado.set(hora, {
+          hora,
+          estado: "reservada",
+          reserva: _miniReserva(r),
+          motivo: bloqueoDia?.motivo || vacacion?.motivo || "Día bloqueado",
+        });
+      });
+
+      return res.json({
+        fecha,
+        bloqueado: true,
+        motivo: bloqueoDia?.motivo || vacacion?.motivo,
+        esFeriado: !!feriado,
+        nombreFeriado: feriado?.nombre,
+        horas: _ordenar(resultado),
+      });
+    }
+
+    // 2. Horas del horario base
+    for (const horario of horariosDelDia) {
+      const intervalo = Number(horario.duracionBloque);
+
+      // Horas de colación
+      const colacionHoras = new Set();
+      if (horario.colacionInicio && horario.colacionFin) {
+        let c = dayjs.tz(
+          `${fecha} ${horario.colacionInicio}`,
+          "YYYY-MM-DD HH:mm",
+          "America/Santiago",
+        );
+        const cFin = dayjs.tz(
+          `${fecha} ${horario.colacionFin}`,
+          "YYYY-MM-DD HH:mm",
+          "America/Santiago",
+        );
+        while (c.isBefore(cFin)) {
+          colacionHoras.add(c.format("HH:mm"));
+          c = c.add(intervalo, "minute");
+        }
+      }
+
+      // Recorrer horario completo (inicio → fin) con el intervalo
+      let cursor = dayjs.tz(
+        `${fecha} ${horario.horaInicio}`,
+        "YYYY-MM-DD HH:mm",
+        "America/Santiago",
+      );
+      const fin = dayjs.tz(
+        `${fecha} ${horario.horaFin}`,
+        "YYYY-MM-DD HH:mm",
+        "America/Santiago",
+      );
+
+      while (cursor.isBefore(fin)) {
+        const hora = cursor.format("HH:mm");
+
+        if (!resultado.has(hora)) {
+          if (colacionHoras.has(hora)) {
+            resultado.set(hora, { hora, estado: "colacion" });
+          } else if (horasBloqueadas.includes(hora)) {
+            resultado.set(hora, { hora, estado: "bloqueada" });
+          } else if (mapaReservas[hora]) {
+            resultado.set(hora, {
+              hora,
+              estado: "reservada",
+              reserva: _miniReserva(mapaReservas[hora]),
+            });
+          } else {
+            resultado.set(hora, { hora, estado: "disponible" });
+          }
+        }
+
+        cursor = cursor.add(intervalo, "minute");
+      }
+    }
+
+    // 3. Horas extra (fuera del horario base)
+    horasExtra.forEach((hora) => {
+      if (mapaReservas[hora]) {
+        resultado.set(hora, {
+          hora,
+          estado: "reservada",
+          esExtra: true,
+          reserva: _miniReserva(mapaReservas[hora]),
+        });
+      } else {
+        resultado.set(hora, { hora, estado: "extra", esExtra: true });
+      }
+    });
+
+    // 4. Reservas que no cayeron en ninguna hora base (edge case)
+    Object.entries(mapaReservas).forEach(([hora, r]) => {
+      if (!resultado.has(hora)) {
+        resultado.set(hora, {
+          hora,
+          estado: "reservada",
+          esExtra: true,
+          reserva: _miniReserva(r),
+        });
+      }
+    });
+
+    return res.json({
+      fecha,
+      esFeriado: !!feriado,
+      nombreFeriado: feriado?.nombre,
+      sinHorario: horariosDelDia.length === 0,
+      horas: _ordenar(resultado),
+    });
+  } catch (error) {
+    console.error("❌ Error getHorasAdmin:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// ─── Helpers ───
+const _miniReserva = (r) => ({
+  _id: r._id,
+  cliente: r.cliente
+    ? {
+        nombre: r.cliente.nombre,
+        email: r.cliente.email,
+        telefono: r.cliente.telefono,
+      }
+    : null,
+  servicio: r.servicio?.nombre || null,
+  duracion: r.duracion,
+  estado: r.estado,
+});
+
+const _ordenar = (mapa) =>
+  [...mapa.values()].sort((a, b) => a.hora.localeCompare(b.hora));
