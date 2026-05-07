@@ -1115,6 +1115,9 @@ export const getHorasProfesionalPorDia = async (req, res) => {
 
     // 2. Horas del horario base
     for (const horario of horariosDelDia) {
+      const usaAncla =
+        empresaDoc?.configuracion?.usaHorasAncla === true &&
+        horario.horasAncla?.length > 0;
       const intervalo = Number(horario.duracionBloque);
 
       // Horas de colación
@@ -1149,6 +1152,36 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       );
 
       while (cursor.isBefore(fin)) {
+        // ✅ Agregar horas ancla especiales
+        if (usaAncla) {
+          for (const ancla of horario.horasAncla) {
+            const hora = ancla.hora;
+
+            if (!resultado.has(hora)) {
+              if (horasBloqueadas.includes(hora)) {
+                resultado.set(hora, {
+                  hora,
+                  estado: "bloqueada",
+                  esAncla: true,
+                });
+              } else if (mapaReservas[hora]) {
+                resultado.set(hora, {
+                  hora,
+                  estado: "reservada",
+                  esAncla: true,
+                  reserva: _miniReserva(mapaReservas[hora]),
+                });
+              } else {
+                resultado.set(hora, {
+                  hora,
+                  estado: "disponible",
+                  esAncla: true,
+                  serviciosPermitidos: ancla.serviciosPermitidos,
+                });
+              }
+            }
+          }
+        }
         const hora = cursor.format("HH:mm");
 
         if (!resultado.has(hora)) {
