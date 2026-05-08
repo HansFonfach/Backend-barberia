@@ -42,4 +42,48 @@ router.get("/test-whatsapp/:reservaId", async (req, res) => {
   res.json(resultado);
 });
 
+router.get("/test/recordatorio-14h/:reservaId", async (req, res) => {
+  const { reservaId } = req.params;
+
+  try {
+    const reserva = await Reserva.findById(reservaId)
+      .populate("servicio", "nombre instrucciones")
+      .populate("barbero", "nombre apellido")
+      .populate(
+        "empresa",
+        "nombre direccion telefono politicaCancelacion slug",
+      );
+
+    if (!reserva) return res.json({ error: "Reserva no encontrada" });
+
+    const resultado = await RecordatoriosJob.obtenerDatosReserva(reserva);
+    if (!resultado) return res.json({ error: "Cliente no encontrado" });
+
+    const { cliente, datos, esHorarioTemprano } = resultado;
+
+    // Te muestra qué slug detectó y qué plantilla usaría
+    console.log("🧪 slug:", reserva.empresa?.slug);
+    console.log("🧪 esHorarioTemprano:", esHorarioTemprano);
+    console.log("🧪 datos:", datos);
+
+    // Enviar de verdad
+    await RecordatoriosJob.enviarPorTodosLosCanales(
+      cliente,
+      datos,
+      "14h",
+      reserva,
+      true,
+    );
+
+    return res.json({
+      success: true,
+      slug: reserva.empresa?.slug,
+      esHorarioTemprano,
+      datos,
+    });
+  } catch (err) {
+    return res.json({ error: err.message });
+  }
+});
+
 export default router;
