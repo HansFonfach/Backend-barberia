@@ -3,6 +3,7 @@ import RecordatoriosJob from "../jobs/recordatoriosJob.js";
 import retencionCron from "../cron/recordatoriosVolver.js"; // 👈 agrega este
 import { validarToken } from "../middlewares/validarToken.js";
 import { obtenerEstadoLookCliente } from "../controllers/clienteAnalyticsController.js";
+import reservaModel from "../models/reserva.model.js";
 
 const router = Router();
 
@@ -46,7 +47,7 @@ router.get("/test/recordatorio-14h/:reservaId", async (req, res) => {
   const { reservaId } = req.params;
 
   try {
-    const reserva = await Reserva.findById(reservaId)
+    const reserva = await reservaModel.findById(reservaId)
       .populate("servicio", "nombre instrucciones")
       .populate("barbero", "nombre apellido")
       .populate(
