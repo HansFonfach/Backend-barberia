@@ -9,10 +9,22 @@ import { sendSuscriptionActiveEmail } from "./mailController.js";
 ======================================================= */
 export const crearSuscripcion = async (req, res) => {
   try {
-    const { id } = req.params; // usuarioId
+    const { id } = req.params;
+    const { tipoPlan } = req.body;
 
-    // 1️⃣ Usuario
+    // 1️⃣ Validar plan
+    const planesPermitidos = ["creditos", "combo_corte_barba"];
+
+    if (!planesPermitidos.includes(tipoPlan)) {
+      return res.status(400).json({
+        success: false,
+        message: "Tipo de plan inválido",
+      });
+    }
+
+    // 2️⃣ Usuario
     const usuario = await Usuario.findById(id);
+
     if (!usuario) {
       return res.status(404).json({
         success: false,
@@ -20,14 +32,7 @@ export const crearSuscripcion = async (req, res) => {
       });
     }
 
-    if (!usuario.empresa) {
-      return res.status(400).json({
-        success: false,
-        message: "El usuario no tiene empresa asociada",
-      });
-    }
-
-    // 2️⃣ Suscripción activa del usuario en esta empresa
+    // 3️⃣ Validar suscripción activa
     const suscripcionActiva = await Suscripcion.findOne({
       usuario: usuario._id,
       empresa: usuario.empresa,
@@ -41,59 +46,58 @@ export const crearSuscripcion = async (req, res) => {
       });
     }
 
-    // 3️⃣ 🔥 LÍMITE POR EMPRESA (AQUÍ VA)
-    const limiteEmpresa = 20;
+    // 4️⃣ Configuración del plan
+    let serviciosTotales = 2;
+    let precio = 25000;
 
-    const totalActivasEmpresa = await Suscripcion.countDocuments({
-      empresa: usuario.empresa,
-      activa: true,
-    });
+    switch (tipoPlan) {
+      case "creditos":
+        serviciosTotales = 2;
+        precio = 25000;
+        break;
 
-    if (totalActivasEmpresa >= limiteEmpresa) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Esta barbería alcanzó el límite máximo de suscripciones activas",
-      });
+      case "combo_corte_barba":
+        serviciosTotales = 2;
+        precio = 40000;
+        break;
     }
 
-    // 4️⃣ Fechas
+    // 5️⃣ Fechas
     const fechaInicio = new Date();
-    const fechaFin = new Date(fechaInicio);
+
+    const fechaFin = new Date();
     fechaFin.setDate(fechaFin.getDate() + 30);
 
-    // 5️⃣ Crear
+    // 6️⃣ Crear suscripción
     const nueva = await Suscripcion.create({
       usuario: usuario._id,
       empresa: usuario.empresa,
+
       activa: true,
+
       fechaInicio,
       fechaFin,
+
       historial: false,
-      serviciosTotales: 2,
+
+      tipoPlan,
+
+      serviciosTotales,
       serviciosUsados: 0,
     });
 
-    // 6️⃣ Marcar usuario + sumar 50 puntos
-    const actualizado = await Usuario.findByIdAndUpdate(
-      usuario._id,
-      {
-        $inc: { puntos: 50 },
-        $set: { suscrito: true },
-      },
-      {
-        new: true,
-        runValidators: true,
-      },
-    );
+    // 7️⃣ Actualizar usuario
+    await Usuario.findByIdAndUpdate(usuario._id, {
+      $inc: { puntos: 50 },
+      $set: { suscrito: true },
+    });
 
+    // 8️⃣ Mail
     sendSuscriptionActiveEmail(usuario.email, {
       nombreCliente: usuario.nombre,
       fechaInicio: fechaInicio.toLocaleDateString("es-CL"),
       fechaFin: fechaFin.toLocaleDateString("es-CL"),
-    }).catch((err) => {
-      console.error("Error enviando correo de suscripción:", err);
-    });
+    }).catch(console.error);
 
     return res.status(201).json({
       success: true,
@@ -101,13 +105,15 @@ export const crearSuscripcion = async (req, res) => {
       data: nueva,
     });
   } catch (error) {
-    console.error("Error al crear suscripción:", error);
+    console.error(error);
+
     return res.status(500).json({
       success: false,
       message: "Error interno del servidor",
     });
   }
 };
+
 /* =======================================================
    🔴 Cancelar Suscripción
 ======================================================= */

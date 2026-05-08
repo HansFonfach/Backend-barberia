@@ -123,7 +123,6 @@ class RecordatoriosJob {
   async enviarRecordatorios14h() {
     const ahora = dayjs().utc();
 
-    // ✅ Ventana ajustada a ±7 min para que no haya overlap entre ticks
     const desde = ahora.add(13, "hour").add(53, "minute").toDate();
     const hasta = ahora.add(14, "hour").add(7, "minute").toDate();
 
@@ -131,7 +130,13 @@ class RecordatoriosJob {
       fecha: { $gte: desde, $lte: hasta },
       estado: { $in: ["pendiente", "confirmada"] },
       recordatorio14hEnviado: { $ne: true },
-    }); // ...populates
+    })
+      .populate("servicio", "nombre instrucciones") // 👈 FALTABA
+      .populate("barbero", "nombre apellido") // 👈 FALTABA
+      .populate(
+        "empresa",
+        "nombre direccion telefono politicaCancelacion slug",
+      ); //
 
     for (const reserva of reservas) {
       const resultado = await this.obtenerDatosReserva(reserva);
