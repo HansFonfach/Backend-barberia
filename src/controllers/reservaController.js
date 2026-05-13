@@ -10,6 +10,7 @@ import {
   sendGuestReservationEmail,
   sendProfesionalCancelReservationEmail,
   sendProfesionalNewReservationEmail,
+  sendReagendamientoEmail,
   sendReservationEmail,
   sendWaitlistNotificationEmail,
 } from "./mailController.js";
