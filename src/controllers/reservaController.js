@@ -1148,7 +1148,7 @@ export const reagendarReserva = async (req, res) => {
 
     // 1. Buscar reserva original
     const reservaOriginal = await Reserva.findById(id).populate(
-      "barbero servicio cliente",
+      "barbero servicio cliente empresa", // ✅ agrega empresa
     );
 
     if (!reservaOriginal)
@@ -1213,7 +1213,9 @@ export const reagendarReserva = async (req, res) => {
     // 5. Enviar correo
     try {
       const clienteEmail =
-        reservaOriginal.cliente?.email || reservaOriginal.invitado?.email;
+        reservaOriginal.cliente?.email ?? reservaOriginal.invitado?.email;
+
+      console.log("📧 Email destino:", clienteEmail); // debug temporal
 
       if (clienteEmail) {
         await sendReagendamientoEmail(clienteEmail, {

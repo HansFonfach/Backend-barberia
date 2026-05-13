@@ -11,6 +11,7 @@ import {
 } from "../controllers/authController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 
+
 const router = Router();
 
 router.post("/:slug/login", login);

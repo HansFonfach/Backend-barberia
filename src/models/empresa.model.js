@@ -144,6 +144,12 @@ const EmpresaSchema = new mongoose.Schema({
     },
   },
 
+  estadoSuscripcion: {
+    type: String,
+    enum: ["trial", "activo", "suspendido", "cancelado"],
+    default: "trial",
+  },
+
   // Configuración de reservas
   anticipacionMinima: { type: Number, default: 30 }, // minutos mínimos antes de reservar
   anticipacionMaxima: { type: Number, default: 15 }, // días máximos hacia adelante (ya tienes diasMostradosCalendario, podrían unificarse)
@@ -174,6 +180,18 @@ const EmpresaSchema = new mongoose.Schema({
       },
     },
   },
+
+  fechaPago: {
+    type: Number, // 5, 15, 30
+  },
+
+  ultimoPago: Date,
+
+  proximoPago: Date,
+
+  suspendidaDesde: Date,
+
+  motivoSuspension: String,
 
   plan: {
     type: String,

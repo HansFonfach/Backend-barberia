@@ -976,6 +976,10 @@ export const getHorasProfesionalPorDia = async (req, res) => {
     const { id: barberoId } = req.params;
     const { fecha } = req.query;
 
+    console.log("🔍 [getHorasProfesionalPorDia] INICIO");
+    console.log("  barberoId:", barberoId);
+    console.log("  fecha:", fecha);
+
     if (!fecha) {
       return res.status(400).json({ message: "Fecha requerida" });
     }
@@ -985,23 +989,47 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       return res.status(400).json({ message: "Fecha inválida" });
     }
 
+    console.log("  fechaConsulta válida:", fechaConsulta.format());
+
     // ─── BARBERO ───
     const barbero = await Usuario.findById(barberoId).populate("horariosDisponibles");
     if (!barbero) return res.status(404).json({ message: "Barbero no encontrado" });
 
+    console.log("✅ Barbero encontrado:", barbero._id);
+    console.log("  horariosDisponibles total:", barbero.horariosDisponibles.length);
+
     const empresaDoc = await empresaModel.findById(barbero.empresa);
     const diaSemana = fechaConsulta.day();
+
+    console.log("  diaSemana (dayjs):", diaSemana, "← 0=Dom 1=Lun 2=Mar 3=Mie 4=Jue 5=Vie 6=Sab");
+    console.log("  horariosDisponibles raw:", barbero.horariosDisponibles.map(h => ({
+      diaSemana: h.diaSemana,
+      tipoDiaSemana: typeof h.diaSemana,
+      horaInicio: h.horaInicio,
+      horaFin: h.horaFin,
+    })));
 
     const horariosDelDia = barbero.horariosDisponibles.filter(
       (h) => Number(h.diaSemana) === diaSemana,
     );
 
+    console.log("  horariosDelDia (filtrados):", horariosDelDia.length);
+    console.log("  horariosDelDia detalle:", horariosDelDia.map(h => ({
+      diaSemana: h.diaSemana,
+      horaInicio: h.horaInicio,
+      horaFin: h.horaFin,
+    })));
+
     // ─── FERIADO ───
     const feriado = await verificarFeriadoConComportamiento(fecha);
+    console.log("  feriado:", feriado ? feriado.nombre : "ninguno");
 
     // ─── RESERVAS DEL DÍA ───
     const inicioBusqueda = fechaConsulta.startOf("day").subtract(4, "hour").utc().toDate();
     const finBusqueda = fechaConsulta.endOf("day").add(4, "hour").utc().toDate();
+
+    console.log("  inicioBusqueda:", inicioBusqueda);
+    console.log("  finBusqueda:", finBusqueda);
 
     const reservas = await Reserva.find({
       barbero: barberoId,
@@ -1011,6 +1039,11 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       .populate("cliente", "nombre email telefono")
       .populate("servicio", "nombre");
 
+    console.log("  reservas encontradas:", reservas.length);
+    reservas.forEach(r => {
+      console.log("    reserva:", dayjs(r.fecha).tz("America/Santiago").format("HH:mm"), "estado:", r.estado);
+    });
+
     // Map rápido hora → reserva (solo el inicio)
     const mapaReservas = {};
     reservas.forEach((r) => {
@@ -1018,7 +1051,7 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       mapaReservas[hora] = r;
     });
 
-    // ─── HORAS OCUPADAS POR DESBORDE (siempre en slots de 30 min) ───
+    // ─── HORAS OCUPADAS POR DESBORDE ───
     const horasOcupadasPorReserva = new Set();
     reservas.forEach((r) => {
       const inicio = dayjs(r.fecha).tz("America/Santiago");
@@ -1039,13 +1072,16 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       fecha: { $gte: inicioDiaUTC, $lte: finDiaUTC },
     });
 
+    console.log("  excepciones encontradas:", excepciones.length);
+    console.log("  excepciones detalle:", excepciones.map(e => ({ tipo: e.tipo, fecha: e.fecha, horaInicio: e.horaInicio })));
+
     const bloqueoDia = excepciones.find((e) => e.tipo === "bloqueo_dia");
-    const horasBloqueadas = excepciones
-      .filter((e) => e.tipo === "bloqueo")
-      .map((e) => e.horaInicio);
-    const horasExtra = excepciones
-      .filter((e) => e.tipo === "extra")
-      .map((e) => e.horaInicio);
+    const horasBloqueadas = excepciones.filter((e) => e.tipo === "bloqueo").map((e) => e.horaInicio);
+    const horasExtra = excepciones.filter((e) => e.tipo === "extra").map((e) => e.horaInicio);
+
+    console.log("  bloqueoDia:", bloqueoDia ? bloqueoDia.motivo : "ninguno");
+    console.log("  horasBloqueadas:", horasBloqueadas);
+    console.log("  horasExtra:", horasExtra);
 
     // ─── VACACIONES ───
     const vacacion = await ExcepcionHorarioModel.findOne({
@@ -1055,11 +1091,14 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       fechaFin: { $gte: fechaConsulta.startOf("day").utc().toDate() },
     });
 
+    console.log("  vacacion:", vacacion ? vacacion.motivo : "ninguna");
+
     // ─── CONSTRUIR GRILLA ───
     const resultado = new Map();
 
     // 1. Si día bloqueado o vacaciones → solo reservas existentes
     if (bloqueoDia || vacacion) {
+      console.log("⛔ Día bloqueado o vacaciones, mostrando solo reservas existentes");
       Object.entries(mapaReservas).forEach(([hora, r]) => {
         resultado.set(hora, {
           hora,
@@ -1079,45 +1118,40 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       });
     }
 
-    // 2. Horas del horario base — grilla siempre de 30 en 30 para vista admin
+    // 2. Horas del horario base
+    console.log("🏗️ Construyendo grilla...");
+    console.log("  horariosDelDia a iterar:", horariosDelDia.length);
+
     for (const horario of horariosDelDia) {
       const usaAncla =
         empresaDoc?.configuracion?.usaHorasAncla === true &&
         horario.horasAncla?.length > 0;
 
+      console.log(`  📅 Procesando horario diaSemana=${horario.diaSemana} ${horario.horaInicio}-${horario.horaFin}`);
+      console.log("    usaAncla:", usaAncla);
+
       // Colación en slots de 30 min
       const colacionHoras = new Set();
       if (horario.colacionInicio && horario.colacionFin) {
-        let c = dayjs.tz(
-          `${fecha} ${horario.colacionInicio}`,
-          "YYYY-MM-DD HH:mm",
-          "America/Santiago",
-        );
-        const cFin = dayjs.tz(
-          `${fecha} ${horario.colacionFin}`,
-          "YYYY-MM-DD HH:mm",
-          "America/Santiago",
-        );
+        let c = dayjs.tz(`${fecha} ${horario.colacionInicio}`, "YYYY-MM-DD HH:mm", "America/Santiago");
+        const cFin = dayjs.tz(`${fecha} ${horario.colacionFin}`, "YYYY-MM-DD HH:mm", "America/Santiago");
         while (c.isBefore(cFin)) {
           colacionHoras.add(c.format("HH:mm"));
           c = c.add(30, "minute");
         }
       }
+      console.log("    colacionHoras:", [...colacionHoras]);
 
-      let cursor = dayjs.tz(
-        `${fecha} ${horario.horaInicio}`,
-        "YYYY-MM-DD HH:mm",
-        "America/Santiago",
-      );
-      const fin = dayjs.tz(
-        `${fecha} ${horario.horaFin}`,
-        "YYYY-MM-DD HH:mm",
-        "America/Santiago",
-      );
+      let cursor = dayjs.tz(`${fecha} ${horario.horaInicio}`, "YYYY-MM-DD HH:mm", "America/Santiago");
+      const fin = dayjs.tz(`${fecha} ${horario.horaFin}`, "YYYY-MM-DD HH:mm", "America/Santiago");
 
-      // Iterar siempre de 30 en 30 para la vista admin
+      console.log("    cursor inicio:", cursor.format("HH:mm"));
+      console.log("    fin:", fin.format("HH:mm"));
+      console.log("    cursor.isBefore(fin):", cursor.isBefore(fin));
+
+      let iteraciones = 0;
       while (cursor.isBefore(fin)) {
-        // Horas ancla
+        iteraciones++;
         if (usaAncla) {
           for (const ancla of horario.horasAncla) {
             const hora = ancla.hora;
@@ -1125,21 +1159,11 @@ export const getHorasProfesionalPorDia = async (req, res) => {
               if (horasBloqueadas.includes(hora)) {
                 resultado.set(hora, { hora, estado: "bloqueada", esAncla: true });
               } else if (mapaReservas[hora]) {
-                resultado.set(hora, {
-                  hora,
-                  estado: "reservada",
-                  esAncla: true,
-                  reserva: _miniReserva(mapaReservas[hora]),
-                });
+                resultado.set(hora, { hora, estado: "reservada", esAncla: true, reserva: _miniReserva(mapaReservas[hora]) });
               } else if (horasOcupadasPorReserva.has(hora)) {
                 resultado.set(hora, { hora, estado: "ocupada", esAncla: true, esDesborde: true });
               } else {
-                resultado.set(hora, {
-                  hora,
-                  estado: "disponible",
-                  esAncla: true,
-                  serviciosPermitidos: ancla.serviciosPermitidos,
-                });
+                resultado.set(hora, { hora, estado: "disponible", esAncla: true, serviciosPermitidos: ancla.serviciosPermitidos });
               }
             }
           }
@@ -1153,11 +1177,7 @@ export const getHorasProfesionalPorDia = async (req, res) => {
           } else if (horasBloqueadas.includes(hora)) {
             resultado.set(hora, { hora, estado: "bloqueada" });
           } else if (mapaReservas[hora]) {
-            resultado.set(hora, {
-              hora,
-              estado: "reservada",
-              reserva: _miniReserva(mapaReservas[hora]),
-            });
+            resultado.set(hora, { hora, estado: "reservada", reserva: _miniReserva(mapaReservas[hora]) });
           } else if (horasOcupadasPorReserva.has(hora)) {
             resultado.set(hora, { hora, estado: "ocupada", esDesborde: true });
           } else {
@@ -1165,19 +1185,18 @@ export const getHorasProfesionalPorDia = async (req, res) => {
           }
         }
 
-        cursor = cursor.add(30, "minute"); // siempre 30 para vista admin
+        cursor = cursor.add(30, "minute");
       }
+
+      console.log(`    iteraciones del while: ${iteraciones}`);
     }
 
-    // 3. Horas extra (fuera del horario base)
+    console.log("  resultado.size después de grilla base:", resultado.size);
+
+    // 3. Horas extra
     horasExtra.forEach((hora) => {
       if (mapaReservas[hora]) {
-        resultado.set(hora, {
-          hora,
-          estado: "reservada",
-          esExtra: true,
-          reserva: _miniReserva(mapaReservas[hora]),
-        });
+        resultado.set(hora, { hora, estado: "reservada", esExtra: true, reserva: _miniReserva(mapaReservas[hora]) });
       } else if (horasOcupadasPorReserva.has(hora)) {
         resultado.set(hora, { hora, estado: "ocupada", esExtra: true, esDesborde: true });
       } else {
@@ -1185,17 +1204,15 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       }
     });
 
-    // 4. Reservas que no cayeron en ninguna hora base (edge case)
+    // 4. Reservas edge case
     Object.entries(mapaReservas).forEach(([hora, r]) => {
       if (!resultado.has(hora)) {
-        resultado.set(hora, {
-          hora,
-          estado: "reservada",
-          esExtra: true,
-          reserva: _miniReserva(r),
-        });
+        resultado.set(hora, { hora, estado: "reservada", esExtra: true, reserva: _miniReserva(r) });
       }
     });
+
+    console.log("  resultado.size FINAL:", resultado.size);
+    console.log("✅ Respondiendo con", resultado.size, "horas");
 
     return res.json({
       fecha,
@@ -1214,11 +1231,7 @@ export const getHorasProfesionalPorDia = async (req, res) => {
 const _miniReserva = (r) => ({
   _id: r._id,
   cliente: r.cliente
-    ? {
-        nombre: r.cliente.nombre,
-        email: r.cliente.email,
-        telefono: r.cliente.telefono,
-      }
+    ? { nombre: r.cliente.nombre, email: r.cliente.email, telefono: r.cliente.telefono }
     : null,
   servicio: r.servicio?.nombre || null,
   duracion: r.duracion,
