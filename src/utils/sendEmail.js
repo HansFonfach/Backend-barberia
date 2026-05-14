@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { sendBaseEmail } from "../controllers/mailController";
 
 export const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
@@ -10,14 +11,9 @@ export const transporter = nodemailer.createTransport({
   },
 });
 
-export default async function sendEmail({ to, subject, html }) {
-  await transporter.sendMail({
-    from: '"🗓️Agenda Fonfach" <hans.fonfach@gmail.com>',
-    to,
-    subject,
-    html,
-  });
-}
+export const sendEmail = async ({ to, subject, html }) => {
+  return await sendBaseEmail({ to, subject, html });
+};
 
 export async function sendReservationEmail({ to, nombre, fecha, servicio }) {
   try {
