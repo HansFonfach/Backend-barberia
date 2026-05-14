@@ -22,10 +22,10 @@ const generarPasswordAleatoria = () => {
 
 export const registroPublicoEmpresa = async (req, res) => {
   try {
-    const { nombre, tipo, telefono, correo } = req.body;
+    const { nombre, rubro, telefono, correo } = req.body;
 
     // Validación mínima
-    if (!nombre || !tipo || !telefono || !correo) {
+    if (!nombre || !rubro|| !telefono || !correo) {
       return res.status(400).json({ message: "Faltan campos obligatorios" });
     }
 
@@ -48,7 +48,7 @@ export const registroPublicoEmpresa = async (req, res) => {
     const nuevaEmpresa = new empresaModel({
       nombre,
       slug,
-      tipo,
+      rubro,
       telefono,
       correo,
       rutEmpresa: "pendiente", // lo pides luego en onboarding

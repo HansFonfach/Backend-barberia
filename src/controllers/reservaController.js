@@ -468,6 +468,38 @@ export const createReserva = async (req, res) => {
     }
 
     /* =============================
+   CONSUMIR CRÉDITO SUSCRIPCIÓN
+============================== */
+
+    const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
+
+    const suscripcionCliente = await suscripcionModel.findOne({
+      usuario: cliente,
+      empresa,
+      activa: true,
+      tipoPlan: "combo_visita_corte_barba",
+      fechaInicio: { $lte: new Date() },
+      fechaFin: { $gte: new Date() },
+    });
+
+    if (suscripcionCliente && servicio.toString() === SERVICIO_COMBO_ID) {
+      const nuevosUsados = suscripcionCliente.serviciosUsados + 1;
+      const agotar = nuevosUsados >= suscripcionCliente.serviciosTotales;
+
+      await suscripcionModel.findByIdAndUpdate(suscripcionCliente._id, {
+        $inc: { serviciosUsados: 1 },
+        ...(agotar && { $set: { activa: false } }),
+      });
+
+      // Si se agotó, marcar usuario como no suscrito
+      if (agotar) {
+        await usuarioModel.findByIdAndUpdate(cliente, {
+          $set: { suscrito: false },
+        });
+      }
+    }
+
+    /* =============================
        RESPUESTA
     ============================== */
     res.status(201).json({
@@ -541,7 +573,8 @@ export const createReserva = async (req, res) => {
         fecha,
         hora: horaFormateada,
         servicio: nombreServicio,
-        plantilla: "notificacion_reserva", // ← esto
+        telefonoCliente: clienteDoc.telefono,
+        plantilla: "notificacion_reserva", //
       }).catch((err) =>
         console.error(`❌ Error WhatsApp barbero nueva reserva:`, err.message),
       );
@@ -731,6 +764,7 @@ export const postDeleteReserva = async (req, res) => {
         fecha: fechaFormateada,
         hora: horaFormateada,
         servicio: existeReserva.servicio?.nombre || "Servicio",
+        telefonoCliente: clienteDoc.telefono, 
       }).catch((err) =>
         console.error(`❌ Error WhatsApp barbero:`, err.message),
       );

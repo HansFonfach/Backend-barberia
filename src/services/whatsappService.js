@@ -140,6 +140,7 @@ class WhatsAppService {
     hora,
     servicio,
     plantilla = "notificacion_cancelacion",
+    telefonoCliente
   }) {
     try {
       const telefonoFormateado = this.formatearTelefono(telefono);
@@ -153,6 +154,7 @@ class WhatsAppService {
         hora,
         servicio,
         plantilla,
+        telefonoCliente
       });
 
       const body = {
@@ -171,6 +173,7 @@ class WhatsAppService {
                 { type: "text", text: fecha || "-" },
                 { type: "text", text: hora || "-" },
                 { type: "text", text: servicio || "-" },
+                { type: "text", text: telefonoCliente || "-" }, 
               ],
             },
           ],

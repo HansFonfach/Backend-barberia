@@ -49,7 +49,7 @@ const suscripcionSchema = new mongoose.Schema(
     },
     tipoPlan: {
       type: String,
-      enum: ["creditos", "combo_corte_barba"],
+      enum: ["creditos", "combo_visita_corte_barba"],
       default: "creditos",
     },
   },

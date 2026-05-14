@@ -9,12 +9,14 @@ import { sendSuscriptionActiveEmail } from "./mailController.js";
 ======================================================= */
 export const crearSuscripcion = async (req, res) => {
   try {
+    const SERVICIO_CORTE_BARBA_ID = "69934ce087e49726a2cd3da1";
     const { id } = req.params;
     const { tipoPlan } = req.body;
 
-    // 1️⃣ Validar plan
-    const planesPermitidos = ["creditos", "combo_corte_barba"];
 
+
+    // 1️⃣ Validar plan
+    const planesPermitidos = ["creditos", "combo_visita_corte_barba"]; 
     if (!planesPermitidos.includes(tipoPlan)) {
       return res.status(400).json({
         success: false,
@@ -56,9 +58,9 @@ export const crearSuscripcion = async (req, res) => {
         precio = 25000;
         break;
 
-      case "combo_corte_barba":
+      case "combo_visita_corte_barba":
         serviciosTotales = 2;
-        precio = 40000;
+        precio = 45000;
         break;
     }
 
