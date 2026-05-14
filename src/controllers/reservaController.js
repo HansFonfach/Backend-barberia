@@ -206,31 +206,63 @@ export const createReserva = async (req, res) => {
         });
 
         if (!suscripcionActiva) {
-          // Buscar si tiene una suscripción vencida
           const suscripcionVencida = await suscripcionModel
-            .findOne({
-              usuario: cliente,
-            })
-            .sort({ fechaFin: -1 }); // la más reciente
+            .findOne({ usuario: cliente })
+            .sort({ fechaFin: -1 });
 
           if (suscripcionVencida) {
             const fechaVencimiento = dayjs(suscripcionVencida.fechaFin)
               .tz("America/Santiago")
               .format("DD/MM/YYYY");
-
             return res.status(403).json({
               message: `Tu suscripción venció el ${fechaVencimiento}, por lo que no puedes reservar este sábado`,
             });
           }
 
           return res.status(403).json({
-            message:
-              "Las reservas del sábado son solo para suscriptores o barberos",
+            message: "Las reservas del sábado son solo para suscriptores",
           });
         }
+
+        // 🔥 NUEVO: Verificar si el plan está agotado (sin créditos disponibles)
+        const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
+        const esCombo =
+          suscripcionActiva.tipoPlan === "combo_visita_corte_barba";
+
+        // Contar TODAS las reservas del periodo (pasadas + futuras), sin canceladas
+        const todasLasReservas = await Reserva.find({
+          cliente,
+          fecha: {
+            $gte: suscripcionActiva.fechaInicio,
+            $lte: suscripcionActiva.fechaFin,
+          },
+          estado: { $ne: "cancelada" },
+        }).populate("servicio", "_id");
+
+        let serviciosAgendados = 0;
+        for (const r of todasLasReservas) {
+          if (esCombo) {
+            if (r.servicio?._id?.toString() === SERVICIO_COMBO_ID) {
+              serviciosAgendados += 1;
+            }
+          } else {
+            serviciosAgendados += r.duracion >= 120 ? 2 : 1;
+          }
+        }
+
+        if (serviciosAgendados >= suscripcionActiva.serviciosTotales) {
+          return res.status(403).json({
+            message:
+              "Has agotado los servicios de tu suscripción. No puedes reservar sábados hasta renovarla",
+          });
+        }
+      } else {
+        // Empresa no permite suscripción, nadie puede reservar sábados
+        return res.status(403).json({
+          message: "Las reservas del sábado no están disponibles",
+        });
       }
     }
-
     /* =============================
        SERVICIO
     ============================== */
