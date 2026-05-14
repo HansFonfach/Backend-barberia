@@ -208,7 +208,8 @@ export const register = async (req, res) => {
 
 export const forgotPassword = async (req, res) => {
   try {
-    const { email, slug } = req.body;
+    const { email } = req.body;
+    const { slug } = req.params;
 
     if (!email || !slug)
       return res.status(400).json({ message: "Datos inválidos" });

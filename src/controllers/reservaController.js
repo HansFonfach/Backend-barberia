@@ -764,7 +764,7 @@ export const postDeleteReserva = async (req, res) => {
         fecha: fechaFormateada,
         hora: horaFormateada,
         servicio: existeReserva.servicio?.nombre || "Servicio",
-        telefonoCliente: clienteDoc.telefono, 
+        telefonoCliente: clienteDoc.telefono,
       }).catch((err) =>
         console.error(`❌ Error WhatsApp barbero:`, err.message),
       );
@@ -915,7 +915,7 @@ export const getReservasPorFechaBarbero = async (req, res) => {
       estado: { $ne: "cancelada" },
     })
       .populate("cliente", "nombre apellido telefono")
-      .populate("servicio", "nombre duracion")
+      .populate("servicio", "nombre duracion _id")
       .sort({ fecha: 1 });
 
     // 2. Procesar cada reserva para incluir posición dentro de la suscripción
@@ -941,28 +941,46 @@ export const getReservasPorFechaBarbero = async (req, res) => {
 
         // Reservas del cliente dentro del periodo de suscripción
         // hasta e incluyendo la reserva actual, sin canceladas
+        const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
+
         const reservasDelCliente = await Reserva.find({
           cliente: clienteId,
           fecha: { $gte: sus.fechaInicio, $lte: reserva.fecha },
           estado: { $ne: "cancelada" },
         }).sort({ fecha: 1 });
 
-        // Acumular servicios usados hasta esta reserva (inclusive)
-        // 120 min = corte + barba = 2 servicios, resto = 1 servicio
         let serviciosAcumulados = 0;
+        const esCombo = sus.tipoPlan === "combo_visita_corte_barba";
+
         for (const r of reservasDelCliente) {
-          const peso = r.duracion >= 120 ? 2 : 1;
+          let peso = 0;
+
+          if (esCombo) {
+            // Solo cuenta si es el servicio combo específico
+            peso = r.servicio?.toString() === SERVICIO_COMBO_ID ? 1 : 0;
+          } else {
+            // Plan creditos: duración >= 120 = 2 servicios
+            peso = r.duracion >= 120 ? 2 : 1;
+          }
+
           serviciosAcumulados += peso;
           if (r._id.toString() === reserva._id.toString()) break;
         }
 
+        // Determinar si esta reserva específica está cubierta por la suscripción
+        const esCubierta = esCombo
+          ? reserva.servicio?._id?.toString() === SERVICIO_COMBO_ID
+          : true;
+
         return {
           ...reserva.toObject(),
-          suscripcion: {
-            posicion: serviciosAcumulados,
-            limite: sus.serviciosTotales,
-            esDobleServicio: reserva.duracion >= 120,
-          },
+          suscripcion: esCubierta
+            ? {
+                posicion: serviciosAcumulados,
+                limite: sus.serviciosTotales,
+                esDobleServicio: !esCombo && reserva.duracion >= 120,
+              }
+            : null, // null = debe pagar, no está en el plan
         };
       }),
     );

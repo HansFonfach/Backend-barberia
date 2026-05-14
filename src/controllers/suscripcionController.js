@@ -13,10 +13,8 @@ export const crearSuscripcion = async (req, res) => {
     const { id } = req.params;
     const { tipoPlan } = req.body;
 
-
-
     // 1️⃣ Validar plan
-    const planesPermitidos = ["creditos", "combo_visita_corte_barba"]; 
+    const planesPermitidos = ["creditos", "combo_visita_corte_barba"];
     if (!planesPermitidos.includes(tipoPlan)) {
       return res.status(400).json({
         success: false,
@@ -161,34 +159,68 @@ export const cancelarSuscripcion = async (req, res) => {
 export const estadoSuscripcionCliente = async (req, res) => {
   try {
     const { userId } = req.params;
+    const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
 
     let suscripcion = await Suscripcion.findOne({
       usuario: userId,
       activa: true,
     });
 
-    // 🔥 VERIFICAR SI YA VENCIO
-    if (suscripcion && suscripcion.fechaFin < new Date()) {
-      suscripcion.activa = false;
-      suscripcion.historial = true;
-      await suscripcion.save();
-
-      await Usuario.findByIdAndUpdate(userId, { suscrito: false });
-
-      return res.json({ activa: false, msg: "Suscripción vencida" });
-    }
-
     if (!suscripcion) {
       return res.json({ activa: false, msg: "Usuario sin suscripción" });
     }
 
-    const restantes =
-      suscripcion.serviciosTotales - suscripcion.serviciosUsados;
+    // 🔥 Venció por tiempo
+    if (suscripcion.fechaFin < new Date()) {
+      suscripcion.activa = false;
+      suscripcion.historial = true;
+      await suscripcion.save();
+      await Usuario.findByIdAndUpdate(userId, { suscrito: false });
+      return res.json({ activa: false, msg: "Suscripción vencida" });
+    }
+
+    // 🔥 Calcular servicios usados en tiempo real
+    const esCombo = suscripcion.tipoPlan === "combo_visita_corte_barba";
+
+    const reservas = await reservaModel
+      .find({
+        cliente: userId,
+        fecha: {
+          $gte: suscripcion.fechaInicio,
+          // Solo reservas que ya pasaron (asistencia confirmada implícita)
+          $lte: new Date(),
+        },
+        estado: { $ne: "cancelada" },
+      })
+      .populate("servicio", "_id");
+
+    let serviciosUsados = 0;
+    for (const r of reservas) {
+      if (esCombo) {
+        if (r.servicio?._id?.toString() === SERVICIO_COMBO_ID) {
+          serviciosUsados += 1;
+        }
+      } else {
+        serviciosUsados += r.duracion >= 120 ? 2 : 1;
+      }
+    }
+
+    // 🔥 Venció por servicios agotados (solo reservas pasadas)
+    if (serviciosUsados >= suscripcion.serviciosTotales) {
+      suscripcion.activa = false;
+      suscripcion.historial = true;
+      await suscripcion.save();
+      await Usuario.findByIdAndUpdate(userId, { suscrito: false });
+      return res.json({ activa: false, msg: "Suscripción agotada" });
+    }
+
+    const restantes = suscripcion.serviciosTotales - serviciosUsados;
 
     return res.json({
       activa: true,
+      tipoPlan: suscripcion.tipoPlan,
       serviciosTotales: suscripcion.serviciosTotales,
-      serviciosUsados: suscripcion.serviciosUsados,
+      serviciosUsados,
       restantes,
       cobrar: restantes <= 0,
     });
@@ -197,7 +229,6 @@ export const estadoSuscripcionCliente = async (req, res) => {
     return res.status(500).json({ msg: "Error interno" });
   }
 };
-
 /* =======================================================
    🟣 Registrar uso de servicio (barbero usa esto)
 ======================================================= */
@@ -277,24 +308,35 @@ export const getSuscripcionActiva = async (req, res) => {
     const sus = await checkSuscripcion(userId);
     if (!sus) return res.json(null);
 
-    // Contar reservas no canceladas dentro del período de suscripción
-    const reservas = await reservaModel.find({
-      cliente: userId,
-      fecha: { $gte: sus.fechaInicio, $lte: sus.fechaFin },
-      estado: { $ne: "cancelada" },
-    });
+    const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
+    const esCombo = sus.tipoPlan === "combo_visita_corte_barba";
 
-    // Mismo criterio que en getReservasPorFechaBarbero
+    const reservas = await reservaModel
+      .find({
+        cliente: userId,
+        fecha: { $gte: sus.fechaInicio, $lte: sus.fechaFin },
+        estado: { $ne: "cancelada" },
+      })
+      .populate("servicio", "_id");
+
     let serviciosUsados = 0;
     for (const r of reservas) {
-      serviciosUsados += r.duracion >= 120 ? 2 : 1;
+      if (esCombo) {
+        // Solo cuenta el servicio combo
+        if (r.servicio?._id?.toString() === SERVICIO_COMBO_ID) {
+          serviciosUsados += 1;
+        }
+      } else {
+        serviciosUsados += r.duracion >= 120 ? 2 : 1;
+      }
     }
 
     return res.json({
+      tipoPlan: sus.tipoPlan,
       fechaInicio: sus.fechaInicio,
       fechaFin: sus.fechaFin,
       serviciosTotales: sus.serviciosTotales,
-      serviciosUsados, // ✅ calculado en tiempo real
+      serviciosUsados,
     });
   } catch (e) {
     res.status(500).json({ message: "Error obteniendo suscripción activa" });
