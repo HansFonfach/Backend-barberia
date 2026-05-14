@@ -247,8 +247,6 @@ export const sendReminderEmail = async (to, data) => {
   });
 };
 
-
-
 export const sendCancelReservationEmail = async (to, data) => {
   const {
     nombreCliente,
@@ -463,4 +461,9 @@ export const sendReagendamientoEmail = async (to, data) => {
     `),
     text: `Reserva reagendada\n\nHola ${nombreCliente}\n\nFecha anterior: ${fechaAnterior}\n\nNueva reserva:\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${nuevaFecha}\nHora: ${nuevaHora}\nDirección: ${direccion ?? "No especificada"}`,
   });
+};
+
+
+export const sendEmail = async ({ to, subject, html }) => {
+  return await sendBaseEmail({ to, subject, html });
 };

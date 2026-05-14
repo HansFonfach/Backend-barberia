@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import Usuario from "../models/usuario.model.js";
 import { generarToken } from "../utils/generarToken.js";
 import crypto from "crypto";
-import { sendEmail } from "../utils/sendEmail.js";
+import { sendEmail } from "../controllers/mailController.js";
 import suscripcionModel from "../models/suscripcion.model.js";
 import empresaModel from "../models/empresa.model.js";
 import Empresa from "../models/empresa.model.js";
