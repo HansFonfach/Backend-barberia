@@ -463,7 +463,62 @@ export const sendReagendamientoEmail = async (to, data) => {
   });
 };
 
-
 export const sendEmail = async ({ to, subject, html }) => {
   return await sendBaseEmail({ to, subject, html });
+};
+
+// mail/recordatorioPago.mail.js
+
+export const sendRecordatorioPagoEmail = async (empresa, { tipo }) => {
+  const destinatario = empresa.correo;
+  if (!destinatario) return;
+
+  const asuntos = {
+    "5_dias_antes": "📅 Tu plan vence en 5 días – Agenda Fonfach",
+    "2_dias_antes": "⚠️ Tu plan vence en 2 días – Agenda Fonfach",
+    vencimiento_hoy: "🔔 Tu plan vence hoy – Agenda Fonfach",
+    suspension: "🔒 Tu acceso ha sido suspendido – Agenda Fonfach",
+  };
+
+  const mensajes = {
+    "5_dias_antes": `
+      <h2 style="margin-top:0;">📅 Tu plan vence en 5 días</h2>
+      <p>Hola <strong>${empresa.nombre}</strong> 👋</p>
+      <p>Te avisamos que tu plan vence en <strong>5 días</strong>.</p>
+      <p style="color:#555;font-size:14px;">Para continuar sin interrupciones, realiza tu transferencia cuando puedas.</p>
+      <p style="color:#aaa;font-size:13px;">Si ya realizaste el pago, ignora este mensaje.</p>
+    `,
+    "2_dias_antes": `
+      <h2 style="margin-top:0;">⚠️ Tu plan vence en 2 días</h2>
+      <p>Hola <strong>${empresa.nombre}</strong> 👋</p>
+      <p>Tu plan vence en <strong>2 días</strong>.</p>
+      <p style="color:#555;font-size:14px;">Para no perder el acceso, realiza tu pago a la brevedad.</p>
+      <p style="color:#aaa;font-size:13px;">Si ya realizaste el pago, ignora este mensaje.</p>
+    `,
+    vencimiento_hoy: `
+      <h2 style="margin-top:0;">🔔 Tu plan vence hoy</h2>
+      <p>Hola <strong>${empresa.nombre}</strong> 👋</p>
+      <p>Tu plan <strong>vence hoy</strong>.</p>
+      <p style="color:#555;font-size:14px;">Realiza tu transferencia para mantener tu acceso activo.</p>
+      <p style="color:#aaa;font-size:13px;">Si ya realizaste el pago, ignora este mensaje y nos comunicaremos pronto.</p>
+    `,
+    suspension: `
+      <h2 style="margin-top:0;">🔒 Tu acceso ha sido suspendido</h2>
+      <p>Hola <strong>${empresa.nombre}</strong> 👋</p>
+      <p>Tu acceso ha sido <strong>suspendido temporalmente</strong> por falta de pago.</p>
+      <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:0;color:#555;font-size:14px;">
+          No te preocupes, <strong>no pierdes ningún dato</strong>. En cuanto confirmemos tu pago, tu cuenta se reactiva de inmediato.
+        </p>
+      </div>
+      <p style="color:#555;font-size:14px;">¿Tienes dudas? Escríbenos y te ayudamos de inmediato.</p>
+    `,
+  };
+
+  return await sendBaseEmail({
+    to: destinatario,
+    subject: asuntos[tipo],
+    html: layout(mensajes[tipo]),
+    text: mensajes[tipo].replace(/<[^>]*>/g, "").trim(),
+  });
 };

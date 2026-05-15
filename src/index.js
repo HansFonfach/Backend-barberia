@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import app from "./app.js";
 import { connectDB } from "./database/db.js";
 import { iniciarCronSuscripciones } from "./cron/suscripcionesCron.js";
+import { iniciarCronpagoEmpresa } from "./cron/pagoEmpresaCron.js";
 import { iniciarJobReservas } from "./jobs/reservasEstado.js";
 import recordatoriosJob from "./jobs/recordatoriosJob.js";
 import recordatoriosVolver from "./cron/recordatoriosVolver.js";
@@ -25,6 +26,8 @@ const startServer = async () => {
   //CRON
   iniciarCronSuscripciones();
   iniciarJobReservas();
+  iniciarCronpagoEmpresa();
+
   recordatoriosJob.init();
   recordatoriosVolver.init(); // ← FALTA ESTA LÍNEA
 
