@@ -224,12 +224,10 @@ export const createReserva = async (req, res) => {
           });
         }
 
-        // 🔥 NUEVO: Verificar si el plan está agotado (sin créditos disponibles)
         const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
         const esCombo =
           suscripcionActiva.tipoPlan === "combo_visita_corte_barba";
 
-        // Contar TODAS las reservas del periodo (pasadas + futuras), sin canceladas
         const todasLasReservas = await Reserva.find({
           cliente,
           fecha: {
@@ -256,12 +254,8 @@ export const createReserva = async (req, res) => {
               "Has agotado los servicios de tu suscripción. No puedes reservar sábados hasta renovarla",
           });
         }
-      } else {
-        // Empresa no permite suscripción, nadie puede reservar sábados
-        return res.status(403).json({
-          message: "Las reservas del sábado no están disponibles",
-        });
       }
+      // Si la empresa no tiene suscripción, el sábado es libre
     }
     /* =============================
        SERVICIO
