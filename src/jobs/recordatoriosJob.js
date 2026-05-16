@@ -13,11 +13,7 @@ dayjs.extend(timezone);
 
 class RecordatoriosJob {
   init() {
-   
-
     cron.schedule("*/15 * * * *", async () => {
-     
-
       await this.enviarRecordatorios24h();
       await this.enviarRecordatorios14h();
       await this.enviarRecordatorios3h();
@@ -73,20 +69,14 @@ class RecordatoriosJob {
     reserva,
     enviarWhatsApp = true,
   ) {
-   
-
     // 📧 EMAIL
     if (cliente.email && tipo !== "3h" && tipo !== "14h") {
       try {
-       
-
         await sendReminderEmail(cliente.email, {
           ...datos,
           tipo,
           instrucciones: reserva.servicio?.instrucciones ?? null,
         });
-
-       
       } catch (err) {
         console.error(`❌ Error email ${cliente.email}:`, err.message);
       }
@@ -95,8 +85,6 @@ class RecordatoriosJob {
     // 💬 WHATSAPP
     if (enviarWhatsApp && cliente.telefono) {
       try {
-       
-
         const res = await WhatsAppService.enviarRecordatorio({
           ...datos,
           telefono: cliente.telefono,
@@ -105,7 +93,6 @@ class RecordatoriosJob {
         });
 
         if (res.success) {
-         
         } else {
           console.error("❌ Falló WhatsApp:", res.error);
         }
@@ -164,7 +151,7 @@ class RecordatoriosJob {
   ============================== */
   async enviarRecordatorios24h() {
     try {
-     hora = dayjs().utc();
+      ahora = dayjs().utc();
       const desde = ahora.add(23, "hour").toDate();
       const hasta = ahora.add(25, "hour").toDate();
 
@@ -180,12 +167,8 @@ class RecordatoriosJob {
           "nombre direccion telefono politicaCancelacion slug",
         );
 
-     
-
       for (const reserva of reservas) {
         try {
-         
-
           const resultado = await this.obtenerDatosReserva(reserva);
           if (!resultado) continue;
 
@@ -196,7 +179,6 @@ class RecordatoriosJob {
             process.env.FRONTEND_URL || "https://www.agendafonfach.cl";
           const slug = reserva.empresa?.slug || ""; // ✅ agregado slug
 
-         
           // ✅ PRIMERO ENVÍAS
           await this.enviarPorTodosLosCanales(
             cliente,
@@ -238,7 +220,6 @@ class RecordatoriosJob {
   ============================== */
   async enviarRecordatorios3h() {
     try {
-    
       const ahora = dayjs().utc();
       const desde = ahora.add(2, "hour").add(45, "minute").toDate();
       const hasta = ahora.add(3, "hour").add(15, "minute").toDate();
@@ -255,12 +236,8 @@ class RecordatoriosJob {
           "nombre direccion telefono politicaCancelacion slug",
         );
 
-     
-
       for (const reserva of reservas) {
         try {
-         
-
           const resultado = await this.obtenerDatosReserva(reserva);
           if (!resultado) continue;
 
@@ -268,7 +245,6 @@ class RecordatoriosJob {
 
           // 🔥 AGREGAR ACÁ ↓
           if (esHorarioTemprano) {
-          
             await Reserva.findOneAndUpdate(
               { _id: reserva._id, recordatorio3hEnviado: { $ne: true } },
               { recordatorio3hEnviado: true },
@@ -315,8 +291,6 @@ class RecordatoriosJob {
   ============================== */
   async testEnviar(reservaId) {
     try {
-     
-
       const reserva = await Reserva.findById(reservaId)
         .populate("servicio", "nombre instrucciones")
         .populate("barbero", "nombre apellido")
