@@ -24,9 +24,7 @@ const procesarRecordatorios = async () => {
         c.empresa, // 👈 ya viene populado con nombre y tipo
       );
 
-      console.log(
-        `📨 Enviando a ${c.cliente.email} | tipo: ${tipoCliente} | empresa: ${c.empresa?.nombre}`,
-      );
+     
 
       await sendRetentionEmail(c.cliente.email, {
         ...mensaje,
@@ -52,11 +50,9 @@ const init = () => {
   cron.schedule(
     "0 8 * * *", // minuto 0, hora 8, todos los días
     async () => {
-      console.log("🔔 CRON TICK - Recordatorios diarios 8AM");
+     
       const result = await procesarRecordatorios();
-      console.log(
-        `Recordatorios: ${result.enviados} enviados, ${result.errores} errores`,
-      );
+      
     },
     { timezone: "America/Santiago" },
   );
