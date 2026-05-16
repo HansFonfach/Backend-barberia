@@ -151,9 +151,12 @@ class RecordatoriosJob {
   ============================== */
   async enviarRecordatorios24h() {
     try {
-      ahora = dayjs().utc();
+      hora = dayjs().utc();
       const desde = ahora.add(23, "hour").toDate();
-      const hasta = ahora.add(25, "hour").toDate();
+
+      // ✅ Así debe quedar
+      const ahora = dayjs().utc();
+      const desde = ahora.add(23, "hour").toDate();
 
       const reservas = await Reserva.find({
         fecha: { $gte: desde, $lte: hasta },
