@@ -1294,7 +1294,7 @@ export const reagendarReserva = async (req, res) => {
       const clienteEmail =
         reservaOriginal.cliente?.email ?? reservaOriginal.invitado?.email;
 
-      console.log("📧 Email destino:", clienteEmail); // debug temporal
+   
 
       if (clienteEmail) {
         await sendReagendamientoEmail(clienteEmail, {

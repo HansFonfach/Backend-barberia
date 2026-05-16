@@ -17,15 +17,13 @@ export const detectarRecordatorios = async () => {
 
   for (const s of stats) {
     const rawEmpresa = s.empresa?.toObject({ virtuals: false });
-    console.log("RAW empresa:", rawEmpresa); // vas a ver tipo ahí
+   
   }
 
   const clientesRecordar = [];
 
   for (const s of stats) {
-    console.log(
-      `👤 ${s.cliente?.nombre} | empresa: ${s.empresa?.nombre} | empresa.tipo: ${s.empresa?.tipo} | empresa.rubro: ${s.empresa?.rubro}`,
-    );
+   
     if (!s.servicio) continue;
     if (!s.cliente) continue;
 
@@ -36,9 +34,7 @@ export const detectarRecordatorios = async () => {
     }
 
     if (!s.empresa.recordatoriosRetencionActivo) {
-      console.log(
-        `⏭️  Empresa "${s.empresa.nombre}" tiene recordatorios desactivados`,
-      );
+     
       continue;
     }
 
@@ -48,14 +44,10 @@ export const detectarRecordatorios = async () => {
     const diasObjetivo =
       s.servicio.diasRecomendadosRepeticion || s.promedioDias || 15;
 
-    console.log(
-      `📊 ${s.cliente.nombre} | diasDesdeUltima: ${diasDesdeUltima.toFixed(1)} | diasObjetivo: ${diasObjetivo}`,
-    );
+ 
 
     if (diasDesdeUltima < diasObjetivo) {
-      console.log(
-        `   ⏳ Aún no es momento (faltan ${(diasObjetivo - diasDesdeUltima).toFixed(1)} días)`,
-      );
+     
       continue;
     }
 
@@ -63,9 +55,7 @@ export const detectarRecordatorios = async () => {
       const diasDesdeNotif =
         (hoy - new Date(s.ultimaNotificacion)) / (1000 * 60 * 60 * 24);
       if (diasDesdeNotif < diasObjetivo) {
-        console.log(
-          `   🔕 Ya notificado hace ${diasDesdeNotif.toFixed(1)} días`,
-        );
+      
         continue;
       }
     }
@@ -73,6 +63,6 @@ export const detectarRecordatorios = async () => {
     clientesRecordar.push(s);
   }
 
-  console.log(`✅ Clientes a recordar: ${clientesRecordar.length}`);
+
   return clientesRecordar;
 };

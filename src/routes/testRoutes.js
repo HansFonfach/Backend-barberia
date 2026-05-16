@@ -62,11 +62,8 @@ router.get("/test/recordatorio-14h/:reservaId", async (req, res) => {
 
     const { cliente, datos, esHorarioTemprano } = resultado;
 
-    // Te muestra qué slug detectó y qué plantilla usaría
-    console.log("🧪 slug:", reserva.empresa?.slug);
-    console.log("🧪 esHorarioTemprano:", esHorarioTemprano);
-    console.log("🧪 datos:", datos);
 
+    
     // Enviar de verdad
     await RecordatoriosJob.enviarPorTodosLosCanales(
       cliente,

@@ -485,21 +485,6 @@ export const getHorasDisponibles = async (req, res) => {
           horasBloqueadas,
         );
 
-        console.log(
-          "🔵 Bloque:",
-          bloque.inicio.format("HH:mm"),
-          "→",
-          bloque.fin.format("HH:mm"),
-        );
-        console.log(
-          "🕳 Huecos:",
-          huecos.map((h) => ({
-            inicio: h.inicio.format("HH:mm"),
-            fin: h.fin.format("HH:mm"),
-            duracion: h.duracion,
-          })),
-        );
-
         for (const hueco of huecos) {
           if (usaAncla) {
             // Con anclas: probar cada ancla individualmente como posible inicio
@@ -515,7 +500,9 @@ export const getHorasDisponibles = async (req, res) => {
               // serviciosPermitidos vacío = todos los servicios permitidos
               const servicioPermitido =
                 !serviciosPermitidos?.length ||
-                serviciosPermitidos.map((s) => s.toString()).includes(servicioId);
+                serviciosPermitidos
+                  .map((s) => s.toString())
+                  .includes(servicioId);
 
               const cabe =
                 inicioAncla.isSameOrAfter(hueco.inicio) &&

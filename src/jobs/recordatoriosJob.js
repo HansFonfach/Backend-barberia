@@ -13,10 +13,10 @@ dayjs.extend(timezone);
 
 class RecordatoriosJob {
   init() {
-    console.log("🚀 Iniciando CRON de recordatorios...");
+   
 
     cron.schedule("*/15 * * * *", async () => {
-      console.log("⏰ Ejecutando CRON:", new Date().toISOString());
+     
 
       await this.enviarRecordatorios24h();
       await this.enviarRecordatorios14h();
@@ -73,12 +73,12 @@ class RecordatoriosJob {
     reserva,
     enviarWhatsApp = true,
   ) {
-    console.log(`📨 Enviando ${tipo} → Reserva ${reserva._id}`);
+   
 
     // 📧 EMAIL
     if (cliente.email && tipo !== "3h" && tipo !== "14h") {
       try {
-        console.log("📧 Enviando email a:", cliente.email);
+       
 
         await sendReminderEmail(cliente.email, {
           ...datos,
@@ -86,7 +86,7 @@ class RecordatoriosJob {
           instrucciones: reserva.servicio?.instrucciones ?? null,
         });
 
-        console.log("✅ Email enviado:", cliente.email);
+       
       } catch (err) {
         console.error(`❌ Error email ${cliente.email}:`, err.message);
       }
@@ -95,7 +95,7 @@ class RecordatoriosJob {
     // 💬 WHATSAPP
     if (enviarWhatsApp && cliente.telefono) {
       try {
-        console.log("💬 Enviando WhatsApp a:", cliente.telefono);
+       
 
         const res = await WhatsAppService.enviarRecordatorio({
           ...datos,
@@ -105,7 +105,7 @@ class RecordatoriosJob {
         });
 
         if (res.success) {
-          console.log("✅ WhatsApp enviado:", cliente.telefono);
+         
         } else {
           console.error("❌ Falló WhatsApp:", res.error);
         }
@@ -164,9 +164,7 @@ class RecordatoriosJob {
   ============================== */
   async enviarRecordatorios24h() {
     try {
-      console.log("🔍 Buscando recordatorios 24h...");
-
-      const ahora = dayjs().utc();
+     hora = dayjs().utc();
       const desde = ahora.add(23, "hour").toDate();
       const hasta = ahora.add(25, "hour").toDate();
 
@@ -182,11 +180,11 @@ class RecordatoriosJob {
           "nombre direccion telefono politicaCancelacion slug",
         );
 
-      console.log(`📊 Reservas encontradas (24h): ${reservas.length}`);
+     
 
       for (const reserva of reservas) {
         try {
-          console.log("➡️ Procesando reserva:", reserva._id);
+         
 
           const resultado = await this.obtenerDatosReserva(reserva);
           if (!resultado) continue;
@@ -198,8 +196,7 @@ class RecordatoriosJob {
             process.env.FRONTEND_URL || "https://www.agendafonfach.cl";
           const slug = reserva.empresa?.slug || ""; // ✅ agregado slug
 
-          console.log("🔐 Token generado:", token);
-
+         
           // ✅ PRIMERO ENVÍAS
           await this.enviarPorTodosLosCanales(
             cliente,
@@ -241,8 +238,7 @@ class RecordatoriosJob {
   ============================== */
   async enviarRecordatorios3h() {
     try {
-      console.log("🔍 Buscando recordatorios 3h...");
-
+    
       const ahora = dayjs().utc();
       const desde = ahora.add(2, "hour").add(45, "minute").toDate();
       const hasta = ahora.add(3, "hour").add(15, "minute").toDate();
@@ -259,11 +255,11 @@ class RecordatoriosJob {
           "nombre direccion telefono politicaCancelacion slug",
         );
 
-      console.log(`📊 Reservas encontradas (3h): ${reservas.length}`);
+     
 
       for (const reserva of reservas) {
         try {
-          console.log("➡️ Procesando reserva:", reserva._id);
+         
 
           const resultado = await this.obtenerDatosReserva(reserva);
           if (!resultado) continue;
@@ -272,9 +268,7 @@ class RecordatoriosJob {
 
           // 🔥 AGREGAR ACÁ ↓
           if (esHorarioTemprano) {
-            console.log(
-              "⏭️ Horario temprano, omitiendo recordatorio 3h completamente",
-            );
+          
             await Reserva.findOneAndUpdate(
               { _id: reserva._id, recordatorio3hEnviado: { $ne: true } },
               { recordatorio3hEnviado: true },
@@ -321,7 +315,7 @@ class RecordatoriosJob {
   ============================== */
   async testEnviar(reservaId) {
     try {
-      console.log("🧪 TEST envío manual:", reservaId);
+     
 
       const reserva = await Reserva.findById(reservaId)
         .populate("servicio", "nombre instrucciones")

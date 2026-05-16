@@ -48,19 +48,6 @@ class WhatsAppService {
     try {
       const telefonoFormateado = this.formatearTelefono(telefono);
 
-      console.log("📤 Enviando recordatorio WhatsApp...");
-      console.log({
-        nombreCliente,
-        telefono,
-        telefonoFormateado,
-        nombreEmpresa,
-        nombreProfesional,
-        fecha,
-        hora,
-        servicio,
-        direccion,
-        slugEmpresa,
-      });
 
       // 👇 Lógica para elegir plantilla según slug
       const esLumyca = slugEmpresa === "lumicabeauty";
@@ -93,9 +80,6 @@ class WhatsAppService {
         },
       };
 
-      // 🔥 LOG 2: Body enviado
-      console.log("📦 Body enviado a Meta:");
-      console.log(JSON.stringify(body, null, 2));
 
       const res = await fetch(this.apiUrl, {
         method: "POST",
@@ -108,19 +92,14 @@ class WhatsAppService {
 
       const data = await res.json();
 
-      // 🔥 LOG 3: Status + respuesta
-      console.log("📊 Status:", res.status);
-      console.log("📥 Respuesta Meta:", data);
-
+ 
       if (!res.ok) {
         console.error("❌ Error Meta API:", data);
         return { success: false, error: data };
       }
 
       // 🔥 LOG 4: éxito claro
-      console.log(
-        `✅ WhatsApp enviado correctamente a ${telefonoFormateado} (${nombreCliente})`,
-      );
+   
 
       return { success: true, data };
     } catch (error) {
@@ -145,17 +124,6 @@ class WhatsAppService {
     try {
       const telefonoFormateado = this.formatearTelefono(telefono);
 
-      console.log("📤 Enviando notificación a profesional...");
-      console.log({
-        telefonoFormateado,
-        nombreProfesional,
-        nombreCliente,
-        fecha,
-        hora,
-        servicio,
-        plantilla,
-        telefonoCliente
-      });
 
       const body = {
         messaging_product: "whatsapp",
@@ -180,8 +148,7 @@ class WhatsAppService {
         },
       };
 
-      console.log("📦 Body profesional:");
-      console.log(JSON.stringify(body, null, 2));
+
 
       const res = await fetch(this.apiUrl, {
         method: "POST",
@@ -194,17 +161,14 @@ class WhatsAppService {
 
       const data = await res.json();
 
-      console.log("📊 Status:", res.status);
-      console.log("📥 Respuesta Meta:", data);
+
 
       if (!res.ok) {
         console.error("❌ Error Meta API (profesional):", data);
         return { success: false, error: data };
       }
 
-      console.log(
-        `✅ Notificación enviada al profesional ${nombreProfesional}`,
-      );
+   
 
       return { success: true, data };
     } catch (error) {

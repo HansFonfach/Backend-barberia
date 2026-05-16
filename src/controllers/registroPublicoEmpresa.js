@@ -87,7 +87,7 @@ export const registroPublicoEmpresa = async (req, res) => {
         email: correo,
         password: passwordPlana,
       });
-      console.log("✅ Email enviado:", resultado);
+   
     } catch (emailError) {
       console.error("❌ Error enviando email:", emailError);
       // No lanzamos el error para que igual responda 201
