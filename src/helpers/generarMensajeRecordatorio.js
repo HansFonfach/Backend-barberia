@@ -1,7 +1,13 @@
 export const generarMensajeRecordatorio = (cliente, servicio, tipoCliente, empresa) => {
+
+
+   console.log("🏢 empresa recibida:", empresa?.nombre, "| tipo:", empresa?.tipo, "| rubro:", empresa?.rubro);
   const nombreEmpresa = empresa?.nombre || "nosotros";
   const nombre = cliente.nombre.split(" ")[0];
-  const tipo = empresa?.tipo;
+const tipo = empresa?.tipo ?? empresa?.rubro;
+
+
+  console.log("🎯 tipo resuelto:", tipo);
 
   const esBarberia = tipo === "barberia";
   const esPeluqueria = tipo === "peluqueria";

@@ -6,28 +6,45 @@ import empresaModel from "../models/empresa.model.js";
 import { sendRecordatorioPagoEmail } from "../controllers/mailController.js";
 
 export const iniciarCronpagoEmpresa = () => {
-  cron.schedule("0 9 * * *", async () => {
+  cron.schedule("* * * * *", async () => {
     console.log("🔄 Revisando pagos de empresas...");
 
     const hoy = dayjs().startOf("day");
+    console.log("📅 Hoy:", hoy.format("YYYY-MM-DD"));
 
     const pagos = await PagoEmpresa.find({
       estado: { $in: ["pendiente", "atrasado"] },
     }).populate("empresa");
 
+    console.log("📦 Pagos encontrados:", pagos.length);
+
     for (const pago of pagos) {
       const empresa = pago.empresa;
+      console.log(
+        "🏢 Empresa:",
+        empresa?.nombre,
+        "| estadoSuscripcion:",
+        empresa?.estadoSuscripcion,
+      );
 
       if (!empresa || empresa.estadoSuscripcion === "cancelado") continue;
 
       const vencimiento = dayjs(pago.fechaVencimiento).startOf("day");
       const diasDiff = vencimiento.diff(hoy, "day");
+      console.log(
+        "📊 diasDiff:",
+        diasDiff,
+        "| fechaVencimiento:",
+        vencimiento.format("YYYY-MM-DD"),
+      );
 
       if (diasDiff === 5 && !pago.notificaciones.diasAntes5) {
+        console.log("📧 Enviando email 5 días antes a:", empresa.correo);
         try {
           const resultado = await sendRecordatorioPagoEmail(empresa, {
             tipo: "5_dias_antes",
           });
+          console.log("✅ Email enviado:", resultado);
         } catch (err) {
           console.error("❌ Error enviando email:", err.message);
         }
@@ -71,5 +88,7 @@ export const iniciarCronpagoEmpresa = () => {
 
       await pago.save();
     }
+
+    console.log("✅ Revisión de pagos completada");
   });
 };

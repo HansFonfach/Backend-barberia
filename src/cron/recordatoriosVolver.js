@@ -10,13 +10,10 @@ import ClienteServicioStats from "../models/clienteServicioStats.model.js";
 
 // Lógica central reutilizable
 const procesarRecordatorios = async () => {
- 
   const clientes = await detectarRecordatorios();
-
 
   let enviados = 0,
     errores = 0;
-
   for (const c of clientes) {
     try {
       const tipoCliente = clasificarCliente(c.totalReservas);
@@ -24,19 +21,23 @@ const procesarRecordatorios = async () => {
         c.cliente,
         c.servicio,
         tipoCliente,
-        c.empresa,
+        c.empresa, // 👈 ya viene populado con nombre y tipo
       );
 
-   
+      console.log(
+        `📨 Enviando a ${c.cliente.email} | tipo: ${tipoCliente} | empresa: ${c.empresa?.nombre}`,
+      );
 
       await sendRetentionEmail(c.cliente.email, {
         ...mensaje,
         nombreEmpresa: c.empresa?.nombre,
       });
 
-  
-      c.ultimaNotificacion = new Date();
-      await c.save();
+      // 👇 findByIdAndUpdate es más seguro que c.save()
+      await ClienteServicioStats.findByIdAndUpdate(c._id, {
+        ultimaNotificacion: new Date(),
+      });
+
       enviados++;
     } catch (err) {
       errores++;
@@ -61,7 +62,7 @@ const init = () => {
   );
 
   // Disparo inmediato para verificar que funciona
- 
+
   procesarRecordatorios().then((r) =>
     console.log(`Primer ciclo: ${r.enviados} enviados, ${r.errores} errores`),
   );

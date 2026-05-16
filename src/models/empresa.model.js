@@ -32,6 +32,17 @@ const EmpresaSchema = new mongoose.Schema({
       "otros",
     ],
   },
+  tipo: {
+    type: String,
+    enum: [
+      "barberia",
+      "peluqueria",
+      "salon_belleza",
+      "spa",
+      "centro_estetica",
+      "otros",
+    ],
+  },
 
   // Módulos activos para esta empresa
   modulos: {
