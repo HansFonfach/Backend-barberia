@@ -16,14 +16,20 @@ export const reservarComoInvitado = async (req, res) => {
   const { nombre, apellido, rut, email, telefono } = req.body;
 
   const empresa = await empresaModel.findOne({ slug });
-  if (!empresa)
-    return res.status(404).json({ message: "Empresa no encontrada" });
 
+  if (!empresa) {
+    return res.status(404).json({
+      message: "Empresa no encontrada",
+    });
+  }
+
+  // ✅ Buscar por RUT + empresa
   let usuario = await usuarioModel.findOne({
-    email,
     empresa: empresa._id,
+    rut,
   });
 
+  // ✅ Crear solo si no existe
   if (!usuario) {
     usuario = await usuarioModel.create({
       nombre,
@@ -34,6 +40,14 @@ export const reservarComoInvitado = async (req, res) => {
       rol: "invitado",
       empresa: empresa._id,
     });
+  } else {
+    // ✅ Actualizar datos si cambiaron
+    usuario.nombre = nombre;
+    usuario.apellido = apellido;
+    usuario.email = email;
+    usuario.telefono = telefono;
+
+    await usuario.save();
   }
 
   req.usuario = {
@@ -42,7 +56,7 @@ export const reservarComoInvitado = async (req, res) => {
     rol: usuario.rol,
   };
 
-  req.crearTokenCancelacion = true; // 👈 aquí, antes de llamar
+  req.crearTokenCancelacion = true;
 
   return createReserva(req, res);
 };

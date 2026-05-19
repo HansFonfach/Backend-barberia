@@ -38,7 +38,6 @@ const UsuarioSchema = new Schema(
     perfilProfesional: {
       aniosExperiencia: { type: Number, default: null },
       especialidades: [{ type: String }],
-      especialidades: [{ type: String }], // ["nutrición", "deportiva", etc.]
       numeroColegiado: { type: String, default: null }, // ← NUEVO, para profesionales de salud
       fotoPerfil: {
         url: { type: String, default: null },

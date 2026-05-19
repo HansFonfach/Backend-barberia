@@ -508,9 +508,7 @@ export const getHorasDisponibles = async (req, res) => {
                 inicioAncla.isSameOrAfter(hueco.inicio) &&
                 finServicio.isSameOrBefore(hueco.fin);
 
-              console.log(
-                `  ⚓ Ancla ${hora}: servicioPermitido=${servicioPermitido}, cabe=${cabe} (fin servicio: ${finServicio.format("HH:mm")}, fin hueco: ${hueco.fin.format("HH:mm")})`,
-              );
+          
 
               if (
                 servicioPermitido &&
@@ -538,7 +536,7 @@ export const getHorasDisponibles = async (req, res) => {
         }
       }
 
-      console.log("✅ horasDisponibles tras horario:", [...horasDisponibles]);
+     
     }
 
     // Agregar horas extra
@@ -978,9 +976,7 @@ export const getHorasProfesionalPorDia = async (req, res) => {
     const { id: barberoId } = req.params;
     const { fecha } = req.query;
 
-    console.log("🔍 [getHorasProfesionalPorDia] INICIO");
-    console.log("  barberoId:", barberoId);
-    console.log("  fecha:", fecha);
+   
 
     if (!fecha) {
       return res.status(400).json({ message: "Fecha requerida" });
@@ -991,7 +987,7 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       return res.status(400).json({ message: "Fecha inválida" });
     }
 
-    console.log("  fechaConsulta válida:", fechaConsulta.format());
+   
 
     // ─── BARBERO ───
     const barbero = await Usuario.findById(barberoId).populate(
@@ -1000,47 +996,23 @@ export const getHorasProfesionalPorDia = async (req, res) => {
     if (!barbero)
       return res.status(404).json({ message: "Barbero no encontrado" });
 
-    console.log("✅ Barbero encontrado:", barbero._id);
-    console.log(
-      "  horariosDisponibles total:",
-      barbero.horariosDisponibles.length,
-    );
+  
 
     const empresaDoc = await empresaModel.findById(barbero.empresa);
     const diaSemana = fechaConsulta.day();
 
-    console.log(
-      "  diaSemana (dayjs):",
-      diaSemana,
-      "← 0=Dom 1=Lun 2=Mar 3=Mie 4=Jue 5=Vie 6=Sab",
-    );
-    console.log(
-      "  horariosDisponibles raw:",
-      barbero.horariosDisponibles.map((h) => ({
-        diaSemana: h.diaSemana,
-        tipoDiaSemana: typeof h.diaSemana,
-        horaInicio: h.horaInicio,
-        horaFin: h.horaFin,
-      })),
-    );
+   
+ 
 
     const horariosDelDia = barbero.horariosDisponibles.filter(
       (h) => Number(h.diaSemana) === diaSemana,
     );
 
-    console.log("  horariosDelDia (filtrados):", horariosDelDia.length);
-    console.log(
-      "  horariosDelDia detalle:",
-      horariosDelDia.map((h) => ({
-        diaSemana: h.diaSemana,
-        horaInicio: h.horaInicio,
-        horaFin: h.horaFin,
-      })),
-    );
+   
 
     // ─── FERIADO ───
     const feriado = await verificarFeriadoConComportamiento(fecha);
-    console.log("  feriado:", feriado ? feriado.nombre : "ninguno");
+    
 
     // ─── RESERVAS DEL DÍA ───
     const inicioBusqueda = fechaConsulta
@@ -1054,8 +1026,6 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       .utc()
       .toDate();
 
-    console.log("  inicioBusqueda:", inicioBusqueda);
-    console.log("  finBusqueda:", finBusqueda);
 
     const reservas = await Reserva.find({
       barbero: barberoId,
@@ -1065,15 +1035,7 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       .populate("cliente", "nombre email telefono")
       .populate("servicio", "nombre");
 
-    console.log("  reservas encontradas:", reservas.length);
-    reservas.forEach((r) => {
-      console.log(
-        "    reserva:",
-        dayjs(r.fecha).tz("America/Santiago").format("HH:mm"),
-        "estado:",
-        r.estado,
-      );
-    });
+
 
     // Map rápido hora → reserva (solo el inicio)
     const mapaReservas = {};
@@ -1103,15 +1065,6 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       fecha: { $gte: inicioDiaUTC, $lte: finDiaUTC },
     });
 
-    console.log("  excepciones encontradas:", excepciones.length);
-    console.log(
-      "  excepciones detalle:",
-      excepciones.map((e) => ({
-        tipo: e.tipo,
-        fecha: e.fecha,
-        horaInicio: e.horaInicio,
-      })),
-    );
 
     const bloqueoDia = excepciones.find((e) => e.tipo === "bloqueo_dia");
     const horasBloqueadas = excepciones
@@ -1121,9 +1074,6 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       .filter((e) => e.tipo === "extra")
       .map((e) => e.horaInicio);
 
-    console.log("  bloqueoDia:", bloqueoDia ? bloqueoDia.motivo : "ninguno");
-    console.log("  horasBloqueadas:", horasBloqueadas);
-    console.log("  horasExtra:", horasExtra);
 
     // ─── VACACIONES ───
     const vacacion = await ExcepcionHorarioModel.findOne({
@@ -1133,16 +1083,14 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       fechaFin: { $gte: fechaConsulta.startOf("day").utc().toDate() },
     });
 
-    console.log("  vacacion:", vacacion ? vacacion.motivo : "ninguna");
+
 
     // ─── CONSTRUIR GRILLA ───
     const resultado = new Map();
 
     // 1. Si día bloqueado o vacaciones → solo reservas existentes
     if (bloqueoDia || vacacion) {
-      console.log(
-        "⛔ Día bloqueado o vacaciones, mostrando solo reservas existentes",
-      );
+     
       Object.entries(mapaReservas).forEach(([hora, r]) => {
         resultado.set(hora, {
           hora,
@@ -1163,18 +1111,14 @@ export const getHorasProfesionalPorDia = async (req, res) => {
     }
 
     // 2. Horas del horario base
-    console.log("🏗️ Construyendo grilla...");
-    console.log("  horariosDelDia a iterar:", horariosDelDia.length);
+   
 
     for (const horario of horariosDelDia) {
       const usaAncla =
         empresaDoc?.configuracion?.usaHorasAncla === true &&
         horario.horasAncla?.length > 0;
 
-      console.log(
-        `  📅 Procesando horario diaSemana=${horario.diaSemana} ${horario.horaInicio}-${horario.horaFin}`,
-      );
-      console.log("    usaAncla:", usaAncla);
+
 
       // Colación en slots de 30 min
       const colacionHoras = new Set();
@@ -1194,7 +1138,7 @@ export const getHorasProfesionalPorDia = async (req, res) => {
           c = c.add(30, "minute");
         }
       }
-      console.log("    colacionHoras:", [...colacionHoras]);
+    
 
       let cursor = dayjs.tz(
         `${fecha} ${horario.horaInicio}`,
@@ -1207,9 +1151,7 @@ export const getHorasProfesionalPorDia = async (req, res) => {
         "America/Santiago",
       );
 
-      console.log("    cursor inicio:", cursor.format("HH:mm"));
-      console.log("    fin:", fin.format("HH:mm"));
-      console.log("    cursor.isBefore(fin):", cursor.isBefore(fin));
+
 
       let iteraciones = 0;
       while (cursor.isBefore(fin)) {
@@ -1273,10 +1215,9 @@ export const getHorasProfesionalPorDia = async (req, res) => {
         cursor = cursor.add(30, "minute");
       }
 
-      console.log(`    iteraciones del while: ${iteraciones}`);
+     
     }
 
-    console.log("  resultado.size después de grilla base:", resultado.size);
 
     // 3. Horas extra
     horasExtra.forEach((hora) => {
@@ -1311,8 +1252,6 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       }
     });
 
-    console.log("  resultado.size FINAL:", resultado.size);
-    console.log("✅ Respondiendo con", resultado.size, "horas");
 
     return res.json({
       fecha,

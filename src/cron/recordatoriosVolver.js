@@ -57,11 +57,7 @@ const init = () => {
     { timezone: "America/Santiago" },
   );
 
-  // Disparo inmediato para verificar que funciona
 
-  procesarRecordatorios().then((r) =>
-    console.log(`Primer ciclo: ${r.enviados} enviados, ${r.errores} errores`),
-  );
 };
 
 // Para el router: fuerza el envío ahora mismo
