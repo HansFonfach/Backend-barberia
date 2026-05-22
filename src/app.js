@@ -21,6 +21,7 @@ import barberoServicioRoutes from "./routes/barberoServicioRoutes.js";
 import reservaInvitadoRoutes from "./routes/reservaInvitadoRoutes.js";
 import empresaRoutes from "./routes/empresaRoutes.js";
 import fichasRoutes from "./routes/fichasRoutes.js";
+import productosRoutes from "./routes/productosRoutes.js";
 
 const app = express();
 app.use(cookieParser());
@@ -48,19 +49,16 @@ app.use(
     allowedHeaders:
       "Content-Type,Authorization,Accept,Origin,X-Requested-With,X-CSRF-Token",
     exposedHeaders: "Set-Cookie", // importante para leer cookies en frontend
-  })
+  }),
 );
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-
 // Rutas
 app.get("/", (req, res) => {
   res.send("API Barbería funcionando 🚀");
 });
-
-
 
 app.use("/usuarios", usuarioRoutes);
 app.use("/horarios", horarioRoutes);
@@ -78,7 +76,8 @@ app.use("/pagos", pagosRoutes);
 app.use("/canjes", canjeRoutes);
 app.use("/barberoServicio", barberoServicioRoutes);
 app.use("/reserva/invitado", reservaInvitadoRoutes);
-app.use("/empresa", empresaRoutes)
-app.use("/fichas", fichasRoutes)
+app.use("/empresa", empresaRoutes);
+app.use("/fichas", fichasRoutes);
+app.use("/productos", productosRoutes);
 
 export default app;

@@ -125,6 +125,7 @@ const ReservaSchema = new Schema(
     cancelTokenExpira: {
       type: Date,
     },
+
     recordatorioEnviado: { type: Boolean, default: false }, // 24h — ya existe
     recordatorio3hEnviado: { type: Boolean, default: false }, // 3h — agregar esto
 
@@ -137,6 +138,63 @@ const ReservaSchema = new Schema(
       respondidaEn: { type: Date },
     },
     confirmacionAsistenciaEnviada: { type: Boolean, default: false }, // flag para el cron
+
+    // SNAPSHOT DEL SERVICIO
+    servicioSnapshot: {
+      nombre: String,
+      precio: Number,
+      duracion: Number,
+    },
+
+    // PRODUCTOS VENDIDOS
+    productos: [
+      {
+        producto: {
+          type: Schema.Types.ObjectId,
+          ref: "Producto",
+        },
+
+        // snapshot histórico
+        nombre: String,
+        precio: Number,
+        categoria: String,
+
+        cantidad: {
+          type: Number,
+          default: 1,
+        },
+
+        subtotal: Number,
+      },
+    ],
+
+    // OBSERVACIÓN FINAL
+    observacionFinal: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    // TOTALES
+    totalServicio: {
+      type: Number,
+      default: 0,
+    },
+
+    totalProductos: {
+      type: Number,
+      default: 0,
+    },
+
+    totalFinal: {
+      type: Number,
+      default: 0,
+    },
+
+    finalizadaEn: {
+      type: Date,
+      default: null,
+    },
   },
 
   { timestamps: true },
