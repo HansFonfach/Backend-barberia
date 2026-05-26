@@ -494,3 +494,29 @@ export const getUsuarioByRutPublico = async (req, res) => {
     });
   }
 };
+
+export const actualizarNotaCliente = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notasProfesional } = req.body;
+
+
+    const usuarioActualizado = await usuarioModel.findByIdAndUpdate(
+      id,
+      { notasProfesional },
+      { new: true },
+    );
+
+    
+    if (!usuarioActualizado) {
+      return res
+        .status(404)
+        .json({ message: `No se encontró usuario con el id ${id}` });
+    }
+
+    res.json({ message: "Nota actualizada", usuario: usuarioActualizado });
+  } catch (error) {
+   
+    res.status(500).json({ message: error.message });
+  }
+};

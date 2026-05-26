@@ -947,7 +947,7 @@ export const getReservasPorFechaBarbero = async (req, res) => {
       fecha: { $gte: inicioDia, $lte: finDia },
       estado: { $ne: "cancelada" },
     })
-      .populate("cliente", "nombre apellido telefono rut email")
+      .populate("cliente", "nombre apellido telefono rut email notasProfesional")
       .populate("servicio", "nombre duracion precio _id")
       .sort({ fecha: 1 });
 

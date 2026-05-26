@@ -11,6 +11,7 @@ import {
   getBarberosPublicos,
   updatePerfil,
   getUsuarioByRutPublico,
+  actualizarNotaCliente,
 } from "../controllers/usuarioController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 import { verificarRol } from "../middlewares/verificarRol.js";
@@ -25,6 +26,7 @@ router.get("/rutPublico/:rut",  getUsuarioByRutPublico);
 router.get("/todosLosUsuarios", validarToken, getAllUsersWithSuscripcion);
 router.get("/misPuntos", validarToken, verMisPuntos);
 router.put("/actualizarPerfil", validarToken, updatePerfil); // ✅ AQUÍ
+router.put("/:id/notas", validarToken, actualizarNotaCliente);
 
 // 📄 GENERALES
 router.get("/", validarToken, getUsuarios);

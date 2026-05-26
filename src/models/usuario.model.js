@@ -54,6 +54,14 @@ const UsuarioSchema = new Schema(
     resetPasswordToken: { type: String, default: null },
     resetPasswordExpires: { type: Date, default: null },
     pendingPassword: { type: String, default: null },
+
+    notasProfesional: {
+      type: String,
+      trim: true,
+      default: "",
+    }
+
+
   },
 
   { timestamps: true },
