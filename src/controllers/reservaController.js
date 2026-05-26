@@ -27,6 +27,8 @@ import { actualizarClienteServicioStats } from "../helpers/actualizarClienteServ
 import WhatsappService from "../services/whatsappService.js";
 import { getHorasDisponibles } from "./horarioController.js";
 import { validarDisponibilidad } from "../helpers/validarDisponibilidad.js";
+import reservaModel from "../models/reserva.model.js";
+import productoModel from "../models/producto.Model.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -466,6 +468,11 @@ export const createReserva = async (req, res) => {
       precio: precioServicio,
       estado: "pendiente",
       abono: abonoData, // 👈
+      servicioSnapshot: {
+        nombre: nombreServicio,
+        precio: precioServicio,
+        duracion: duracionServicio,
+      },
     });
 
     await actualizarClienteServicioStats({
@@ -940,8 +947,8 @@ export const getReservasPorFechaBarbero = async (req, res) => {
       fecha: { $gte: inicioDia, $lte: finDia },
       estado: { $ne: "cancelada" },
     })
-      .populate("cliente", "nombre apellido telefono")
-      .populate("servicio", "nombre duracion _id")
+      .populate("cliente", "nombre apellido telefono rut email")
+      .populate("servicio", "nombre duracion precio _id")
       .sort({ fecha: 1 });
 
     // 2. Procesar cada reserva para incluir posición dentro de la suscripción
@@ -1294,8 +1301,6 @@ export const reagendarReserva = async (req, res) => {
       const clienteEmail =
         reservaOriginal.cliente?.email ?? reservaOriginal.invitado?.email;
 
-   
-
       if (clienteEmail) {
         await sendReagendamientoEmail(clienteEmail, {
           nombreCliente:
@@ -1333,5 +1338,77 @@ export const reagendarReserva = async (req, res) => {
   } catch (error) {
     console.error("❌ Error reagendarReserva:", error);
     res.status(500).json({ message: "Error al reagendar la reserva" });
+  }
+};
+
+export const actualizarReserva = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { observacionFinal, productos } = req.body;
+
+    const reserva = await Reserva.findById(id).populate("servicio");
+    if (!reserva)
+      return res.status(404).json({ message: "Reserva no encontrada" });
+
+    const updateData = {};
+
+    if (observacionFinal !== undefined) {
+      updateData.observacionFinal = observacionFinal;
+    }
+
+    if (productos !== undefined) {
+      const ids = productos.map((p) => p.producto);
+      const productosDB = await productoModel.find({ _id: { $in: ids } });
+
+      let totalProductos = 0;
+      updateData.productos = productos.map((item) => {
+        const prod = productosDB.find(
+          (p) => p._id.toString() === item.producto,
+        );
+        const subtotal = (prod?.precio || 0) * (item.cantidad || 1);
+        totalProductos += subtotal;
+        return {
+          producto: prod._id,
+          nombre: prod.nombre,
+          precio: prod.precio,
+          categoria: prod.categoria,
+          cantidad: item.cantidad || 1,
+          subtotal,
+        };
+      });
+
+      const totalServicio =
+        reserva.servicioSnapshot?.precio || reserva.servicio?.precio || 0;
+      updateData.totalProductos = totalProductos;
+      updateData.totalServicio = totalServicio;
+      updateData.totalFinal = totalServicio + totalProductos;
+
+      // ── ajustar stock por diferencia ──
+      const anteriores = reserva.productos || []; // productos que ya tenía la reserva
+
+      // 1. devolver stock de los anteriores
+      for (const ant of anteriores) {
+        await productoModel.findOneAndUpdate(
+          { _id: ant.producto, stock: { $ne: null } },
+          { $inc: { stock: ant.cantidad } }, // devuelve lo que tenía
+        );
+      }
+
+      // 2. descontar stock de los nuevos
+      for (const item of productos) {
+        await productoModel.findOneAndUpdate(
+          { _id: item.producto, stock: { $ne: null } },
+          { $inc: { stock: -(item.cantidad || 1) } },
+        );
+      }
+    }
+
+    const reservaActualizada = await Reserva.findByIdAndUpdate(id, updateData, {
+      new: true,
+    });
+
+    res.json({ message: "Reserva actualizada", reserva: reservaActualizada });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
 };

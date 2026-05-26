@@ -10,6 +10,7 @@ import {
   updateMarcarNoAsistioReserva,
   responderConfirmacionAsistencia,
   reagendarReserva,
+  actualizarReserva,
 } from "../controllers/reservaController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 import { optionalAuth } from "../middlewares/optionalAuth.js";
@@ -20,6 +21,7 @@ const router = Router();
 
 router.post("/", validarToken, createReserva);
 router.get("/", validarToken, getReservas);
+router.patch("/:id/actualizar", validarToken, actualizarReserva);
 router.get("/barbero", validarToken, getReservasByBarberId);
 router.get("/confirmacion/:token", responderConfirmacionAsistencia);
 router.get("/:id", validarToken, getReservasByUserId);

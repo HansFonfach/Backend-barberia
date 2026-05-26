@@ -12,6 +12,7 @@ export const createProducto = async (req, res) => {
       imagen,
       stock,
       categoria,
+      empresa: req.usuario.empresa,
     });
     res.status(201).json({
       msg: "Producto creado exitosamente!",
@@ -81,11 +82,14 @@ export const updateProducto = async (req, res) => {
 
 export const getAllProductos = async (req, res) => {
   try {
-    const productos = await productoModel.find();
-    res.json({
-      message: "Lista de productos",
-      productos,
+  
+
+    const productos = await productoModel.find({
+      empresa: req.usuario.empresaId, 
     });
+
+
+    res.json({ message: "Lista de productos", productos });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
