@@ -6,6 +6,7 @@ import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
 import suscripcionModel from "../models/suscripcion.model.js";
 import mongoose from "mongoose";
+import productoModel from "../models/producto.Model.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -244,6 +245,10 @@ export const ingresoMensual = async (req, res) => {
     });
     const ingresoSuscripciones = suscripcionesMes * PRECIO_SUSCRIPCION;
 
+    const ingresoProductos = reservasPasadas
+      .filter((r) => r.estado === "completada")
+      .reduce((acc, r) => acc + (r.totalProductos || 0), 0);
+
     const reservasFuturas = await reservaModel
       .find({
         empresa: empresaId,
@@ -287,13 +292,17 @@ export const ingresoMensual = async (req, res) => {
     return res.json({
       ok: true,
       data: {
-        ingresoTotal: ingresoReservas + ingresoSuscripciones,
+        ingresoTotal: ingresoReservas + ingresoSuscripciones + ingresoProductos,
         detalle: {
           ingresoReservas,
+          ingresoProductos, // ← nuevo
           ingresoSuscripciones,
           suscripcionesNuevas: suscripcionesMes,
           posibleIngreso:
-            ingresoReservas + ingresoSuscripciones + posibleIngreso,
+            ingresoReservas +
+            ingresoSuscripciones +
+            ingresoProductos +
+            posibleIngreso,
         },
       },
     });
@@ -801,5 +810,79 @@ export const getDashboardResumen = async (req, res) => {
   } catch (error) {
     console.error("❌ Error getDashboardResumen:", error);
     return err(res, "Error al obtener resumen del dashboard");
+  }
+};
+
+
+export const estadisticasProductos = async (req, res) => {
+  try {
+    const empresaId = req.usuario?.empresaId;
+    if (!empresaId) return res.status(400).json({ message: "Empresa no identificada" });
+
+    const hoy = new Date();
+    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    inicioMes.setHours(0, 0, 0, 0);
+
+    // reservas completadas del mes con productos
+    const reservas = await reservaModel
+      .find({
+        empresa: empresaId,
+        estado: "completada",
+        fecha: { $gte: inicioMes, $lte: hoy },
+        "productos.0": { $exists: true }, // solo las que tienen productos
+      })
+      .populate("cliente", "nombre apellido")
+      .sort({ fecha: -1 });
+
+    // ── 1. ventas recientes ──
+    const ventasRecientes = reservas.flatMap((r) =>
+      r.productos.map((p) => ({
+        fecha: r.fecha,
+        cliente: r.cliente
+          ? `${r.cliente.nombre} ${r.cliente.apellido}`
+          : "Cliente",
+        producto: p.nombre,
+        cantidad: p.cantidad,
+        subtotal: p.subtotal,
+      }))
+    );
+
+    // ── 2. productos más vendidos ──
+    const mapaProductos = {};
+    for (const r of reservas) {
+      for (const p of r.productos) {
+        const key = p.nombre;
+        if (!mapaProductos[key]) {
+          mapaProductos[key] = { nombre: p.nombre, unidades: 0, total: 0 };
+        }
+        mapaProductos[key].unidades += p.cantidad;
+        mapaProductos[key].total += p.subtotal;
+      }
+    }
+    const masVendidos = Object.values(mapaProductos)
+      .sort((a, b) => b.unidades - a.unidades);
+
+    // ── 3. stock bajo (menos de 3 unidades) ──
+    const stockBajo = await productoModel.find({
+      empresa: empresaId,
+      activo: true,
+      stock: { $ne: null, $lte: 3, $gt: 0 },
+    }).select("nombre stock");
+
+    // ── 4. total vendido en el mes ──
+    const totalMes = ventasRecientes.reduce((acc, v) => acc + v.subtotal, 0);
+
+    res.json({
+      ok: true,
+      data: {
+        totalMes,
+        ventasRecientes,
+        masVendidos,
+        stockBajo,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error estadisticasProductos:", error);
+    res.status(500).json({ message: error.message });
   }
 };

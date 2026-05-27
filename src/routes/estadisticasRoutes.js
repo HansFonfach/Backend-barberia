@@ -3,6 +3,7 @@ import { Router } from "express";
 import { validarToken } from "../middlewares/validarToken.js";
 import {
 
+  estadisticasProductos,
   getDashboardResumen,
   getHoraMasSolicitada,
   getProximoCliente,
@@ -34,5 +35,7 @@ router.get("/horaMasSolicitada", validarToken, getHoraMasSolicitada);
 router.get("/ingreso-total", validarToken, ingresoTotal);
 
 router.get("/dashboard/resumen", validarToken, getDashboardResumen);
+
+router.get("/productos", validarToken, estadisticasProductos);
 
 export default router;
