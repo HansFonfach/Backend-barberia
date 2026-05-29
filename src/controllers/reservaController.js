@@ -1346,6 +1346,8 @@ export const actualizarReserva = async (req, res) => {
     const { id } = req.params;
     const { observacionFinal, productos } = req.body;
 
+    console.log(productos);
+
     const reserva = await Reserva.findById(id).populate("servicio");
     if (!reserva)
       return res.status(404).json({ message: "Reserva no encontrada" });

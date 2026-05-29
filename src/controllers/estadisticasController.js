@@ -245,9 +245,10 @@ export const ingresoMensual = async (req, res) => {
     });
     const ingresoSuscripciones = suscripcionesMes * PRECIO_SUSCRIPCION;
 
-    const ingresoProductos = reservasPasadas
-      .filter((r) => r.estado === "completada")
-      .reduce((acc, r) => acc + (r.totalProductos || 0), 0);
+    const ingresoProductos = reservasPasadas.reduce(
+      (acc, r) => acc + (r.totalProductos || 0),
+      0,
+    );
 
     const reservasFuturas = await reservaModel
       .find({
@@ -813,11 +814,11 @@ export const getDashboardResumen = async (req, res) => {
   }
 };
 
-
 export const estadisticasProductos = async (req, res) => {
   try {
     const empresaId = req.usuario?.empresaId;
-    if (!empresaId) return res.status(400).json({ message: "Empresa no identificada" });
+    if (!empresaId)
+      return res.status(400).json({ message: "Empresa no identificada" });
 
     const hoy = new Date();
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
@@ -827,9 +828,9 @@ export const estadisticasProductos = async (req, res) => {
     const reservas = await reservaModel
       .find({
         empresa: empresaId,
-        estado: "completada",
+        estado: { $nin: ["cancelada", "no_asistio"] }, // excluye solo los inválidos
         fecha: { $gte: inicioMes, $lte: hoy },
-        "productos.0": { $exists: true }, // solo las que tienen productos
+        "productos.0": { $exists: true },
       })
       .populate("cliente", "nombre apellido")
       .sort({ fecha: -1 });
@@ -844,7 +845,7 @@ export const estadisticasProductos = async (req, res) => {
         producto: p.nombre,
         cantidad: p.cantidad,
         subtotal: p.subtotal,
-      }))
+      })),
     );
 
     // ── 2. productos más vendidos ──
@@ -859,15 +860,18 @@ export const estadisticasProductos = async (req, res) => {
         mapaProductos[key].total += p.subtotal;
       }
     }
-    const masVendidos = Object.values(mapaProductos)
-      .sort((a, b) => b.unidades - a.unidades);
+    const masVendidos = Object.values(mapaProductos).sort(
+      (a, b) => b.unidades - a.unidades,
+    );
 
     // ── 3. stock bajo (menos de 3 unidades) ──
-    const stockBajo = await productoModel.find({
-      empresa: empresaId,
-      activo: true,
-      stock: { $ne: null, $lte: 3, $gt: 0 },
-    }).select("nombre stock");
+    const stockBajo = await productoModel
+      .find({
+        empresa: empresaId,
+        activo: true,
+        stock: { $ne: null, $lte: 3, $gt: 0 },
+      })
+      .select("nombre stock");
 
     // ── 4. total vendido en el mes ──
     const totalMes = ventasRecientes.reduce((acc, v) => acc + v.subtotal, 0);

@@ -12,7 +12,7 @@ export const createProducto = async (req, res) => {
       imagen,
       stock,
       categoria,
-      empresa: req.usuario.empresa,
+      empresa: req.usuario.empresaId,
     });
     res.status(201).json({
       msg: "Producto creado exitosamente!",
@@ -26,9 +26,11 @@ export const createProducto = async (req, res) => {
 export const deleteProducto = async (req, res) => {
   const { id } = req.params;
   try {
-    const productoEliminado = await productoModel.findByIdAndUpdate(id, {
-      activo: false,
-    });
+    const productoEliminado = await productoModel.findByIdAndUpdate(
+      id,
+      { activo: false },
+      { new: true }, 
+    );
 
     if (!productoEliminado) {
       return res.status(404).json({
