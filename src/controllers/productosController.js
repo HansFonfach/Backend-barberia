@@ -82,12 +82,9 @@ export const updateProducto = async (req, res) => {
 
 export const getAllProductos = async (req, res) => {
   try {
-  
-
     const productos = await productoModel.find({
-      empresa: req.usuario.empresaId, 
+      empresa: req.usuario.empresaId,
     });
-
 
     res.json({ message: "Lista de productos", productos });
   } catch (error) {

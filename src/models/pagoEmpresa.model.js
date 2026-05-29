@@ -35,12 +35,12 @@ const PagoEmpresaSchema = new mongoose.Schema(
       ref: "Usuario",
     },
 
-
     notificaciones: {
-      diasAntes5: { type: Boolean, default: false }, // 5 días antes
-      diasAntes2: { type: Boolean, default: false }, // 2 días antes
-      diaVencimiento: { type: Boolean, default: false }, // el mismo día
-      diasDespues3: { type: Boolean, default: false }, // suspensión a los 3 días
+      diasAntes5: { type: Boolean, default: false },
+      diasAntes2: { type: Boolean, default: false },
+      diasAntes1: { type: Boolean, default: false },
+      diaVencimiento: { type: Boolean, default: false },
+      diasDespues3: { type: Boolean, default: false },
     },
   },
   { timestamps: true },
