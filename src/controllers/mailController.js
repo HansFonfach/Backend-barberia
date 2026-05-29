@@ -476,6 +476,7 @@ export const sendRecordatorioPagoEmail = async (empresa, { tipo }) => {
   const asuntos = {
     "5_dias_antes": "📅 Tu plan vence en 5 días – Agenda Fonfach",
     "2_dias_antes": "⚠️ Tu plan vence en 2 días – Agenda Fonfach",
+    "1_dia_antes": "🚨 Tu plan vence mañana – Agenda Fonfach",
     vencimiento_hoy: "🔔 Tu plan vence hoy – Agenda Fonfach",
     suspension: "🔒 Tu acceso ha sido suspendido – Agenda Fonfach",
   };
@@ -495,6 +496,13 @@ export const sendRecordatorioPagoEmail = async (empresa, { tipo }) => {
       <p style="color:#555;font-size:14px;">Para no perder el acceso, realiza tu pago a la brevedad.</p>
       <p style="color:#aaa;font-size:13px;">Si ya realizaste el pago, ignora este mensaje.</p>
     `,
+    "1_dia_antes": `
+    <h2 style="margin-top:0;">🚨 Tu plan vence mañana</h2>
+    <p>Hola <strong>${empresa.nombre}</strong> 👋</p>
+    <p>Te recordamos que tu plan vence <strong>mañana</strong>.</p>
+    <p style="color:#555;font-size:14px;">Para no perder el acceso, realiza tu transferencia hoy.</p>
+    <p style="color:#aaa;font-size:13px;">Si ya realizaste el pago, ignora este mensaje.</p>
+  `,
     vencimiento_hoy: `
       <h2 style="margin-top:0;">🔔 Tu plan vence hoy</h2>
       <p>Hola <strong>${empresa.nombre}</strong> 👋</p>
