@@ -6,7 +6,7 @@ import empresaModel from "../models/empresa.model.js";
 import { sendRecordatorioPagoEmail } from "../controllers/mailController.js";
 
 export const iniciarCronpagoEmpresa = () => {
-  cron.schedule("* * * * *", async () => {
+  cron.schedule("0 9 * * *", async () => {
     const hoy = dayjs().startOf("day");
 
     const pagos = await PagoEmpresa.find({
