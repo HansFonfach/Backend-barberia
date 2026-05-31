@@ -13,7 +13,8 @@ dayjs.extend(timezone);
 
 export const reservarComoInvitado = async (req, res) => {
   const { slug } = req.params;
-  const { nombre, apellido, rut, email, telefono } = req.body;
+  const { nombre, apellido, rut,  telefono } = req.body;
+  const email = req.body.email.toLowerCase().trim(); // 👈 agrega esto
 
   const empresa = await empresaModel.findOne({ slug });
 

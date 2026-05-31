@@ -11,7 +11,7 @@ const UsuarioSchema = new Schema(
     rut: { type: String },
     nombre: { type: String, required: true },
     apellido: { type: String },
-    email: { type: String, required: true },
+   email: { type: String, required: true, lowercase: true, trim: true },
     telefono: { type: String, required: true },
     suscrito: { type: Boolean, default: false },
     password: { type: String, default: null },

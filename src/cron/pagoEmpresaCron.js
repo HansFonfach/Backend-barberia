@@ -1,13 +1,19 @@
 // crons/pagoEmpresaCron.js
 import cron from "node-cron";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
+
 import PagoEmpresa from "../models/pagoEmpresa.model.js";
 import empresaModel from "../models/empresa.model.js";
 import { sendRecordatorioPagoEmail } from "../controllers/mailController.js";
 
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
 export const iniciarCronpagoEmpresa = () => {
   cron.schedule("0 9 * * *", async () => {
-    const hoy = dayjs().startOf("day");
+    const hoy = dayjs().tz("America/Santiago").startOf("day");
 
     const pagos = await PagoEmpresa.find({
       estado: { $in: ["pendiente", "atrasado"] },
@@ -17,7 +23,9 @@ export const iniciarCronpagoEmpresa = () => {
       const empresa = pago.empresa;
       if (!empresa || empresa.estadoSuscripcion === "cancelado") continue;
 
-      const vencimiento = dayjs(pago.fechaVencimiento).startOf("day");
+      const vencimiento = dayjs(pago.fechaVencimiento)
+        .tz("America/Santiago")
+        .startOf("day");
       const diasDiff = vencimiento.diff(hoy, "day");
       let modificado = false;
 
