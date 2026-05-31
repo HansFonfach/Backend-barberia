@@ -13,24 +13,21 @@ dayjs.extend(timezone);
 
 export const reservarComoInvitado = async (req, res) => {
   const { slug } = req.params;
-  const { nombre, apellido, rut,  telefono } = req.body;
-  const email = req.body.email.toLowerCase().trim(); // 👈 agrega esto
+  const { nombre, apellido, rut, telefono } = req.body;
+  const email = req.body.email.toLowerCase().trim();
 
   const empresa = await empresaModel.findOne({ slug });
 
   if (!empresa) {
-    return res.status(404).json({
-      message: "Empresa no encontrada",
-    });
+    return res.status(404).json({ message: "Empresa no encontrada" });
   }
 
-  // ✅ Buscar por RUT + empresa
+  // ✅ Buscar por RUT o email dentro de la misma empresa
   let usuario = await usuarioModel.findOne({
     empresa: empresa._id,
-    rut,
+    $or: [{ rut }, { email }],
   });
 
-  // ✅ Crear solo si no existe
   if (!usuario) {
     usuario = await usuarioModel.create({
       nombre,
@@ -42,11 +39,11 @@ export const reservarComoInvitado = async (req, res) => {
       empresa: empresa._id,
     });
   } else {
-    // ✅ Actualizar datos si cambiaron
     usuario.nombre = nombre;
     usuario.apellido = apellido;
     usuario.email = email;
     usuario.telefono = telefono;
+    if (rut) usuario.rut = rut;
 
     await usuario.save();
   }
