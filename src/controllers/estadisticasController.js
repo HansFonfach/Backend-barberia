@@ -250,6 +250,12 @@ export const ingresoMensual = async (req, res) => {
       0,
     );
 
+    const ingresoExtras = reservasPasadas.reduce(
+      // 👈
+      (acc, r) => acc + (r.totalExtras || 0),
+      0,
+    );
+
     const reservasFuturas = await reservaModel
       .find({
         empresa: empresaId,
@@ -293,16 +299,22 @@ export const ingresoMensual = async (req, res) => {
     return res.json({
       ok: true,
       data: {
-        ingresoTotal: ingresoReservas + ingresoSuscripciones + ingresoProductos,
+        ingresoTotal:
+          ingresoReservas +
+          ingresoSuscripciones +
+          ingresoProductos +
+          ingresoExtras, // 👈
         detalle: {
           ingresoReservas,
-          ingresoProductos, // ← nuevo
+          ingresoProductos,
+          ingresoExtras, // 👈
           ingresoSuscripciones,
           suscripcionesNuevas: suscripcionesMes,
           posibleIngreso:
             ingresoReservas +
             ingresoSuscripciones +
             ingresoProductos +
+            ingresoExtras + // 👈
             posibleIngreso,
         },
       },
@@ -811,6 +823,167 @@ export const getDashboardResumen = async (req, res) => {
   } catch (error) {
     console.error("❌ Error getDashboardResumen:", error);
     return err(res, "Error al obtener resumen del dashboard");
+  }
+};
+
+export const ingresosPorMes = async (req, res) => {
+  const empresaId = req.usuario?.empresaId;
+  if (!empresaId) return err(res, "Empresa no identificada", 400);
+
+  const PRECIO_SUSCRIPCION = 25000;
+
+  // ── Leer mes y año desde query params ──
+  // Ejemplo: GET /estadisticas/ingresos?mes=3&anio=2025
+  const mes = parseInt(req.query.mes); // 0-11 (igual que JS Date)
+  const anio = parseInt(req.query.anio);
+
+  if (isNaN(mes) || isNaN(anio)) {
+    return err(res, "Debes enviar mes (0-11) y anio como query params", 400);
+  }
+
+  const ahora = new Date();
+  const inicioMes = new Date(anio, mes, 1);
+  inicioMes.setHours(0, 0, 0, 0);
+  const finMes = new Date(anio, mes + 1, 0);
+  finMes.setHours(23, 59, 59, 999);
+
+  // Si es el mes actual, solo hasta ahora. Si es pasado, todo el mes.
+  const esMesActual = anio === ahora.getFullYear() && mes === ahora.getMonth();
+  const finConsulta = esMesActual ? ahora : finMes;
+
+  try {
+    const reservasPasadas = await reservaModel
+      .find({
+        empresa: empresaId,
+        fecha: { $gte: inicioMes, $lte: finConsulta },
+        estado: { $nin: ["cancelada", "no_asistio"] },
+      })
+      .populate("servicio", "precio")
+      .lean();
+
+    // ── Calcular ingreso respetando suscripciones ──
+    const clienteIds = [
+      ...new Set(
+        reservasPasadas.map((r) => r.cliente?.toString()).filter(Boolean),
+      ),
+    ];
+
+    const todasLasSus = await suscripcionModel
+      .find({ usuario: { $in: clienteIds }, empresa: empresaId })
+      .lean();
+
+    const susMap = new Map();
+    for (const s of todasLasSus) {
+      const key = s.usuario.toString();
+      if (!susMap.has(key)) susMap.set(key, []);
+      susMap.get(key).push(s);
+    }
+
+    const todasReservasMes = await reservaModel
+      .find({
+        empresa: empresaId,
+        cliente: { $in: clienteIds },
+        fecha: { $gte: inicioMes, $lte: finConsulta },
+        estado: { $nin: ["cancelada", "no_asistio"] },
+      })
+      .sort({ fecha: 1 })
+      .lean();
+
+    const reservasPorCliente = new Map();
+    for (const r of todasReservasMes) {
+      const key = r.cliente.toString();
+      if (!reservasPorCliente.has(key)) reservasPorCliente.set(key, []);
+      reservasPorCliente.get(key).push(r);
+    }
+
+    let ingresoReservas = 0;
+    for (const reserva of reservasPasadas) {
+      const precio = reserva.precio || reserva.servicio?.precio || 0;
+      const clienteKey = reserva.cliente?.toString();
+      const sus = (susMap.get(clienteKey) || []).find(
+        (s) =>
+          new Date(s.fechaInicio) <= new Date(reserva.fecha) &&
+          new Date(s.fechaFin) >= new Date(reserva.fecha),
+      );
+
+      if (!sus) {
+        ingresoReservas += precio;
+        continue;
+      }
+
+      const reservasCliente = reservasPorCliente.get(clienteKey) || [];
+      let serviciosAcumulados = 0;
+      for (const r of reservasCliente) {
+        serviciosAcumulados += r.duracion >= 120 ? 2 : 1;
+        if (r._id.toString() === reserva._id.toString()) break;
+      }
+      if (serviciosAcumulados > sus.serviciosTotales) ingresoReservas += precio;
+    }
+
+    // ── Suscripciones nuevas del mes ──
+    const suscripcionesMes = await suscripcionModel.countDocuments({
+      empresa: empresaId,
+      fechaInicio: { $gte: inicioMes, $lte: finMes },
+    });
+    const ingresoSuscripciones = suscripcionesMes * PRECIO_SUSCRIPCION;
+
+    // ── Productos y extras ──
+    const ingresoProductos = reservasPasadas.reduce(
+      (acc, r) => acc + (r.totalProductos || 0),
+      0,
+    );
+    const ingresoExtras = reservasPasadas.reduce(
+      (acc, r) => acc + (r.totalExtras || 0),
+      0,
+    );
+
+    // ── Posible ingreso (solo si es mes actual, futuras del mes) ──
+    let posibleIngreso = 0;
+    if (esMesActual) {
+      const reservasFuturas = await reservaModel
+        .find({
+          empresa: empresaId,
+          fecha: { $gt: ahora, $lte: finMes },
+          estado: { $nin: ["cancelada", "no_asistio"] },
+        })
+        .populate("servicio", "precio")
+        .lean();
+
+      for (const reserva of reservasFuturas) {
+        const precio = reserva.precio || reserva.servicio?.precio || 0;
+        posibleIngreso += precio;
+      }
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        mes,
+        anio,
+        ingresoTotal:
+          ingresoReservas +
+          ingresoSuscripciones +
+          ingresoProductos +
+          ingresoExtras,
+        detalle: {
+          ingresoReservas,
+          ingresoProductos,
+          ingresoExtras,
+          ingresoSuscripciones,
+          suscripcionesNuevas: suscripcionesMes,
+          posibleIngreso: esMesActual
+            ? ingresoReservas +
+              ingresoSuscripciones +
+              ingresoProductos +
+              ingresoExtras +
+              posibleIngreso
+            : null, // en meses pasados no tiene sentido
+        },
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error ingresosPorMes:", error);
+    return err(res, "Error al obtener ingresos del mes");
   }
 };
 

@@ -2,16 +2,14 @@ import { Router } from "express";
 
 import { validarToken } from "../middlewares/validarToken.js";
 import {
-
   estadisticasProductos,
   getDashboardResumen,
   getHoraMasSolicitada,
   getProximoCliente,
-
   ingresoMensual,
+  ingresosPorMes,
   ingresoTotal,
   proximaReserva,
-
   totalReservasHoyBarbero,
   totalSuscripcionesActivas,
   ultimaReserva,
@@ -37,5 +35,7 @@ router.get("/ingreso-total", validarToken, ingresoTotal);
 router.get("/dashboard/resumen", validarToken, getDashboardResumen);
 
 router.get("/productos", validarToken, estadisticasProductos);
+
+router.get("/ingresos/historial", validarToken, ingresosPorMes);
 
 export default router;
