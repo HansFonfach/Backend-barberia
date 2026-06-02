@@ -1362,9 +1362,7 @@ export const reagendarReserva = async (req, res) => {
 export const actualizarReserva = async (req, res) => {
   try {
     const { id } = req.params;
-    const { observacionFinal, productos } = req.body;
-
-    console.log(productos);
+    const { observacionFinal, productos, extras } = req.body; // 👈 se agrega extras
 
     const reserva = await Reserva.findById(id).populate("servicio");
     if (!reserva)
@@ -1372,10 +1370,12 @@ export const actualizarReserva = async (req, res) => {
 
     const updateData = {};
 
+    // ── Observación ──
     if (observacionFinal !== undefined) {
       updateData.observacionFinal = observacionFinal;
     }
 
+    // ── Productos ──
     if (productos !== undefined) {
       const ids = productos.map((p) => p.producto);
       const productosDB = await productoModel.find({ _id: { $in: ids } });
@@ -1397,30 +1397,52 @@ export const actualizarReserva = async (req, res) => {
         };
       });
 
-      const totalServicio =
-        reserva.servicioSnapshot?.precio || reserva.servicio?.precio || 0;
       updateData.totalProductos = totalProductos;
-      updateData.totalServicio = totalServicio;
-      updateData.totalFinal = totalServicio + totalProductos;
 
-      // ── ajustar stock por diferencia ──
-      const anteriores = reserva.productos || []; // productos que ya tenía la reserva
-
-      // 1. devolver stock de los anteriores
+      // ajustar stock
+      const anteriores = reserva.productos || [];
       for (const ant of anteriores) {
         await productoModel.findOneAndUpdate(
           { _id: ant.producto, stock: { $ne: null } },
-          { $inc: { stock: ant.cantidad } }, // devuelve lo que tenía
+          { $inc: { stock: ant.cantidad } },
         );
       }
-
-      // 2. descontar stock de los nuevos
       for (const item of productos) {
         await productoModel.findOneAndUpdate(
           { _id: item.producto, stock: { $ne: null } },
           { $inc: { stock: -(item.cantidad || 1) } },
         );
       }
+    }
+
+    // ── Extras ──
+    if (extras !== undefined) {
+      let totalExtras = 0;
+      updateData.extras = extras.map((item) => {
+        const subtotal = (item.precio || 0) * (item.cantidad || 1);
+        totalExtras += subtotal;
+        return {
+          nombre: item.nombre,
+          precio: item.precio,
+          cantidad: item.cantidad || 1,
+          subtotal,
+        };
+      });
+      updateData.totalExtras = totalExtras;
+    }
+
+    // ── Recalcular totalFinal siempre que cambie algo ──
+    if (productos !== undefined || extras !== undefined) {
+      const totalServicio =
+        reserva.servicioSnapshot?.precio || reserva.servicio?.precio || 0;
+
+      // Si no vino en este request, usa lo que ya tenía guardado la reserva
+      const totalProductos =
+        updateData.totalProductos ?? reserva.totalProductos ?? 0;
+      const totalExtras = updateData.totalExtras ?? reserva.totalExtras ?? 0;
+
+      updateData.totalServicio = totalServicio;
+      updateData.totalFinal = totalServicio + totalProductos + totalExtras;
     }
 
     const reservaActualizada = await Reserva.findByIdAndUpdate(id, updateData, {

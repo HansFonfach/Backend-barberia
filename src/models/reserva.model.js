@@ -168,6 +168,31 @@ const ReservaSchema = new Schema(
       },
     ],
 
+    extras: [
+      {
+        // Referencia opcional a un catálogo de extras (si lo creas después)
+        extra: {
+          type: Schema.Types.ObjectId,
+          ref: "Extra",
+          default: null,
+        },
+
+        // Snapshot histórico (igual que productos)
+        nombre: { type: String, required: true }, // "Diseño de uñas", "Degradado", etc.
+        precio: { type: Number, required: true },
+        categoria: { type: String }, // "Diseño", "Tratamiento", etc.
+
+        cantidad: { type: Number, default: 1 },
+
+        subtotal: { type: Number }, // precio * cantidad
+      },
+    ],
+
+    totalExtras: {
+      type: Number,
+      default: 0,
+    },
+
     // OBSERVACIÓN FINAL
     observacionFinal: {
       type: String,
