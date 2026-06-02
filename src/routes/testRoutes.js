@@ -4,6 +4,9 @@ import retencionCron from "../cron/recordatoriosVolver.js"; // 👈 agrega este
 import { validarToken } from "../middlewares/validarToken.js";
 import { obtenerEstadoLookCliente } from "../controllers/clienteAnalyticsController.js";
 import reservaModel from "../models/reserva.model.js";
+import recordatoriosJob from "../jobs/recordatoriosJob.js";
+import recordatorioPagoCron from "../cron/recordatoriosPagoCron.js";
+
 
 const router = Router();
 
@@ -47,7 +50,8 @@ router.get("/test/recordatorio-14h/:reservaId", async (req, res) => {
   const { reservaId } = req.params;
 
   try {
-    const reserva = await reservaModel.findById(reservaId)
+    const reserva = await reservaModel
+      .findById(reservaId)
       .populate("servicio", "nombre instrucciones")
       .populate("barbero", "nombre apellido")
       .populate(
@@ -62,8 +66,6 @@ router.get("/test/recordatorio-14h/:reservaId", async (req, res) => {
 
     const { cliente, datos, esHorarioTemprano } = resultado;
 
-
-    
     // Enviar de verdad
     await RecordatoriosJob.enviarPorTodosLosCanales(
       cliente,
@@ -82,6 +84,12 @@ router.get("/test/recordatorio-14h/:reservaId", async (req, res) => {
   } catch (err) {
     return res.json({ error: err.message });
   }
+});
+
+
+router.post("/test/recordatorio-pago/:empresaId", async (req, res) => {
+  const resultado = await recordatorioPagoCron.testEnviar(req.params.empresaId);
+  res.json(resultado);
 });
 
 export default router;

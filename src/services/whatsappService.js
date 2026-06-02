@@ -1,7 +1,3 @@
-
-
-
-
 class WhatsAppService {
   constructor() {
     this.accessToken = process.env.ACCESS_TOKEN;
@@ -44,7 +40,6 @@ class WhatsAppService {
     try {
       const telefonoFormateado = this.formatearTelefono(telefono);
 
-
       // 👇 Lógica para elegir plantilla según slug
       const esLumyca = slugEmpresa === "lumicabeauty";
       const templateName = esLumyca
@@ -76,7 +71,6 @@ class WhatsAppService {
         },
       };
 
-
       const res = await fetch(this.apiUrl, {
         method: "POST",
         headers: {
@@ -88,14 +82,12 @@ class WhatsAppService {
 
       const data = await res.json();
 
- 
       if (!res.ok) {
         console.error("❌ Error Meta API:", data);
         return { success: false, error: data };
       }
 
       // 🔥 LOG 4: éxito claro
-   
 
       return { success: true, data };
     } catch (error) {
@@ -115,11 +107,10 @@ class WhatsAppService {
     hora,
     servicio,
     plantilla = "notificacion_cancelacion",
-    telefonoCliente
+    telefonoCliente,
   }) {
     try {
       const telefonoFormateado = this.formatearTelefono(telefono);
-
 
       const body = {
         messaging_product: "whatsapp",
@@ -137,14 +128,12 @@ class WhatsAppService {
                 { type: "text", text: fecha || "-" },
                 { type: "text", text: hora || "-" },
                 { type: "text", text: servicio || "-" },
-                { type: "text", text: telefonoCliente || "-" }, 
+                { type: "text", text: telefonoCliente || "-" },
               ],
             },
           ],
         },
       };
-
-
 
       const res = await fetch(this.apiUrl, {
         method: "POST",
@@ -157,18 +146,57 @@ class WhatsAppService {
 
       const data = await res.json();
 
-
-
       if (!res.ok) {
         console.error("❌ Error Meta API (profesional):", data);
         return { success: false, error: data };
       }
 
-   
-
       return { success: true, data };
     } catch (error) {
       console.error("❌ Error enviando WhatsApp profesional:", error.message);
+      return { success: false, error: error.message };
+    }
+  }
+  
+  async enviarRecordatorioPago({ telefono, nombreEmpresa }) {
+    try {
+      const telefonoFormateado = this.formatearTelefono(telefono);
+
+      const body = {
+        messaging_product: "whatsapp",
+        to: telefonoFormateado,
+        type: "template",
+        template: {
+          name: "recordatorio_pago",
+          language: { code: "en" },
+          components: [
+            {
+              type: "body",
+              parameters: [{ type: "text", text: nombreEmpresa || "-" }],
+            },
+          ],
+        },
+      };
+
+      const res = await fetch(this.apiUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("❌ Error Meta API (recordatorio pago):", data);
+        return { success: false, error: data };
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error("❌ Error enviando recordatorio pago:", error.message);
       return { success: false, error: error.message };
     }
   }
