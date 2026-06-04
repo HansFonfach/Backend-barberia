@@ -22,6 +22,7 @@ import reservaInvitadoRoutes from "./routes/reservaInvitadoRoutes.js";
 import empresaRoutes from "./routes/empresaRoutes.js";
 import fichasRoutes from "./routes/fichasRoutes.js";
 import productosRoutes from "./routes/productosRoutes.js";
+import ventaDirectaRoutes from "./routes/ventaDirectaRoutes.js";
 
 const app = express();
 app.use(cookieParser());
@@ -79,5 +80,6 @@ app.use("/reserva/invitado", reservaInvitadoRoutes);
 app.use("/empresa", empresaRoutes);
 app.use("/fichas", fichasRoutes);
 app.use("/productos", productosRoutes);
+app.use("/ventasProductos", ventaDirectaRoutes);
 
 export default app;

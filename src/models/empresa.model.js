@@ -13,6 +13,9 @@ const EmpresaSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+
+  moduloProductos: { type: Boolean, default: false },
+
   rubro: {
     type: String,
     required: true,

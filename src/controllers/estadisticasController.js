@@ -937,6 +937,18 @@ export const ingresosPorMes = async (req, res) => {
       0,
     );
 
+    // ── Ventas directas del mes ──
+    const ventasDirectasMes = await VentaDirecta.find({
+      empresa: empresaId,
+      fecha: { $gte: inicioMes, $lte: finConsulta },
+      anulada: false,
+    }).lean();
+
+    const ingresoVentasDirectas = ventasDirectasMes.reduce(
+      (acc, v) => acc + (v.totalFinal || 0),
+      0,
+    );
+
     // ── Posible ingreso (solo si es mes actual, futuras del mes) ──
     let posibleIngreso = 0;
     if (esMesActual) {
@@ -965,12 +977,14 @@ export const ingresosPorMes = async (req, res) => {
           ingresoSuscripciones +
           ingresoProductos +
           ingresoExtras,
+          ingresoVentasDirectas,
         detalle: {
           ingresoReservas,
           ingresoProductos,
           ingresoExtras,
           ingresoSuscripciones,
           suscripcionesNuevas: suscripcionesMes,
+          ingresoVentasDirectas, 
           posibleIngreso: esMesActual
             ? ingresoReservas +
               ingresoSuscripciones +
