@@ -23,12 +23,21 @@ router.post(
   ingresarEmpresa,
 );
 
-router.post("/registro-negocio", registroPublicoEmpresa)
 router.get("/slug/:slug", getEmpresaPorSlug);
-router.get("/publicas", getEmpresasPublicas); // sin middleware de auth
+router.get("/publicas", getEmpresasPublicas);
+router.put(
+  "/:empresaId/logo",
+  validarToken,
+  verificarRol("esAdmin"),
+  upload.single("logo"),
+  actualizarLogoEmpresa,
+); // ← antes de /:id
 router.get("/:id", validarToken, getEmpresaPorId);
-router.patch("/actualizar", validarToken, verificarRol("esAdmin"),  actualizarEmpresa);
-router.put("/:empresaId/logo", verificarRol("esAdmin"), actualizarLogoEmpresa);
-
+router.patch(
+  "/actualizar",
+  validarToken,
+  verificarRol("esAdmin"),
+  actualizarEmpresa,
+);
 
 export default router;

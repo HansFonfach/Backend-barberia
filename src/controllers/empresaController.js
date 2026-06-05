@@ -1,4 +1,5 @@
 import empresaModel from "../models/empresa.model.js";
+import { v2 as cloudinary } from "cloudinary";
 
 export const ingresarEmpresa = async (req, res) => {
   try {
@@ -118,15 +119,26 @@ export const getEmpresaPorId = async (req, res) => {
 export const actualizarLogoEmpresa = async (req, res) => {
   try {
     const { empresaId } = req.params;
-    const { logo } = req.body;
 
-    if (!logo) {
-      return res.status(400).json({ message: "Debes enviar la URL del logo" });
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ message: "Debes enviar un archivo de imagen" });
     }
+
+    // Subir desde buffer en vez de path
+    const uploaded = await new Promise((resolve, reject) => {
+      cloudinary.uploader
+        .upload_stream({ folder: "logos" }, (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        })
+        .end(req.file.buffer);
+    });
 
     const empresaActualizada = await empresaModel.findByIdAndUpdate(
       empresaId,
-      { logo: logo }, // ahora usa la URL que envías
+      { logo: uploaded.secure_url },
       { new: true },
     );
 
@@ -136,6 +148,7 @@ export const actualizarLogoEmpresa = async (req, res) => {
 
     res.status(200).json(empresaActualizada);
   } catch (error) {
+    console.error("Error subiendo logo:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -153,6 +166,7 @@ export const actualizarEmpresa = async (req, res) => {
     delete data.tipo;
     delete data.plan;
     delete data.trial;
+    delete data.logo;
 
     const empresaActualizada = await empresaModel.findByIdAndUpdate(
       empresaId,
