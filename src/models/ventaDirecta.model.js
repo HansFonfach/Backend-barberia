@@ -7,6 +7,7 @@ const VentaDirectaSchema = new Schema(
     empresa: { type: ObjectId, ref: "Empresa", required: true },
 
     vendedor: { type: ObjectId, ref: "Usuario", required: true },
+    cliente: { type: ObjectId, ref: "Usuario", default: null },
 
     productos: [
       {
@@ -35,7 +36,7 @@ const VentaDirectaSchema = new Schema(
 
     fecha: { type: Date, default: Date.now },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 VentaDirectaSchema.index({ empresa: 1, fecha: -1 });

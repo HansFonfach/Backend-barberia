@@ -2,34 +2,38 @@ import productoModel from "../models/producto.Model.js";
 import ventaDirectaModel from "../models/ventaDirecta.model.js";
 
 export const crearVentaDirecta = async (req, res) => {
-  const { productos, metodoPago, observacion, fecha } = req.body;
+  const { productos, metodoPago, observacion, fecha, clienteId } = req.body;
   // El vendedor siempre es el usuario logueado
- 
+
   try {
     if (!productos || productos.length === 0) {
-      return res.status(400).json({ message: "Debes incluir al menos un producto." });
+      return res
+        .status(400)
+        .json({ message: "Debes incluir al menos un producto." });
     }
- 
+
     // Validar productos y armar snapshot
     const productosVenta = [];
- 
+
     for (const item of productos) {
       const prod = await productoModel.findOne({
         _id: item.producto,
         empresa: req.usuario.empresaId,
         activo: true,
       });
- 
+
       if (!prod) {
-        return res.status(404).json({ message: `Producto ${item.producto} no encontrado o inactivo.` });
+        return res.status(404).json({
+          message: `Producto ${item.producto} no encontrado o inactivo.`,
+        });
       }
- 
+
       if (prod.stock !== null && prod.stock < item.cantidad) {
         return res.status(400).json({
           message: `Stock insuficiente para "${prod.nombre}". Disponible: ${prod.stock}, solicitado: ${item.cantidad}.`,
         });
       }
- 
+
       productosVenta.push({
         producto: prod._id,
         nombre: prod.nombre,
@@ -39,20 +43,21 @@ export const crearVentaDirecta = async (req, res) => {
         subtotal: prod.precio * item.cantidad,
       });
     }
- 
+
     const totalFinal = productosVenta.reduce((acc, p) => acc + p.subtotal, 0);
- 
+
     // Crear la venta
     const venta = await ventaDirectaModel.create({
       empresa: req.usuario.empresaId,
       vendedor: req.usuario.id,
       productos: productosVenta,
       totalFinal,
+      ...(clienteId ? { cliente: clienteId } : {}),
       metodoPago: metodoPago || "efectivo",
       observacion: observacion || "",
       fecha: fecha ? new Date(fecha) : new Date(),
     });
- 
+
     // Descontar stock
     for (const item of productosVenta) {
       const prod = await productoModel.findById(item.producto);
@@ -62,7 +67,7 @@ export const crearVentaDirecta = async (req, res) => {
         });
       }
     }
- 
+
     res.status(201).json({ msg: "Venta registrada exitosamente!", venta });
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -91,8 +96,10 @@ export const listarVentasDirectas = async (req, res) => {
     if (vendedor) filtro.vendedor = vendedor;
     if (metodoPago) filtro.metodoPago = metodoPago;
 
-    const ventas = await ventaDirectaModel.find(filtro)
+    const ventas = await ventaDirectaModel
+      .find(filtro)
       .populate("vendedor", "nombre email")
+      .populate("cliente", "nombre apellido rut email telefono")
       .sort({ fecha: -1 });
 
     res.json({ message: "Lista de ventas directas", ventas });
@@ -105,10 +112,13 @@ export const obtenerVentaDirecta = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const venta = await ventaDirectaModel.findOne({
-      _id: id,
-      empresa: req.usuario.empresaId,
-    }).populate("vendedor", "nombre email");
+    const venta = await ventaDirectaModel
+      .findOne({
+        _id: id,
+        empresa: req.usuario.empresaId,
+      })
+      .populate("vendedor", "nombre email")
+      .populate("cliente", "nombre apellido rut email telefono");
 
     if (!venta) {
       return res

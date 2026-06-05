@@ -76,29 +76,21 @@ export const getUsuarioByRut = async (req, res) => {
     }
 
     // 1. Primero intentar buscar exactamente como viene
-    let usuario = await Usuario.findOne({ rut: rut });
-
+    let usuario = await Usuario.findOne({
+      rut: rut,
+      empresa: req.usuario.empresaId, // ← agregar esto
+    });
     // 2. Si no encuentra, buscar con RUT limpio
     if (!usuario) {
-      // Función para limpiar RUT (quitar puntos y guión, convertir a mayúsculas)
-      const limpiarRut = (rutStr) => {
-        return rutStr.replace(/[\.\-]/g, "").toUpperCase();
-      };
-
       const rutLimpioBuscado = limpiarRut(rut);
 
-      // Buscar todos los usuarios y comparar RUTs limpios
-      const todosUsuarios = await Usuario.find({});
-      usuario = todosUsuarios.find((u) => {
+      const usuariosEmpresa = await Usuario.find({
+        empresa: req.usuario.empresaId, // ← solo usuarios de la empresa
+      });
+
+      usuario = usuariosEmpresa.find((u) => {
         if (!u.rut) return false;
-
-        const rutBDLimpio = limpiarRut(u.rut);
-        const encontrado = rutBDLimpio === rutLimpioBuscado;
-
-        if (encontrado) {
-        }
-
-        return encontrado;
+        return limpiarRut(u.rut) === rutLimpioBuscado;
       });
     }
 
@@ -435,29 +427,22 @@ export const getUsuarioByRutPublico = async (req, res) => {
     }
 
     // 1. Primero intentar buscar exactamente como viene
-    let usuario = await Usuario.findOne({ rut: rut });
+    let usuario = await Usuario.findOne({
+      rut: rut,
+      empresa: req.usuario.empresaId, // ← agregar esto
+    });
 
     // 2. Si no encuentra, buscar con RUT limpio
     if (!usuario) {
-      // Función para limpiar RUT (quitar puntos y guión, convertir a mayúsculas)
-      const limpiarRut = (rutStr) => {
-        return rutStr.replace(/[\.\-]/g, "").toUpperCase();
-      };
-
       const rutLimpioBuscado = limpiarRut(rut);
 
-      // Buscar todos los usuarios y comparar RUTs limpios
-      const todosUsuarios = await Usuario.find({});
-      usuario = todosUsuarios.find((u) => {
+      const usuariosEmpresa = await Usuario.find({
+        empresa: req.usuario.empresaId, // ← solo usuarios de la empresa
+      });
+
+      usuario = usuariosEmpresa.find((u) => {
         if (!u.rut) return false;
-
-        const rutBDLimpio = limpiarRut(u.rut);
-        const encontrado = rutBDLimpio === rutLimpioBuscado;
-
-        if (encontrado) {
-        }
-
-        return encontrado;
+        return limpiarRut(u.rut) === rutLimpioBuscado;
       });
     }
 
@@ -500,14 +485,12 @@ export const actualizarNotaCliente = async (req, res) => {
     const { id } = req.params;
     const { notasProfesional } = req.body;
 
-
     const usuarioActualizado = await usuarioModel.findByIdAndUpdate(
       id,
       { notasProfesional },
       { new: true },
     );
 
-    
     if (!usuarioActualizado) {
       return res
         .status(404)
@@ -516,7 +499,6 @@ export const actualizarNotaCliente = async (req, res) => {
 
     res.json({ message: "Nota actualizada", usuario: usuarioActualizado });
   } catch (error) {
-   
     res.status(500).json({ message: error.message });
   }
 };
