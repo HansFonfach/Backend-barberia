@@ -82,12 +82,15 @@ export const getUsuarioByRut = async (req, res) => {
     });
     // 2. Si no encuentra, buscar con RUT limpio
     if (!usuario) {
+      const limpiarRut = (rutStr) => {
+        return rutStr.replace(/[\.\-]/g, "").toUpperCase();
+      };
+
       const rutLimpioBuscado = limpiarRut(rut);
 
       const usuariosEmpresa = await Usuario.find({
-        empresa: req.usuario.empresaId, // ← solo usuarios de la empresa
+        empresa: req.usuario.empresaId,
       });
-
       usuario = usuariosEmpresa.find((u) => {
         if (!u.rut) return false;
         return limpiarRut(u.rut) === rutLimpioBuscado;
@@ -434,12 +437,15 @@ export const getUsuarioByRutPublico = async (req, res) => {
 
     // 2. Si no encuentra, buscar con RUT limpio
     if (!usuario) {
+      const limpiarRut = (rutStr) => {
+        return rutStr.replace(/[\.\-]/g, "").toUpperCase();
+      };
+
       const rutLimpioBuscado = limpiarRut(rut);
 
       const usuariosEmpresa = await Usuario.find({
-        empresa: req.usuario.empresaId, // ← solo usuarios de la empresa
+        empresa: req.usuario.empresaId,
       });
-
       usuario = usuariosEmpresa.find((u) => {
         if (!u.rut) return false;
         return limpiarRut(u.rut) === rutLimpioBuscado;
