@@ -1,4 +1,5 @@
 import reservaModel from "../models/reserva.model.js";
+import suscripcionModel from "../models/suscripcion.model.js";
 import Suscripcion from "../models/suscripcion.model.js";
 import Usuario from "../models/usuario.model.js";
 import { checkSuscripcion } from "../utils/checkSuscripcion.js";
@@ -340,5 +341,38 @@ export const getSuscripcionActiva = async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ message: "Error obteniendo suscripción activa" });
+  }
+};
+
+export const listarSuscripciones = async (req, res) => {
+  const { mes, anio, activas } = req.query;
+
+  try {
+    const filtro = { empresa: req.usuario.empresaId };
+
+    // Filtro por mes/año
+    if (mes !== undefined && anio !== undefined) {
+      const inicio = new Date(anio, mes, 1);
+      inicio.setHours(0, 0, 0, 0);
+      const fin = new Date(anio, Number(mes) + 1, 0);
+      fin.setHours(23, 59, 59, 999);
+      filtro.fechaInicio = { $gte: inicio, $lte: fin };
+    }
+
+    // Solo activas
+    if (activas === "true") {
+      filtro.activa = true;
+      filtro.fechaFin = { $gte: new Date() };
+    }
+
+    const suscripciones = await suscripcionModel
+      .find(filtro)
+      .populate("usuario", "nombre apellido rut email telefono")
+      .sort({ fechaInicio: -1 });
+
+    res.json({ ok: true, suscripciones });
+  } catch (error) {
+    console.error("Error al listar suscripciones:", error);
+    res.status(500).json({ message: error.message });
   }
 };

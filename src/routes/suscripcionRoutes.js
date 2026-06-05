@@ -4,6 +4,7 @@ import {
   crearSuscripcion,
   estadoSuscripcionCliente,
   getSuscripcionActiva,
+  listarSuscripciones,
   registrarUsoServicio,
 } from "../controllers/suscripcionController.js";
 import { validarToken } from "../middlewares/validarToken.js";
@@ -17,5 +18,6 @@ router.put("/usuario/:id/cancelarSub",  validarToken  , cancelarSuscripcion);
 router.get("/usuario/estado/:userId", validarToken, estadoSuscripcionCliente);
 router.get("/usuario/activa", validarToken,  getSuscripcionActiva);
 router.post("/usuario/usar-servicio", validarToken, registrarUsoServicio);
+router.get("/listar",  validarToken, listarSuscripciones);
 
 export default router;
