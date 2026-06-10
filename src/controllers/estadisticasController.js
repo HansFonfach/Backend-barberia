@@ -194,12 +194,14 @@ export const ingresoMensual = async (req, res) => {
   const hoy = new Date();
   const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
   inicioMes.setHours(0, 0, 0, 0);
+
   const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
   finMes.setHours(23, 59, 59, 999);
 
   const PRECIO_SUSCRIPCION = 25000;
 
   try {
+    // ── RESERVAS DEL MES ──
     const reservasPasadas = await reservaModel
       .find({
         empresa: empresaId,
@@ -209,8 +211,10 @@ export const ingresoMensual = async (req, res) => {
       .populate("servicio", "precio");
 
     let ingresoReservas = 0;
+
     for (const reserva of reservasPasadas) {
       const precio = reserva.precio || reserva.servicio?.precio || 0;
+
       const sus = await suscripcionModel.findOne({
         usuario: reserva.cliente,
         empresa: empresaId,
@@ -233,30 +237,55 @@ export const ingresoMensual = async (req, res) => {
         .sort({ fecha: 1 });
 
       let serviciosAcumulados = 0;
+
       for (const r of reservasAnteriores) {
         serviciosAcumulados += r.duracion >= 120 ? 2 : 1;
         if (r._id.toString() === reserva._id.toString()) break;
       }
-      if (serviciosAcumulados > sus.serviciosTotales) ingresoReservas += precio;
+
+      if (serviciosAcumulados > sus.serviciosTotales) {
+        ingresoReservas += precio;
+      }
     }
 
+    // ── SUSCRIPCIONES NUEVAS ──
     const suscripcionesMes = await suscripcionModel.countDocuments({
       empresa: empresaId,
       fechaInicio: { $gte: inicioMes, $lte: finMes },
     });
+
     const ingresoSuscripciones = suscripcionesMes * PRECIO_SUSCRIPCION;
 
-    const ingresoProductos = reservasPasadas.reduce(
+    // ── PRODUCTOS EN RESERVAS ──
+    const ingresoProductosReservas = reservasPasadas.reduce(
       (acc, r) => acc + (r.totalProductos || 0),
       0,
     );
 
+    // ── VENTAS DIRECTAS ──
+    const ventasDirectasMes = await ventaDirectaModel
+      .find({
+        empresa: empresaId,
+        fecha: { $gte: inicioMes, $lte: finMes },
+        anulada: false,
+      })
+      .lean();
+
+    const ingresoVentasDirectas = ventasDirectasMes.reduce(
+      (acc, v) => acc + (v.totalFinal || 0),
+      0,
+    );
+
+    // ── EXTRAS ──
     const ingresoExtras = reservasPasadas.reduce(
-      // 👈
       (acc, r) => acc + (r.totalExtras || 0),
       0,
     );
 
+    // ── PRODUCTOS (UNIFICADO) ──
+    const ingresoProductos = ingresoProductosReservas + ingresoVentasDirectas;
+
+    // ── RESERVAS FUTURAS (POSIBLE INGRESO) ──
     const reservasFuturas = await reservaModel
       .find({
         empresa: empresaId,
@@ -266,8 +295,10 @@ export const ingresoMensual = async (req, res) => {
       .populate("servicio", "precio");
 
     let posibleIngreso = 0;
+
     for (const reserva of reservasFuturas) {
       const precio = reserva.precio || reserva.servicio?.precio || 0;
+
       const sus = await suscripcionModel.findOne({
         usuario: reserva.cliente,
         empresa: empresaId,
@@ -290,13 +321,18 @@ export const ingresoMensual = async (req, res) => {
         .sort({ fecha: 1 });
 
       let serviciosAcumulados = 0;
+
       for (const r of reservasAnteriores) {
         serviciosAcumulados += r.duracion >= 120 ? 2 : 1;
         if (r._id.toString() === reserva._id.toString()) break;
       }
-      if (serviciosAcumulados > sus.serviciosTotales) posibleIngreso += precio;
+
+      if (serviciosAcumulados > sus.serviciosTotales) {
+        posibleIngreso += precio;
+      }
     }
 
+    // ── RESPONSE ──
     return res.json({
       ok: true,
       data: {
@@ -304,18 +340,19 @@ export const ingresoMensual = async (req, res) => {
           ingresoReservas +
           ingresoSuscripciones +
           ingresoProductos +
-          ingresoExtras, // 👈
+          ingresoExtras,
+
         detalle: {
           ingresoReservas,
           ingresoProductos,
-          ingresoExtras, // 👈
+          ingresoExtras,
           ingresoSuscripciones,
           suscripcionesNuevas: suscripcionesMes,
           posibleIngreso:
             ingresoReservas +
             ingresoSuscripciones +
             ingresoProductos +
-            ingresoExtras + // 👈
+            ingresoExtras +
             posibleIngreso,
         },
       },
@@ -333,7 +370,8 @@ export const ingresoTotal = async (req, res) => {
   try {
     const empresaId = req.usuario.empresaId;
 
-    const resultado = await reservaModel.aggregate([
+    // ── 1. SERVICIOS (reservas completadas) ──
+    const serviciosAgg = await reservaModel.aggregate([
       {
         $match: {
           estado: "completada",
@@ -349,11 +387,70 @@ export const ingresoTotal = async (req, res) => {
         },
       },
       { $unwind: "$servicioData" },
-      { $group: { _id: null, total: { $sum: "$servicioData.precio" } } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$servicioData.precio" },
+        },
+      },
     ]);
 
-    const total = resultado[0]?.total || 0;
-    return ok(res, { total });
+    const ingresoServicios = serviciosAgg[0]?.total || 0;
+
+    // ── 2. PRODUCTOS + EXTRAS (reservas) ──
+    const reservas = await reservaModel.find({ empresa: empresaId }).lean();
+
+    const ingresoProductos = reservas.reduce(
+      (acc, r) => acc + (r.totalProductos || 0),
+      0,
+    );
+
+    const ingresoExtras = reservas.reduce(
+      (acc, r) => acc + (r.totalExtras || 0),
+      0,
+    );
+
+    // ── 3. VENTAS DIRECTAS ──
+    const ventasDirectas = await ventaDirectaModel
+      .find({
+        empresa: empresaId,
+        anulada: false,
+      })
+      .lean();
+
+    const ingresoVentasDirectas = ventasDirectas.reduce(
+      (acc, v) => acc + (v.totalFinal || 0),
+      0,
+    );
+
+    // ── 4. SUSCRIPCIONES (si las quieres incluir aquí) ──
+    const suscripciones = await suscripcionModel
+      .find({ empresa: empresaId })
+      .lean();
+
+    const ingresoSuscripciones = suscripciones.length * 25000;
+
+    // ── TOTAL ──
+    const total =
+      ingresoServicios +
+      ingresoProductos +
+      ingresoExtras +
+      ingresoVentasDirectas +
+      ingresoSuscripciones;
+
+    return res.json({
+      ok: true,
+      data: {
+        total,
+        detalle: {
+          ingresoServicios,
+          ingresoProductos,
+          ingresoExtras,
+          ingresoVentasDirectas,
+          ingresoSuscripciones,
+        },
+      },
+    });
   } catch (error) {
     console.error(error);
     return err(res, "Error al calcular el ingreso total");
@@ -939,11 +1036,13 @@ export const ingresosPorMes = async (req, res) => {
     );
 
     // ── Ventas directas del mes ──
-    const ventasDirectasMes = await ventaDirectaModel.find({
-      empresa: empresaId,
-      fecha: { $gte: inicioMes, $lte: finConsulta },
-      anulada: false,
-    }).lean();
+    const ventasDirectasMes = await ventaDirectaModel
+      .find({
+        empresa: empresaId,
+        fecha: { $gte: inicioMes, $lte: finConsulta },
+        anulada: false,
+      })
+      .lean();
 
     const ingresoVentasDirectas = ventasDirectasMes.reduce(
       (acc, v) => acc + (v.totalFinal || 0),
@@ -978,14 +1077,14 @@ export const ingresosPorMes = async (req, res) => {
           ingresoSuscripciones +
           ingresoProductos +
           ingresoExtras,
-          ingresoVentasDirectas,
+        ingresoVentasDirectas,
         detalle: {
           ingresoReservas,
           ingresoProductos,
           ingresoExtras,
           ingresoSuscripciones,
           suscripcionesNuevas: suscripcionesMes,
-          ingresoVentasDirectas, 
+          ingresoVentasDirectas,
           posibleIngreso: esMesActual
             ? ingresoReservas +
               ingresoSuscripciones +
