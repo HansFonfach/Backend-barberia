@@ -7,6 +7,7 @@ import timezone from "dayjs/plugin/timezone.js";
 import suscripcionModel from "../models/suscripcion.model.js";
 import mongoose from "mongoose";
 import productoModel from "../models/producto.Model.js";
+import ventaDirectaModel from "../models/ventaDirecta.model.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -938,7 +939,7 @@ export const ingresosPorMes = async (req, res) => {
     );
 
     // ── Ventas directas del mes ──
-    const ventasDirectasMes = await VentaDirecta.find({
+    const ventasDirectasMes = await ventaDirectaModel.find({
       empresa: empresaId,
       fecha: { $gte: inicioMes, $lte: finConsulta },
       anulada: false,
