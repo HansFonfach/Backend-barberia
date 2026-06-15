@@ -776,6 +776,27 @@ export const postDeleteReserva = async (req, res) => {
       );
     }
 
+    const telefonoCliente =
+      existeReserva.cliente?.telefono || existeReserva.invitado?.telefono;
+
+    if (telefonoCliente) {
+      WhatsappService.enviarCancelacionCliente({
+        telefono: telefonoCliente,
+        nombreCliente,
+        motivo: existeReserva.motivoCancelacion,
+        nombreProfesional: existeReserva.barbero?.nombre || "Profesional",
+        servicio: existeReserva.servicio?.nombre || "Servicio",
+        fecha: fechaFormateada,
+        hora: horaFormateada,
+        direccion: empresaDoc?.direccion || "-",
+      }).catch((err) =>
+        console.error(
+          "❌ Error enviando WhatsApp de cancelación al cliente:",
+          err.message,
+        ),
+      );
+    }
+
     // 6️⃣ Email al barbero — solo si la empresa tiene activada la notificación
     if (empresaDoc?.envioNotificacionReserva && existeReserva.barbero?.email) {
       sendProfesionalCancelReservationEmail(

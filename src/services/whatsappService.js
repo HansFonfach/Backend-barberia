@@ -157,7 +157,7 @@ class WhatsAppService {
       return { success: false, error: error.message };
     }
   }
-  
+
   async enviarRecordatorioPago({ telefono, nombreEmpresa }) {
     try {
       const telefonoFormateado = this.formatearTelefono(telefono);
@@ -197,6 +197,69 @@ class WhatsAppService {
       return { success: true, data };
     } catch (error) {
       console.error("❌ Error enviando recordatorio pago:", error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /* =============================
+   NOTIFICAR CLIENTE CANCELACIÓN
+============================== */
+  async enviarCancelacionCliente({
+    telefono,
+    nombreCliente,
+    motivo,
+    nombreProfesional,
+    servicio,
+    fecha,
+    hora,
+    direccion,
+  }) {
+    try {
+      const telefonoFormateado = this.formatearTelefono(telefono);
+
+      const body = {
+        messaging_product: "whatsapp",
+        to: telefonoFormateado,
+        type: "template",
+        template: {
+          name: "cancelacion_reserva_profesional",
+          language: { code: "es_CL" },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: nombreCliente || "-" }, // nombre_cliente
+                { type: "text", text: motivo || "-" }, // motivo
+                { type: "text", text: nombreProfesional || "-" }, // nombre_profesional
+                { type: "text", text: servicio || "-" }, // servicio
+                { type: "text", text: fecha || "-" }, // fecha
+                { type: "text", text: hora || "-" }, // hora
+                { type: "text", text: direccion || "-" }, // direccion
+              ],
+            },
+          ],
+        },
+      };
+
+      const res = await fetch(this.apiUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("❌ Error Meta API (cancelación cliente):", data);
+        return { success: false, error: data };
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error("❌ Error enviando cancelación al cliente:", error.message);
       return { success: false, error: error.message };
     }
   }
