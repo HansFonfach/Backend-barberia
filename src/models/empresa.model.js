@@ -24,6 +24,7 @@ const EmpresaSchema = new mongoose.Schema({
       "barberia",
       "peluqueria",
       "salon_belleza",
+      "salon de belleza",
       "spa",
       "centro_estetica",
       // Salud (nuevo)

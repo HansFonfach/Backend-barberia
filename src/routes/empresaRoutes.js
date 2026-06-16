@@ -23,6 +23,8 @@ router.post(
   ingresarEmpresa,
 );
 
+router.post("/registro-negocio", registroPublicoEmpresa);
+
 router.get("/slug/:slug", getEmpresaPorSlug);
 router.get("/publicas", getEmpresasPublicas);
 router.put(
