@@ -437,19 +437,21 @@ export const createReserva = async (req, res) => {
 
     if (requiereAbono) {
       const tipoAbono = empresaDoc.pagos.tipoAbono || "fijo";
+
+      const porcentaje = Number(empresaDoc.pagos.porcentajeAbono || 0);
+      const montoFijo = Number(empresaDoc.pagos.montoAbonoFijo || 0);
+      const precio = Number(precioServicio || 0);
+
       const monto =
         tipoAbono === "porcentaje"
-          ? Math.round(
-              (precioServicio * empresaDoc.pagos.porcentajeAbono) / 100,
-            )
-          : empresaDoc.pagos.montoAbonoFijo;
+          ? Math.round((precio * porcentaje) / 100)
+          : montoFijo;
 
       abonoData = {
         requerido: true,
-        monto,
+        monto: isNaN(monto) ? 0 : monto, // ← seguro contra NaN
         tipoCalculo: tipoAbono,
-        porcentajeAplicado:
-          tipoAbono === "porcentaje" ? empresaDoc.pagos.porcentajeAbono : 0,
+        porcentajeAplicado: tipoAbono === "porcentaje" ? porcentaje : 0,
         estado: "pendiente",
         metodo: "transferencia",
       };

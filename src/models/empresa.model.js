@@ -111,18 +111,19 @@ const EmpresaSchema = new mongoose.Schema({
   },
 
   colores: {
-    primario: String,
-    secundario: String,
-    fondo: String,
-    texto: String,
-    textoMuted: String,
-    heroBg: String,
-    heroEsClaro: Boolean,
-    acento: String,
-    sidebar: String,
-    navbar: String,
-    tarjeta: String,
-    bordeTarjeta: String,
+    primario: String, // ✅ ya tienes — botones, íconos, badges
+    secundario: String, // ✅ ya tienes — acento (dorado en Danails)
+    fondo: String, // ✅ ya tienes — backgroundColor general
+    texto: String, // ✅ ya tienes — textDark
+    textoMuted: String, // ✅ ya tienes — subtítulos
+    heroBg: String, // ✅ ya tienes — gradiente del hero
+    heroEsClaro: Boolean, // ✅ ya tienes — controla variant light/dark
+    acento: String, // ✅ ya tienes
+
+    // 👇 estos te faltan para completar el tema
+    primarioLight: String, // fondo de cards y badges
+    primarioDark: String, // hover de botones
+    softBg: String, // fondo de secciones alternadas
   },
 
   creadoEn: {
