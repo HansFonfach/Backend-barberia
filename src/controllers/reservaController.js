@@ -272,11 +272,11 @@ export const createReserva = async (req, res) => {
       });
     }
 
-    const {
-      duracion: duracionServicio,
-      precio: precioServicio,
-      intervaloMinimo = 15,
-    } = barberoServicio;
+    const { duracion: duracionServicio, intervaloMinimo = 15 } =
+      barberoServicio;
+
+    // El precio viene del servicio poblado, no de BarberoServicio
+    const precioServicio = Number(barberoServicio.servicio?.precio ?? 0);
 
     const nombreServicio = barberoServicio.servicio.nombre;
     const finReservaChile = inicioReservaChile.add(duracionServicio, "minute");
