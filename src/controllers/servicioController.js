@@ -28,7 +28,7 @@ export const getServicios = async (req, res) => {
  */
 export const createServicio = async (req, res) => {
   try {
-    const { nombre, descripcion, precio } = req.body;
+    const { nombre, descripcion, precio, instrucciones } = req.body;
     const empresaId = req.usuario.empresaId; // ✅ viene del token
 
     if (!empresaId) {
@@ -42,6 +42,7 @@ export const createServicio = async (req, res) => {
       nombre,
       descripcion,
       precio,
+      instrucciones,
     });
 
     res.status(201).json(servicio);
@@ -56,7 +57,8 @@ export const createServicio = async (req, res) => {
  */
 export const updateServicio = async (req, res) => {
   const { id } = req.params;
-  const { nombre, descripcion, precio, duracion } = req.body;
+  const { nombre, descripcion, precio, duracion, instrucciones } = req.body;
+  console.log(req.body);
 
   try {
     // Buscar servicio dentro de la empresa del usuario
@@ -72,6 +74,8 @@ export const updateServicio = async (req, res) => {
     servicio.descripcion = descripcion || servicio.descripcion;
     servicio.precio = precio !== undefined ? precio : servicio.precio;
     servicio.duracion = duracion !== undefined ? duracion : servicio.duracion;
+    servicio.instrucciones =
+      instrucciones !== undefined ? instrucciones : servicio.instrucciones;
 
     await servicio.save();
 
@@ -122,9 +126,10 @@ export const getServiciosPublicos = async (req, res) => {
     }
 
     // 2️⃣ Buscar relaciones barbero-servicio
-    const barberoServicios = await barberoServicioModel.find({
-      activo: true,
-    })
+    const barberoServicios = await barberoServicioModel
+      .find({
+        activo: true,
+      })
       .populate({
         path: "servicio",
         match: { empresa: empresa._id }, // 👈 FILTRAS POR EMPRESA AQUÍ
