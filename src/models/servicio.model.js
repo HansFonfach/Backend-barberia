@@ -22,7 +22,9 @@ const servicioSchema = new Schema({
     type: Boolean,
     default: true,
   },
+  
   instrucciones: { type: String, default: null },
+  cuidados: { type: String, default: null },
 
   // 🔹 cada cuantos días se recomienda repetir el servicio
   diasRecomendadosRepeticion: {

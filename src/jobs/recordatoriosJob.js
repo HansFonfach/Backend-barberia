@@ -4,7 +4,10 @@ import Usuario from "../models/usuario.model.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
-import { sendReminderEmail } from "../controllers/mailController.js";
+import {
+  sendPostServiceCareEmail,
+  sendReminderEmail,
+} from "../controllers/mailController.js";
 import WhatsAppService from "../services/whatsappService.js";
 import crypto from "crypto";
 
@@ -17,6 +20,7 @@ class RecordatoriosJob {
       await this.enviarRecordatorios24h();
       await this.enviarRecordatorios14h();
       await this.enviarRecordatorios3h();
+      await this.enviarCuidadosPosteriores();
     });
   }
 
@@ -318,6 +322,71 @@ class RecordatoriosJob {
     } catch (error) {
       console.error("❌ Error en testEnviar:", error);
       return { error: error.message };
+    }
+  }
+
+  async enviarCuidadosPosteriores() {
+    try {
+      const reservas = await Reserva.find({
+        estado: "completada",
+        cuidadosEnviados: { $ne: true },
+      })
+        .populate("servicio", "nombre cuidados")
+        .populate("barbero", "nombre apellido")
+        .populate("empresa", "nombre direccion telefono");
+
+      for (const reserva of reservas) {
+        try {
+          const resultado = await this.obtenerDatosReserva(reserva);
+          if (!resultado) continue;
+
+          const { cliente, datos } = resultado;
+
+          // Si el servicio no tiene cuidados, marcar como procesado
+          if (!reserva.servicio?.cuidados?.trim()) {
+            await Reserva.findByIdAndUpdate(reserva._id, {
+              cuidadosEnviados: true,
+            });
+            continue;
+          }
+
+          // Si el cliente no tiene email, marcar como procesado
+          if (!cliente?.email) {
+            await Reserva.findByIdAndUpdate(reserva._id, {
+              cuidadosEnviados: true,
+            });
+            continue;
+          }
+
+          // Fecha de término del servicio + 1 hora
+          const fechaEnvio = dayjs(reserva.fecha)
+            .add(reserva.duracion, "minute")
+            .add(1, "hour");
+
+          // Aún no corresponde enviar
+          if (fechaEnvio.isAfter(dayjs())) {
+            continue;
+          }
+
+          await sendPostServiceCareEmail(cliente.email, {
+            ...datos,
+            cuidados: reserva.servicio.cuidados,
+          });
+
+          await Reserva.findByIdAndUpdate(reserva._id, {
+            cuidadosEnviados: true,
+          });
+
+          await new Promise((r) => setTimeout(r, 500));
+        } catch (error) {
+          console.error(
+            `❌ Error enviando cuidados para reserva ${reserva._id}:`,
+            error.message,
+          );
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error en enviarCuidadosPosteriores:", error);
     }
   }
 }

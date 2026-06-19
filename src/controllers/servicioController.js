@@ -28,7 +28,7 @@ export const getServicios = async (req, res) => {
  */
 export const createServicio = async (req, res) => {
   try {
-    const { nombre, descripcion, precio, instrucciones } = req.body;
+    const { nombre, descripcion, precio, instrucciones, cuidados } = req.body;
     const empresaId = req.usuario.empresaId; // ✅ viene del token
 
     if (!empresaId) {
@@ -57,7 +57,8 @@ export const createServicio = async (req, res) => {
  */
 export const updateServicio = async (req, res) => {
   const { id } = req.params;
-  const { nombre, descripcion, precio, duracion, instrucciones } = req.body;
+  const { nombre, descripcion, precio, duracion, instrucciones, cuidados } =
+    req.body;
   console.log(req.body);
 
   try {
@@ -76,6 +77,7 @@ export const updateServicio = async (req, res) => {
     servicio.duracion = duracion !== undefined ? duracion : servicio.duracion;
     servicio.instrucciones =
       instrucciones !== undefined ? instrucciones : servicio.instrucciones;
+    servicio.cuidados = cuidados !== undefined ? cuidados : servicio.cuidados;
 
     await servicio.save();
 

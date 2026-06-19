@@ -85,6 +85,19 @@ const bloqueInstrucciones = (instrucciones) =>
     <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;text-align:justify;">${instrucciones}</p>
   </div>`
     : "";
+//bloque cuidados: instrucciones de cuidados posterior a la cita
+const bloqueCuidados = (cuidados) =>
+  cuidados
+    ? `
+  <div style="background:#f0fff4;border-left:4px solid #28a745;padding:16px;border-radius:4px;margin:16px 0;">
+    <p style="margin:0 0 8px;font-weight:bold;color:#2d6a4f;">
+      🌿 Cuidados posteriores a tu servicio:
+    </p>
+    <p style="margin:0;color:#555;font-size:14px;white-space:pre-line;text-align:justify;">
+      ${cuidados}
+    </p>
+  </div>`
+    : "";
 
 // Bloque reutilizable: política de cancelación
 const bloquePolitica = ({
@@ -528,5 +541,84 @@ export const sendRecordatorioPagoEmail = async (empresa, { tipo }) => {
     subject: asuntos[tipo],
     html: layout(mensajes[tipo]),
     text: mensajes[tipo].replace(/<[^>]*>/g, "").trim(),
+  });
+};
+
+export const sendPostServiceCareEmail = async (to, data) => {
+  const {
+    nombreCliente,
+    nombreBarbero,
+    servicio,
+    fecha,
+    hora,
+    cuidados,
+    direccion,
+    telefonoEmpresa,
+  } = data;
+
+  return await sendBaseEmail({
+    to,
+    subject: `Cuidados posteriores – ${servicio}`,
+    html: layout(`
+      <h2 style="margin-top:0;">Gracias por tu visita </h2>
+
+      <p>
+        Hola <strong>${nombreCliente}</strong>, esperamos que hayas disfrutado de tu experiencia.
+      </p>
+
+      <p>
+        Para ayudarte a obtener los mejores resultados de tu servicio,
+        te recomendamos seguir las indicaciones que encontrarás a continuación.
+      </p>
+
+      ${detalles({
+        nombreBarbero,
+        servicio,
+        fecha,
+        hora,
+        direccion,
+      })}
+
+      ${bloqueCuidados(cuidados)}
+
+      <div style="margin-top:20px;padding:12px;background:#fafafa;border-radius:6px;">
+        <p style="margin:0;color:#666;font-size:14px;">
+          💬 Si tienes dudas o presentas alguna molestia relacionada con tu servicio,
+          puedes comunicarte con nosotros.
+          ${
+            telefonoEmpresa
+              ? `<br><strong>Teléfono:</strong> ${telefonoEmpresa}`
+              : ""
+          }
+        </p>
+      </div>
+
+      <p style="margin-top:20px;color:#777;font-size:14px;">
+        Gracias por confiar en nosotros. Esperamos verte nuevamente pronto ✨
+      </p>
+    `),
+
+    text: `
+Gracias por tu visita
+
+Hola ${nombreCliente},
+
+Esperamos que hayas disfrutado de tu experiencia.
+
+Servicio: ${servicio}
+Profesional: ${nombreBarbero}
+Fecha: ${fecha}
+Hora: ${hora}
+
+${cuidados ? `Cuidados posteriores:\n${cuidados}\n` : ""}
+
+${
+  telefonoEmpresa
+    ? `Si tienes dudas puedes contactarnos al: ${telefonoEmpresa}`
+    : ""
+}
+
+Gracias por confiar en nosotros.
+    `,
   });
 };

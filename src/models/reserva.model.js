@@ -193,6 +193,11 @@ const ReservaSchema = new Schema(
       default: 0,
     },
 
+    cuidadosEnviados: {
+      type: Boolean,
+      default: false,
+    },
+
     // OBSERVACIÓN FINAL
     observacionFinal: {
       type: String,
