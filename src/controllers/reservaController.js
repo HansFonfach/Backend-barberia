@@ -764,18 +764,13 @@ export const postDeleteReserva = async (req, res) => {
     });
 
     const emailData = {
-      nombreCliente: clienteDoc.nombre,
-      nombreBarbero: barberoDoc.nombre,
-      fecha,
+      nombreCliente,
+      nombreBarbero: existeReserva.barbero?.nombre || "Tu barbero",
+      fecha: fechaFormateada,
       hora: horaFormateada,
-      servicio: nombreServicio,
-      duracion: duracionServicio,
-      horaFin: finReservaChile.format("HH:mm"),
-      direccion: empresaDoc.direccion,
-      horasLimite: empresaDoc.politicaCancelacion?.horasLimite ?? null,
-      telefonoEmpresa: empresaDoc.telefono ?? null,
- 
-     
+      servicio: existeReserva.servicio?.nombre || "Servicio",
+      motivo: existeReserva.motivoCancelacion,
+      direccion: empresaDoc?.direccion || null, // ← agregar esto
     };
 
     // 5️⃣ Email al cliente
