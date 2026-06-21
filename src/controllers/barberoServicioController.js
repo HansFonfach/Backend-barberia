@@ -72,16 +72,19 @@ export const obtenerServiciosDeBarbero = async (req, res) => {
       })
       .populate("servicio", "nombre descripcion");
 
-    const response = servicios.map((s) => ({
-      id: s._id,
-      servicioId: s.servicio._id,
-      nombre: s.servicio.nombre,
-      descripcion: s.servicio.descripcion,
-      duracion: s.duracion,
-    }));
+    const response = servicios
+      .filter((s) => s.servicio) // 👈 descarta los que tienen servicio borrado/null
+      .map((s) => ({
+        id: s._id,
+        servicioId: s.servicio._id,
+        nombre: s.servicio.nombre,
+        descripcion: s.servicio.descripcion,
+        duracion: s.duracion,
+      }));
 
     res.json(response);
   } catch (error) {
-    res.status(500).json({ message: "Error obteniendo servicios", error });
+    console.error(error); // 👈 agregá esto para ver el error real en la terminal
+    res.status(500).json({ message: "Error obteniendo servicios", error: error.message });
   }
 };
