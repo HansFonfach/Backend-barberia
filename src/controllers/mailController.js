@@ -134,25 +134,41 @@ export const sendReservationEmail = async (to, data) => {
     fecha,
     hora,
     servicio,
-    instrucciones,
     direccion,
-    horasLimite,
-    telefonoEmpresa,
-    mensajeCancelacionRecordatorio,
+    instrucciones,
+    requiereAbono,
+    montoAbono,
+    datosPago,
   } = data;
+
+  const bloqueAbono = requiereAbono
+    ? `
+      <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:16px;margin-top:16px;">
+        <p style="margin:0 0 8px;"><strong>Debes transferir $${montoAbono.toLocaleString("es-CL")} para confirmar tu reserva.</strong></p>
+        <p style="margin:0;">Banco: ${datosPago.banco}<br/>
+        Tipo de cuenta: ${datosPago.tipoCuenta}<br/>
+        N° cuenta: ${datosPago.numeroCuenta}<br/>
+        Titular: ${datosPago.titular}<br/>
+        RUT: ${datosPago.rut}<br/>
+        Correo: ${datosPago.correo}</p>
+      </div>
+    `
+    : "";
 
   return await sendBaseEmail({
     to,
     subject: "Reserva confirmada – Agenda Fonfach",
     html: layout(`
-      <h2 style="margin-top:0;">Reserva Confirmada 🗓️</h2>
-      <p>Hola <strong>${nombreCliente}</strong>, tu reserva ha sido confirmada.</p>
-      ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
-      ${bloqueInstrucciones(instrucciones)}
-      ${bloquePolitica({ horasLimite, telefonoEmpresa, mensajeCancelacionRecordatorio })}
-      <p style="color:#555;font-size:14px;">Si necesitas cancelar o reagendar, ingresa a tu perfil.</p>
-    `),
-    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\nDirección: ${direccion ?? "No especificada"}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${mensajeCancelacionRecordatorio ? `\n\n${mensajeCancelacionRecordatorio}` : horasLimite != null ? `\n\n⚠️ Puedes cancelar con al menos ${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación.${telefonoEmpresa ? ` Contáctate con tu profesional: ${telefonoEmpresa}` : ""}` : ""}`,
+        <h2 style="margin-top:0;">¡Tu reserva está lista! ✅</h2>
+        <p>Hola <strong>${nombreCliente}</strong>, tu hora con ${nombreBarbero} fue agendada.</p>
+        ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
+        ${bloqueAbono}
+      `),
+    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\nDirección: ${direccion}${
+      requiereAbono
+        ? `\n\nDebes transferir $${montoAbono.toLocaleString("es-CL")} para confirmar tu reserva.\nBanco: ${datosPago.banco}\nCuenta: ${datosPago.numeroCuenta}\nTitular: ${datosPago.titular}\nRUT: ${datosPago.rut}`
+        : ""
+    }`,
   });
 };
 

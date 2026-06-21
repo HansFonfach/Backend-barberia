@@ -759,13 +759,20 @@ export const postDeleteReserva = async (req, res) => {
     });
 
     const emailData = {
-      nombreCliente,
-      nombreBarbero: existeReserva.barbero?.nombre || "Tu barbero",
-      fecha: fechaFormateada,
+      nombreCliente: clienteDoc.nombre,
+      nombreBarbero: barberoDoc.nombre,
+      fecha,
       hora: horaFormateada,
-      servicio: existeReserva.servicio?.nombre || "Servicio",
-      motivo: existeReserva.motivoCancelacion,
-      direccion: empresaDoc?.direccion || null, // ← agregar esto
+      servicio: nombreServicio,
+      duracion: duracionServicio,
+      horaFin: finReservaChile.format("HH:mm"),
+      direccion: empresaDoc.direccion,
+      horasLimite: empresaDoc.politicaCancelacion?.horasLimite ?? null,
+      telefonoEmpresa: empresaDoc.telefono ?? null,
+      // 👇 nuevo
+      requiereAbono,
+      montoAbono: abonoData.monto,
+      datosPago: requiereAbono ? empresaDoc.pagos?.transferencia : null,
     };
 
     // 5️⃣ Email al cliente
