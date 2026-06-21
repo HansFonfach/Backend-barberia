@@ -564,9 +564,14 @@ export const createReserva = async (req, res) => {
       duracion: duracionServicio,
       horaFin: finReservaChile.format("HH:mm"),
       direccion: empresaDoc.direccion,
-      horasLimite: empresaDoc.politicaCancelacion?.horasLimite ?? null, // ← nuevo
-      telefonoEmpresa: empresaDoc.telefono ?? null, // ← nuevo
+      horasLimite: empresaDoc.politicaCancelacion?.horasLimite ?? null,
+      telefonoEmpresa: empresaDoc.telefono ?? null,
+      // 👇 nuevo
+      requiereAbono,
+      montoAbono: abonoData.monto,
+      datosPago: requiereAbono ? empresaDoc.pagos?.transferencia : null,
     };
+
 
     // ✅ Solo enviar emails si la hora NO ha pasado
     const limiteMinimoSeguro = ahoraChile.add(30, "minute");
@@ -769,10 +774,8 @@ export const postDeleteReserva = async (req, res) => {
       direccion: empresaDoc.direccion,
       horasLimite: empresaDoc.politicaCancelacion?.horasLimite ?? null,
       telefonoEmpresa: empresaDoc.telefono ?? null,
-      // 👇 nuevo
-      requiereAbono,
-      montoAbono: abonoData.monto,
-      datosPago: requiereAbono ? empresaDoc.pagos?.transferencia : null,
+ 
+     
     };
 
     // 5️⃣ Email al cliente
