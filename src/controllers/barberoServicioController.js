@@ -2,7 +2,6 @@ import barberoServicioModel from "../models/barberoServicio.model.js";
 import servicioModel from "../models/servicio.model.js";
 import usuarioModel from "../models/usuario.model.js";
 
-
 export const asignarServiciosBarbero = async (req, res) => {
   try {
     const { barberoId } = req.params;
@@ -21,9 +20,8 @@ export const asignarServiciosBarbero = async (req, res) => {
     const resultados = [];
 
     for (const item of servicios) {
-      const { servicioId, duracion } = item;
+      const { servicioId, duracion, activo } = item; // 👈 desestructurar también activo
 
-      // validar servicio
       const servicio = await servicioModel.findById(servicioId);
       if (!servicio) {
         return res
@@ -38,12 +36,12 @@ export const asignarServiciosBarbero = async (req, res) => {
         },
         {
           duracion,
-          activo: true,
+          activo: activo !== false, // 👈 default true si no viene, pero respeta false explícito
         },
         {
           upsert: true,
           new: true,
-        }
+        },
       );
 
       resultados.push(barberoServicio);
@@ -85,6 +83,8 @@ export const obtenerServiciosDeBarbero = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error(error); // 👈 agregá esto para ver el error real en la terminal
-    res.status(500).json({ message: "Error obteniendo servicios", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error obteniendo servicios", error: error.message });
   }
 };
