@@ -7,7 +7,7 @@ export const validarDisponibilidad = async ({
   duracionServicio,
   excluirReservaId = null,
 }) => {
-  const horaFormateada = formatHora(hora);
+  const horaFormateada = hora.length === 5 ? hora : `${hora}:00`;
   const inicioReservaChile = dayjs.tz(
     `${fecha} ${horaFormateada}`,
     "YYYY-MM-DD HH:mm",
@@ -101,8 +101,6 @@ export const validarDisponibilidad = async ({
       message: "El servicio no cabe en el horario del profesional",
     });
   }
-
-
 
   const excepciones = await excepcionHorarioModel.find({
     barbero,
