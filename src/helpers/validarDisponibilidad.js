@@ -1,3 +1,13 @@
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
+import excepcionHorarioModel from "../models/excepcionHorario.model.js";
+import reservaModel from "../models/reserva.model.js";
+
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
 export const validarDisponibilidad = async ({
   barberoDoc,
   barbero,
@@ -13,6 +23,7 @@ export const validarDisponibilidad = async ({
     "YYYY-MM-DD HH:mm",
     "America/Santiago",
   );
+
   const finReservaChile = inicioReservaChile.add(duracionServicio, "minute");
   const diaSemana = inicioReservaChile.day();
 
@@ -97,9 +108,10 @@ export const validarDisponibilidad = async ({
     console.log("horasExtraDelDia:", JSON.stringify(horasExtraDelDia, null, 2));
     console.log("inicioReservaChile:", inicioReservaChile.format());
     console.log("finReservaChile:", finReservaChile.format());
-    return res.status(400).json({
+    return {
+      ok: false,
       message: "El servicio no cabe en el horario del profesional",
-    });
+    };
   }
 
   const excepciones = await excepcionHorarioModel.find({
@@ -116,7 +128,7 @@ export const validarDisponibilidad = async ({
     return { ok: false, message: "La hora está bloqueada por el barbero" };
 
   // Colisiones (sin cambios)
-  const reservasDelDia = await Reserva.find({
+  const reservasDelDia = await reservaModel.find({
     barbero,
     fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
     estado: { $in: ["pendiente", "confirmada"] },
