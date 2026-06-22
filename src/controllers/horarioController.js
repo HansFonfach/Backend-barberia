@@ -363,9 +363,7 @@ export const getHorasDisponibles = async (req, res) => {
       .filter((e) => e.tipo === "bloqueo")
       .map((e) => e.horaInicio);
 
-    const horasExtra = excepciones
-      .filter((e) => e.tipo === "extra")
-      .map((e) => e.horaInicio);
+    const horasExtra = excepciones.filter((e) => e.tipo === "extra");
 
     /* ================= HORAS DISPONIBLES ================= */
     const horasDisponibles = new Set();
@@ -542,7 +540,30 @@ export const getHorasDisponibles = async (req, res) => {
     }
 
     // Agregar horas extra
-    horasExtra.forEach((h) => horasDisponibles.add(h));
+    horasExtra.forEach((he) => {
+      if (!he.horaFin) {
+        // registro viejo sin horaFin: lo agregamos igual para no romper compatibilidad,
+        // pero create Reserva lo va a validar de todas formas
+        horasDisponibles.add(he.horaInicio);
+        return;
+      }
+
+      const inicioExtra = dayjs.tz(
+        `${fecha} ${he.horaInicio}`,
+        "YYYY-MM-DD HH:mm",
+        "America/Santiago",
+      );
+      const finExtra = dayjs.tz(
+        `${fecha} ${he.horaFin}`,
+        "YYYY-MM-DD HH:mm",
+        "America/Santiago",
+      );
+      const finServicioEnExtra = inicioExtra.add(duracionServicio, "minute");
+
+      if (finServicioEnExtra.isSameOrBefore(finExtra)) {
+        horasDisponibles.add(he.horaInicio);
+      }
+    });
 
     /* ================= RESPUESTA FINAL ================= */
     const esPrivilegiado = rolUsuario === "barbero" || rolUsuario === "admin";
@@ -1059,9 +1080,7 @@ export const getHorasProfesionalPorDia = async (req, res) => {
     const horasBloqueadas = excepciones
       .filter((e) => e.tipo === "bloqueo")
       .map((e) => e.horaInicio);
-    const horasExtra = excepciones
-      .filter((e) => e.tipo === "extra")
-      .map((e) => e.horaInicio);
+    const horasExtra = excepciones.filter((e) => e.tipo === "extra");
 
     // ─── VACACIONES ───
     const vacacion = await ExcepcionHorarioModel.findOne({
@@ -1196,23 +1215,37 @@ export const getHorasProfesionalPorDia = async (req, res) => {
     }
 
     // 3. Horas extra
-    horasExtra.forEach((hora) => {
-      if (mapaReservas[hora]) {
-        resultado.set(hora, {
-          hora,
-          estado: "reservada",
-          esExtra: true,
-          reserva: _miniReserva(mapaReservas[hora]),
-        });
-      } else if (horasOcupadasPorReserva.has(hora)) {
-        resultado.set(hora, {
-          hora,
-          estado: "ocupada",
-          esExtra: true,
-          esDesborde: true,
-        });
-      } else {
-        resultado.set(hora, { hora, estado: "extra", esExtra: true });
+    horasExtra.forEach((extra) => {
+      let cursor = dayjs(`${fecha} ${extra.horaInicio}`, "YYYY-MM-DD HH:mm");
+
+      const fin = dayjs(`${fecha} ${extra.horaFin}`, "YYYY-MM-DD HH:mm");
+
+      while (cursor.isBefore(fin)) {
+        const hora = cursor.format("HH:mm");
+
+        if (mapaReservas[hora]) {
+          resultado.set(hora, {
+            hora,
+            estado: "reservada",
+            esExtra: true,
+            reserva: _miniReserva(mapaReservas[hora]),
+          });
+        } else if (horasOcupadasPorReserva.has(hora)) {
+          resultado.set(hora, {
+            hora,
+            estado: "ocupada",
+            esExtra: true,
+            esDesborde: true,
+          });
+        } else {
+          resultado.set(hora, {
+            hora,
+            estado: "extra",
+            esExtra: true,
+          });
+        }
+
+        cursor = cursor.add(30, "minute");
       }
     });
 

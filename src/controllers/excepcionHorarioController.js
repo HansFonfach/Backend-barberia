@@ -70,8 +70,8 @@ export const toggleHora = async (req, res) => {
 };
 
 export const agregarHoraExtra = async (req, res) => {
-  const { barbero, fecha, horaInicio } = req.body;
-
+  console.log(req.body);
+  const { barbero, fecha, horaInicio, horaFin } = req.body; 
   try {
     const fechaUTC = fechaChileToUTC(fecha);
 
@@ -79,6 +79,7 @@ export const agregarHoraExtra = async (req, res) => {
       barbero,
       fecha: fechaUTC,
       horaInicio,
+      horaFin, 
       tipo: "extra",
     });
 
@@ -92,7 +93,6 @@ export const agregarHoraExtra = async (req, res) => {
     res.status(500).json({ message: "Error al agregar la hora extra", error });
   }
 };
-
 export const eliminarHoraExtra = async (req, res) => {
   const { barbero, fecha, horaInicio } = req.body;
 

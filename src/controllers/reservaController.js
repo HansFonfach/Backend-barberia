@@ -282,15 +282,35 @@ export const createReserva = async (req, res) => {
     const finReservaChile = inicioReservaChile.add(duracionServicio, "minute");
 
     /* =============================
-       HORARIOS
+       RANGO DE BÚSQUEDA DEL DÍA
+    ============================== */
+    const inicioBusqueda = inicioReservaChile
+      .startOf("day")
+      .subtract(4, "hour")
+      .utc()
+      .toDate();
+    const finBusqueda = inicioReservaChile
+      .endOf("day")
+      .add(4, "hour")
+      .utc()
+      .toDate();
+
+    /* =============================
+       HORARIOS (normales + horas extra)
     ============================== */
     const horariosDelDia = barberoDoc.horariosDisponibles.filter(
       (h) => Number(h.diaSemana) === diaSemana,
     );
 
-    if (!horariosDelDia.length) {
+    const horasExtraDelDia = await excepcionHorarioModel.find({
+      barbero,
+      tipo: "extra",
+      fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
+    });
+
+    if (!horariosDelDia.length && !horasExtraDelDia.length) {
       return res.status(400).json({
-        message: "El barbero no trabaja este día",
+        message: "El profesional no trabaja este día",
       });
     }
 
@@ -318,24 +338,45 @@ export const createReserva = async (req, res) => {
     }
 
     if (!bloqueValido) {
-      return res.status(400).json({
-        message: "El servicio no cabe en el horario del barbero",
-      });
+      for (const he of horasExtraDelDia) {
+        if (!he.horaFin) continue;
+
+        const ini = dayjs.tz(
+          `${fecha} ${he.horaInicio}`,
+          "YYYY-MM-DD HH:mm",
+          "America/Santiago",
+        );
+        const fin = dayjs.tz(
+          `${fecha} ${he.horaFin}`,
+          "YYYY-MM-DD HH:mm",
+          "America/Santiago",
+        );
+
+        if (
+          inicioReservaChile.isSameOrAfter(ini) &&
+          finReservaChile.isSameOrBefore(fin)
+        ) {
+          bloqueValido = { inicio: ini, fin };
+          break;
+        }
+      }
     }
 
+    if (!bloqueValido) {
+      console.log("🔴 BLOQUEO EN createReserva");
+      console.log(
+        "horasExtraDelDia:",
+        JSON.stringify(horasExtraDelDia, null, 2),
+      );
+      console.log("inicioReservaChile:", inicioReservaChile.format());
+      console.log("finReservaChile:", finReservaChile.format());
+      return res.status(400).json({
+        message: "El servicio no cabe en el horario del profesional",
+      });
+    }
     /* =============================
        EXCEPCIONES
     ============================== */
-    const inicioBusqueda = inicioReservaChile
-      .startOf("day")
-      .subtract(4, "hour")
-      .utc()
-      .toDate();
-    const finBusqueda = inicioReservaChile
-      .endOf("day")
-      .add(4, "hour")
-      .utc()
-      .toDate();
 
     const excepciones = await excepcionHorarioModel.find({
       barbero,
@@ -571,7 +612,6 @@ export const createReserva = async (req, res) => {
       montoAbono: abonoData.monto,
       datosPago: requiereAbono ? empresaDoc.pagos?.transferencia : null,
     };
-
 
     // ✅ Solo enviar emails si la hora NO ha pasado
     const limiteMinimoSeguro = ahoraChile.add(30, "minute");
