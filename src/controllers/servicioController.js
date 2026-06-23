@@ -57,16 +57,23 @@ export const createServicio = async (req, res) => {
  */
 export const updateServicio = async (req, res) => {
   const { id } = req.params;
-  const { nombre, descripcion, precio, duracion, instrucciones, cuidados } =
-    req.body;
-  console.log(req.body);
+
+  const {
+    nombre,
+    descripcion,
+    precio,
+    duracion,
+    instrucciones,
+    cuidados,
+    categoriaId, // 👈 nuevo
+  } = req.body;
 
   try {
-    // Buscar servicio dentro de la empresa del usuario
     const servicio = await Servicio.findOne({
       _id: id,
-      empresa: req.usuario.empresaId, // ✅
+      empresa: req.usuario.empresaId,
     });
+
     if (!servicio) {
       return res.status(404).json({ message: "Servicio no encontrado" });
     }
@@ -79,17 +86,21 @@ export const updateServicio = async (req, res) => {
       instrucciones !== undefined ? instrucciones : servicio.instrucciones;
     servicio.cuidados = cuidados !== undefined ? cuidados : servicio.cuidados;
 
+    servicio.categoria = categoriaId || servicio.categoria;
+
     await servicio.save();
 
-    res.json({ message: "Servicio actualizado correctamente", servicio });
+    return res.json({
+      message: "Servicio actualizado correctamente",
+      servicio,
+    });
   } catch (error) {
     console.error("Error al actualizar servicio:", error);
-    res
-      .status(500)
-      .json({ message: "Error del servidor al actualizar servicio" });
+    return res.status(500).json({
+      message: "Error del servidor al actualizar servicio",
+    });
   }
 };
-
 /**
  * Eliminar servicio (solo de la empresa del usuario)
  */
@@ -118,7 +129,6 @@ export const getServiciosPublicos = async (req, res) => {
   const { slug } = req.params;
 
   try {
-    // 1️⃣ Buscar empresa
     const empresa = await empresaModel.findOne({ slug });
 
     if (!empresa) {
@@ -127,21 +137,22 @@ export const getServiciosPublicos = async (req, res) => {
       });
     }
 
-    // 2️⃣ Buscar relaciones barbero-servicio
     const barberoServicios = await barberoServicioModel
       .find({
         activo: true,
       })
       .populate({
         path: "servicio",
-        match: { empresa: empresa._id }, // 👈 FILTRAS POR EMPRESA AQUÍ
+        match: { empresa: empresa._id },
+        populate: {
+          path: "categoria", // 👈 singular, coincide con el campo real del schema
+          select: "nombre orden",
+        },
       })
       .lean();
 
-    // 3️⃣ Filtrar los que sí tienen servicio válido
     const filtrados = barberoServicios.filter((bs) => bs.servicio);
 
-    // 4️⃣ Transformar data (🔥 aquí unes todo)
     const serviciosMap = {};
 
     filtrados.forEach((bs) => {
@@ -157,14 +168,12 @@ export const getServiciosPublicos = async (req, res) => {
       serviciosMap[id].duraciones.push(bs.duracion);
     });
 
-    // 5️⃣ Calcular duración final (puedes elegir estrategia)
     const servicios = Object.values(serviciosMap).map((s) => ({
       ...s,
       duracionMin: Math.min(...s.duraciones),
       duracionMax: Math.max(...s.duraciones),
     }));
 
-    // 6️⃣ Ordenar por precio
     servicios.sort((a, b) => a.precio - b.precio);
 
     res.json({

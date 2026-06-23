@@ -9,8 +9,18 @@ const servicioSchema = new Schema({
     required: true,
   },
 
-  nombre: { type: String, required: true },
+  categoria: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Categoria", // 👈 ya estaba bien, ahora coincide con el modelo renombrado
+    required: true,
+  },
 
+  icono: {
+    type: String,
+    default: null,
+  },
+
+  nombre: { type: String, required: true },
   descripcion: { type: String },
 
   precio: {
@@ -22,17 +32,15 @@ const servicioSchema = new Schema({
     type: Boolean,
     default: true,
   },
-  
+
   instrucciones: { type: String, default: null },
   cuidados: { type: String, default: null },
 
-  // 🔹 cada cuantos días se recomienda repetir el servicio
   diasRecomendadosRepeticion: {
     type: Number,
-    default: null, // null = el sistema calcula el promedio del cliente
+    default: null,
   },
 
-  // 🔹 activar o desactivar recordatorios para este servicio
   recordatorioActivo: {
     type: Boolean,
     default: true,
