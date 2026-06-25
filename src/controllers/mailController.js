@@ -335,27 +335,52 @@ export const sendSuscriptionActiveEmail = async (to, data) => {
     to,
     subject: "¡Tu suscripción está activa! – Agenda Fonfach",
     html: layout(`
-      <h2 style="margin-top:0;">¡Bienvenido/a, ${nombreCliente}! 🎉</h2>
-      <p style="color:#555;">Tu suscripción <strong>${nombrePlan}</strong> ya está activa y lista para usar.</p>
+  <h2 style="margin-top:0;">¡Bienvenido/a, ${nombreCliente}! 🎉</h2>
+  <p style="color:#555;">Tu suscripción <strong>${nombrePlan}</strong> ya está activa y lista para usar.</p>
 
-      <table cellpadding="8" cellspacing="0" border="0" width="100%"
-            style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
-        <tr><td style="font-size:14px;color:#555;width:50%;">Plan</td><td style="font-weight:bold;">${nombrePlan}</td></tr>
-        <tr><td style="font-size:14px;color:#555;">Activación</td><td style="font-weight:bold;">${fechaInicio}</td></tr>
-        <tr><td style="font-size:14px;color:#555;">Válida hasta</td><td style="font-weight:bold;">${fechaFin}</td></tr>
-      </table>
+  <table cellpadding="8" cellspacing="0" border="0" width="100%"
+        style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
+    <tr><td style="font-size:14px;color:#555;width:50%;">Plan</td><td style="font-weight:bold;">${nombrePlan}</td></tr>
+    <tr><td style="font-size:14px;color:#555;">Activación</td><td style="font-weight:bold;">${fechaInicio}</td></tr>
+    <tr><td style="font-size:14px;color:#555;">Válida hasta</td><td style="font-weight:bold;">${fechaFin}</td></tr>
+  </table>
 
-      <p style="color:#555;font-size:14px;">
-        Tu suscripción tiene una duración de <strong>1 mes</strong> o hasta que hagas uso de todos tus servicios incluidos, lo que ocurra primero.
-      </p>
+  <div style="background:#f0f7ff;border-left:4px solid #1a73e8;padding:16px;border-radius:4px;margin:16px 0;">
+    <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
+      ℹ️ <strong>Importante:</strong> Para que tu suscripción quede completamente habilitada,
+      cierra sesión e inicia sesión nuevamente en la aplicación.
+      <br/><br/>
+      📅 Desde este momento podrás visualizar hasta <strong>31 días de disponibilidad</strong>
+      en el calendario al momento de reservar tus horas.
+    </p>
+  </div>
 
-      <p style="color:#555;font-size:14px;">
-        Puedes reservar tu hora cuando quieras desde la app. ¡Nos vemos pronto! ✂️
-      </p>
+  <p style="color:#555;font-size:14px;">
+    Tu suscripción tiene una duración de <strong>1 mes</strong> o hasta que hagas uso de todos tus servicios incluidos, lo que ocurra primero.
+  </p>
 
-      <p style="color:#555;font-size:14px;">Atentamente,<br/><strong>Equipo 🗓️ Agenda Fonfach</strong></p>
-    `),
-    text: `¡Tu suscripción está activa!\n\nHola ${nombreCliente}, tu plan ${nombrePlan} ya está listo.\n\nActivación: ${fechaInicio}\nVálida hasta: ${fechaFin}\n\nRecuerda que tu suscripción dura 1 mes o hasta agotar tus servicios.\n\nEquipo 🗓️ Agenda Fonfach`,
+  <p style="color:#555;font-size:14px;">
+    Puedes reservar tu hora cuando quieras desde la app. ¡Nos vemos pronto! ✂️
+  </p>
+
+  <p style="color:#555;font-size:14px;">
+    Atentamente,<br/><strong>Equipo 🗓️ Agenda Fonfach</strong>
+  </p>
+`),
+    text: `¡Tu suscripción está activa!
+
+Hola ${nombreCliente}, tu plan ${nombrePlan} ya está listo.
+
+Activación: ${fechaInicio}
+Válida hasta: ${fechaFin}
+
+IMPORTANTE:
+- Cierra sesión e inicia sesión nuevamente para activar todos los beneficios de tu suscripción.
+- Ahora podrás visualizar hasta 31 días de disponibilidad en el calendario al reservar.
+
+Recuerda que tu suscripción dura 1 mes o hasta agotar tus servicios.
+
+Equipo 🗓️ Agenda Fonfach`,
   });
 };
 

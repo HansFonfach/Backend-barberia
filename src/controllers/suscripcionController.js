@@ -64,7 +64,7 @@ export const crearSuscripcion = async (req, res) => {
 
       case "combo_visita_corte_barba":
         serviciosTotales = 2;
-        precio = 45000;
+        precio = 40000;
         break;
 
       case "padre_e_hijo":
