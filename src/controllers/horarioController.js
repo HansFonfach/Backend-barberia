@@ -119,11 +119,7 @@ export const getHorasDisponibles = async (req, res) => {
     const usuario = req.usuario;
     const rolUsuario = req.usuario?.rol;
 
-    console.log("getHorasDisponibles llamado con:", {
-      barberoId,
-      fecha,
-      servicioId,
-    });
+   
 
     if (!fecha || !servicioId) {
       return res.status(400).json({ message: "Fecha y servicio requeridos" });
@@ -596,9 +592,7 @@ export const getHorasDisponibles = async (req, res) => {
       return acc;
     }, []);
 
-    console.log("esPrivilegiado:", esPrivilegiado, "rol:", rolUsuario);
-    console.log("horas generadas:", horas);
-
+ 
     return res.json({
       fecha,
       duracionServicio,

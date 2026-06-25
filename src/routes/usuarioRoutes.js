@@ -21,7 +21,7 @@ const router = Router();
 
 // 🔒 RUTAS ESPECÍFICAS PRIMERO
 router.get("/rut/:rut", validarToken, getUsuarioByRut);
-router.get("/rutPublico/:rut",  getUsuarioByRutPublico);
+router.get("/publico/:slug/rut/:rut", getUsuarioByRutPublico);
 
 router.get("/todosLosUsuarios", validarToken, getAllUsersWithSuscripcion);
 router.get("/misPuntos", validarToken, verMisPuntos);

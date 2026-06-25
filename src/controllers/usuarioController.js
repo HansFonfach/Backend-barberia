@@ -419,7 +419,8 @@ export const crearBarbero = async (req, res) => {
   }
 };
 export const getUsuarioByRutPublico = async (req, res) => {
-  const { rut } = req.params;
+  const { rut, slug } = req.params;
+ 
 
   try {
     if (!rut || rut.trim() === "") {
@@ -429,23 +430,40 @@ export const getUsuarioByRutPublico = async (req, res) => {
       });
     }
 
-    // 1. Primero intentar buscar exactamente como viene
+    if (!slug) {
+      return res.status(400).json({
+        success: false,
+        message: "Empresa (slug) no proporcionado",
+      });
+    }
+
+    // 1. Buscar empresa por slug
+    const empresa = await empresaModel.findOne({ slug });
+
+    if (!empresa) {
+      return res.status(404).json({
+        success: false,
+        message: "Empresa no encontrada",
+      });
+    }
+
+    // 2. Buscar usuario dentro de esa empresa
     let usuario = await Usuario.findOne({
-      rut: rut,
-      empresa: req.usuario.empresaId, // ← agregar esto
+      rut,
+      empresa: empresa._id,
     });
 
-    // 2. Si no encuentra, buscar con RUT limpio
+    // 3. fallback con rut limpio
     if (!usuario) {
-      const limpiarRut = (rutStr) => {
-        return rutStr.replace(/[\.\-]/g, "").toUpperCase();
-      };
+      const limpiarRut = (rutStr) =>
+        rutStr.replace(/[\.\-]/g, "").toUpperCase();
 
       const rutLimpioBuscado = limpiarRut(rut);
 
       const usuariosEmpresa = await Usuario.find({
-        empresa: req.usuario.empresaId,
+        empresa: empresa._id,
       });
+
       usuario = usuariosEmpresa.find((u) => {
         if (!u.rut) return false;
         return limpiarRut(u.rut) === rutLimpioBuscado;
@@ -460,15 +478,13 @@ export const getUsuarioByRutPublico = async (req, res) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       _id: usuario._id,
       nombre: usuario.nombre,
       apellido: usuario.apellido,
-      // Enmascarar email: h***@gmail.com
       email: usuario.email.replace(/(.{1}).+(@.+)/, "$1***$2"),
       rut: usuario.rut,
-      // Enmascarar teléfono: mostrar solo últimos 4 dígitos
       telefono: usuario.telefono
         ? "*".repeat(usuario.telefono.length - 4) + usuario.telefono.slice(-4)
         : "",
@@ -478,7 +494,7 @@ export const getUsuarioByRutPublico = async (req, res) => {
     });
   } catch (error) {
     console.error("💥 Error en getUsuarioByRut:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Error del servidor",
       error: error.message,
