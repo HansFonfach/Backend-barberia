@@ -15,7 +15,12 @@ export const crearSuscripcion = async (req, res) => {
     const { tipoPlan } = req.body;
 
     // 1️⃣ Validar plan
-    const planesPermitidos = ["creditos", "combo_visita_corte_barba"];
+    const planesPermitidos = [
+      "creditos",
+      "combo_visita_corte_barba",
+      "padre_e_hijo",
+      "barba",
+    ];
     if (!planesPermitidos.includes(tipoPlan)) {
       return res.status(400).json({
         success: false,
@@ -61,6 +66,16 @@ export const crearSuscripcion = async (req, res) => {
         serviciosTotales = 2;
         precio = 45000;
         break;
+
+      case "padre_e_hijo":
+        serviciosTotales = 2;
+        precio = 22000;
+        break;
+
+      case "barba":
+        serviciosTotales = 4;
+        precio = 40000;
+        break;
     }
 
     // 5️⃣ Fechas
@@ -98,6 +113,7 @@ export const crearSuscripcion = async (req, res) => {
       nombreCliente: usuario.nombre,
       fechaInicio: fechaInicio.toLocaleDateString("es-CL"),
       fechaFin: fechaFin.toLocaleDateString("es-CL"),
+      tipoPlan, 
     }).catch(console.error);
 
     return res.status(201).json({
@@ -182,6 +198,8 @@ export const estadoSuscripcionCliente = async (req, res) => {
 
     // 🔥 Calcular servicios usados en tiempo real
     const esCombo = suscripcion.tipoPlan === "combo_visita_corte_barba";
+    const esBarba = suscripcion.tipoPlan === "barba";
+    const SERVICIO_BARBA_ID = "6993a5495dada31f33304c19";
 
     const reservas = await reservaModel
       .find({
@@ -201,7 +219,12 @@ export const estadoSuscripcionCliente = async (req, res) => {
         if (r.servicio?._id?.toString() === SERVICIO_COMBO_ID) {
           serviciosUsados += 1;
         }
+      } else if (esBarba) {
+        if (r.servicio?._id?.toString() === SERVICIO_BARBA_ID) {
+          serviciosUsados += 1;
+        }
       } else {
+        // creditos y padre_e_hijo
         serviciosUsados += r.duracion >= 120 ? 2 : 1;
       }
     }
@@ -311,6 +334,8 @@ export const getSuscripcionActiva = async (req, res) => {
 
     const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
     const esCombo = sus.tipoPlan === "combo_visita_corte_barba";
+    const esBarba = sus.tipoPlan === "barba";
+    const SERVICIO_BARBA_ID = "6993a5495dada31f33304c19";
 
     const reservas = await reservaModel
       .find({
@@ -323,11 +348,15 @@ export const getSuscripcionActiva = async (req, res) => {
     let serviciosUsados = 0;
     for (const r of reservas) {
       if (esCombo) {
-        // Solo cuenta el servicio combo
         if (r.servicio?._id?.toString() === SERVICIO_COMBO_ID) {
           serviciosUsados += 1;
         }
+      } else if (esBarba) {
+        if (r.servicio?._id?.toString() === SERVICIO_BARBA_ID) {
+          serviciosUsados += 1;
+        }
       } else {
+        // creditos y padre_e_hijo
         serviciosUsados += r.duracion >= 120 ? 2 : 1;
       }
     }

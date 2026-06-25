@@ -227,8 +227,10 @@ export const createReserva = async (req, res) => {
         }
 
         const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
+        const SERVICIO_BARBA_ID = "6993a5495dada31f33304c19"; // 👈 agregar aquí
         const esCombo =
           suscripcionActiva.tipoPlan === "combo_visita_corte_barba";
+        const esBarba = suscripcionActiva.tipoPlan === "barba"; // 👈 agregar aquí
 
         const todasLasReservas = await Reserva.find({
           cliente,
@@ -245,7 +247,12 @@ export const createReserva = async (req, res) => {
             if (r.servicio?._id?.toString() === SERVICIO_COMBO_ID) {
               serviciosAgendados += 1;
             }
+          } else if (esBarba) {
+            if (r.servicio?._id?.toString() === SERVICIO_BARBA_ID) {
+              serviciosAgendados += 1;
+            }
           } else {
+            // creditos y padre_e_hijo
             serviciosAgendados += r.duracion >= 120 ? 2 : 1;
           }
         }
@@ -259,6 +266,10 @@ export const createReserva = async (req, res) => {
       }
       // Si la empresa no tiene suscripción, el sábado es libre
     }
+
+    const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
+    const SERVICIO_BARBA_ID = "6993a5495dada31f33304c19";
+
     /* =============================
        SERVICIO
     ============================== */
@@ -471,7 +482,7 @@ export const createReserva = async (req, res) => {
 
     /* =============================
    CALCULAR ABONO
-============================== */
+   ============================== */
 
     const requiereAbono = empresaDoc.pagos?.requiereAbono === true;
     let abonoData = { requerido: false, monto: 0 };
@@ -547,31 +558,51 @@ export const createReserva = async (req, res) => {
    CONSUMIR CRÉDITO SUSCRIPCIÓN
 ============================== */
 
-    const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
+    const planesQueConsumenCredito = [
+      "creditos",
+      "padre_e_hijo",
+      "combo_visita_corte_barba",
+      "barba",
+    ];
 
-    const suscripcionCliente = await suscripcionModel.findOne({
+    const suscripcionActual = await suscripcionModel.findOne({
       usuario: cliente,
       empresa,
       activa: true,
-      tipoPlan: "combo_visita_corte_barba",
+      tipoPlan: { $in: planesQueConsumenCredito },
       fechaInicio: { $lte: new Date() },
       fechaFin: { $gte: new Date() },
     });
 
-    if (suscripcionCliente && servicio.toString() === SERVICIO_COMBO_ID) {
-      const nuevosUsados = suscripcionCliente.serviciosUsados + 1;
-      const agotar = nuevosUsados >= suscripcionCliente.serviciosTotales;
+    if (suscripcionActual) {
+      // Para combo, solo consume si es el servicio específico
+      if (
+        suscripcionActual.tipoPlan === "combo_visita_corte_barba" &&
+        servicio.toString() !== SERVICIO_COMBO_ID
+      ) {
+        // No consumir crédito si no es el servicio del combo
+      }
+      // Para barba, solo consume si es el servicio de barba (ya validado arriba)
+      else if (
+        suscripcionActual.tipoPlan === "barba" &&
+        servicio.toString() !== SERVICIO_BARBA_ID
+      ) {
+        // No debería llegar aquí por la validación previa, pero por si acaso
+      } else {
+        // creditos, padre_e_hijo, barba con servicio correcto, combo con servicio correcto
+        const nuevosUsados = suscripcionActual.serviciosUsados + 1;
+        const agotar = nuevosUsados >= suscripcionActual.serviciosTotales;
 
-      await suscripcionModel.findByIdAndUpdate(suscripcionCliente._id, {
-        $inc: { serviciosUsados: 1 },
-        ...(agotar && { $set: { activa: false } }),
-      });
-
-      // Si se agotó, marcar usuario como no suscrito
-      if (agotar) {
-        await usuarioModel.findByIdAndUpdate(cliente, {
-          $set: { suscrito: false },
+        await suscripcionModel.findByIdAndUpdate(suscripcionActual._id, {
+          $inc: { serviciosUsados: 1 },
+          ...(agotar && { $set: { activa: false } }),
         });
+
+        if (agotar) {
+          await usuarioModel.findByIdAndUpdate(cliente, {
+            $set: { suscrito: false },
+          });
+        }
       }
     }
 
@@ -719,7 +750,6 @@ export const getReservasByBarberId = async (req, res) => {
     return res.status(500).json({ message: "Error al obtener reservas" });
   }
 };
-
 export const postDeleteReserva = async (req, res) => {
   try {
     const { id } = req.params;
@@ -742,7 +772,7 @@ export const postDeleteReserva = async (req, res) => {
         .json({ message: "La reserva ya se encuentra cancelada." });
     }
 
-    // 1️⃣ Cargar empresa (movido arriba para usar en política)
+    // 1️⃣ Cargar empresa
     const empresaDoc = await empresaModel.findById(existeReserva.empresa);
 
     // 2️⃣ Validar política de cancelación (solo para clientes e invitados)
@@ -771,7 +801,6 @@ export const postDeleteReserva = async (req, res) => {
           "hour",
         );
 
-        // 🔥 CLAVE: comparar fechas directamente (más limpio)
         if (ahoraChile.isAfter(limiteCancelacion)) {
           return res.status(403).json({
             message:
@@ -810,10 +839,10 @@ export const postDeleteReserva = async (req, res) => {
       hora: horaFormateada,
       servicio: existeReserva.servicio?.nombre || "Servicio",
       motivo: existeReserva.motivoCancelacion,
-      direccion: empresaDoc?.direccion || null, // ← agregar esto
+      direccion: empresaDoc?.direccion || null,
     };
 
-    // 5️⃣ Email al cliente
+    // 5️⃣ Email al cliente — siempre
     if (emailCliente) {
       sendCancelReservationEmail(emailCliente, emailData).catch((error) =>
         console.error(
@@ -823,10 +852,11 @@ export const postDeleteReserva = async (req, res) => {
       );
     }
 
+    // 6️⃣ WhatsApp al cliente — solo si cancela el barbero
     const telefonoCliente =
       existeReserva.cliente?.telefono || existeReserva.invitado?.telefono;
 
-    if (telefonoCliente) {
+    if (telefonoCliente && rolUsuario === "barbero") {
       WhatsappService.enviarCancelacionCliente({
         telefono: telefonoCliente,
         nombreCliente,
@@ -844,7 +874,7 @@ export const postDeleteReserva = async (req, res) => {
       );
     }
 
-    // 6️⃣ Email al barbero — solo si la empresa tiene activada la notificación
+    // 7️⃣ Email al barbero
     if (empresaDoc?.envioNotificacionReserva && existeReserva.barbero?.email) {
       sendProfesionalCancelReservationEmail(
         existeReserva.barbero.email,
@@ -857,21 +887,22 @@ export const postDeleteReserva = async (req, res) => {
       );
     }
 
-    if (existeReserva.barbero?.telefono) {
+    // 8️⃣ WhatsApp al barbero — solo si cancela el cliente
+    if (existeReserva.barbero?.telefono && rolUsuario === "cliente") {
       WhatsappService.enviarNotificacionProfesional({
         telefono: existeReserva.barbero.telefono,
         nombreProfesional: existeReserva.barbero.nombre,
-        nombreCliente: `${clienteDoc.nombre} ${clienteDoc.apellido}`,
+        nombreCliente: `${existeReserva.cliente?.nombre} ${existeReserva.cliente?.apellido}`,
         fecha: fechaFormateada,
         hora: horaFormateada,
         servicio: existeReserva.servicio?.nombre || "Servicio",
-        telefonoCliente: clienteDoc.telefono,
+        telefonoCliente: existeReserva.cliente?.telefono,
       }).catch((err) =>
         console.error(`❌ Error WhatsApp barbero:`, err.message),
       );
     }
 
-    // 7️⃣ Notificar lista de espera
+    // 9️⃣ Notificar lista de espera
     const fechaInicio = new Date(existeReserva.fecha);
     fechaInicio.setSeconds(0, 0);
     const fechaFin = new Date(existeReserva.fecha);
@@ -900,7 +931,6 @@ export const postDeleteReserva = async (req, res) => {
           timeZone: "America/Santiago",
         });
 
-        // ✅ INVITADO: usar emailInvitado directamente
         if (noti.esInvitado && noti.emailInvitado) {
           try {
             const result = await sendWaitlistNotificationEmail(
@@ -926,7 +956,6 @@ export const postDeleteReserva = async (req, res) => {
           return;
         }
 
-        // ✅ USUARIO REGISTRADO
         const usuario = noti.usuarioId;
         if (!usuario?.email) return;
 

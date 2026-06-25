@@ -320,21 +320,42 @@ export const sendWaitlistNotificationEmail = async (to, data) => {
 };
 
 export const sendSuscriptionActiveEmail = async (to, data) => {
-  const { nombreCliente, fechaInicio, fechaFin } = data;
+  const { nombreCliente, fechaInicio, fechaFin, tipoPlan } = data;
+
+  const nombresPlan = {
+    creditos: "La Santa Navaja",
+    combo_visita_corte_barba: "La Santa Dupla",
+    padre_e_hijo: "En el nombre del padre y del hijo",
+    barba: "La Santa Barba",
+  };
+
+  const nombrePlan = nombresPlan[tipoPlan] ?? "Plan suscripción";
+
   return await sendBaseEmail({
     to,
-    subject: "Suscripción confirmada – Agenda Fonfach",
+    subject: "¡Tu suscripción está activa! – Agenda Fonfach",
     html: layout(`
-        <h2 style="margin-top:0;">Suscripción confirmada</h2>
-        <p>Estimado/a <strong>${nombreCliente}</strong>, tu pago fue procesado correctamente.</p>
-        <table cellpadding="8" cellspacing="0" border="0" width="100%"
-              style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
-          <tr><td style="font-size:14px;color:#555;width:50%;">Activación</td><td style="font-weight:bold;">${fechaInicio}</td></tr>
-          <tr><td style="font-size:14px;color:#555;">Válida hasta</td><td style="font-weight:bold;">${fechaFin}</td></tr>
-        </table>
-        <p style="color:#555;font-size:14px;">Atentamente,<br/><strong>Equipo 🗓️ Agenda Fonfach</strong></p>
-      `),
-    text: `Suscripción confirmada\n\nEstimado/a ${nombreCliente}\n\nActivación: ${fechaInicio}\nVálida hasta: ${fechaFin}\n\nEquipo 🗓️ Agenda Fonfach`,
+      <h2 style="margin-top:0;">¡Bienvenido/a, ${nombreCliente}! 🎉</h2>
+      <p style="color:#555;">Tu suscripción <strong>${nombrePlan}</strong> ya está activa y lista para usar.</p>
+
+      <table cellpadding="8" cellspacing="0" border="0" width="100%"
+            style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
+        <tr><td style="font-size:14px;color:#555;width:50%;">Plan</td><td style="font-weight:bold;">${nombrePlan}</td></tr>
+        <tr><td style="font-size:14px;color:#555;">Activación</td><td style="font-weight:bold;">${fechaInicio}</td></tr>
+        <tr><td style="font-size:14px;color:#555;">Válida hasta</td><td style="font-weight:bold;">${fechaFin}</td></tr>
+      </table>
+
+      <p style="color:#555;font-size:14px;">
+        Tu suscripción tiene una duración de <strong>1 mes</strong> o hasta que hagas uso de todos tus servicios incluidos, lo que ocurra primero.
+      </p>
+
+      <p style="color:#555;font-size:14px;">
+        Puedes reservar tu hora cuando quieras desde la app. ¡Nos vemos pronto! ✂️
+      </p>
+
+      <p style="color:#555;font-size:14px;">Atentamente,<br/><strong>Equipo 🗓️ Agenda Fonfach</strong></p>
+    `),
+    text: `¡Tu suscripción está activa!\n\nHola ${nombreCliente}, tu plan ${nombrePlan} ya está listo.\n\nActivación: ${fechaInicio}\nVálida hasta: ${fechaFin}\n\nRecuerda que tu suscripción dura 1 mes o hasta agotar tus servicios.\n\nEquipo 🗓️ Agenda Fonfach`,
   });
 };
 
