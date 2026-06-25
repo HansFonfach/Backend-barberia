@@ -659,3 +659,49 @@ Gracias por confiar en nosotros.
     `,
   });
 };
+
+export const sendResetPasswordEmail = async (to, data) => {
+  const { nombreUsuario, resetUrl } = data;
+
+  return await sendBaseEmail({
+    to,
+    subject: "Restablecer contraseña – Agenda Fonfach",
+    html: layout(`
+      <h2 style="margin-top:0;">Restablecer contraseña 🔐</h2>
+
+      <p>
+        Hola <strong>${nombreUsuario}</strong>,
+      </p>
+
+      <p>
+        Recibimos una solicitud para restablecer la contraseña de tu cuenta.
+      </p>
+
+      ${ctaButton(resetUrl, "Restablecer contraseña", "#4361ee")}
+
+      <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:0;color:#555;font-size:14px;">
+          ⏰ Este enlace expirará en <strong>15 minutos</strong>.
+        </p>
+      </div>
+
+      <p style="color:#555;font-size:14px;">
+        Si no solicitaste este cambio, puedes ignorar este correo.
+      </p>
+    `),
+
+    text: `
+Hola ${nombreUsuario}
+
+Recibimos una solicitud para restablecer tu contraseña.
+
+Utiliza el siguiente enlace:
+
+${resetUrl}
+
+Este enlace expira en 15 minutos.
+
+Si no solicitaste este cambio, ignora este correo.
+    `,
+  });
+};

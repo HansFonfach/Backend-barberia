@@ -250,16 +250,10 @@ export const forgotPassword = async (req, res) => {
 
     const resetUrl = `www.agendafonfach.cl/${slug}/reiniciar-contrasena/${resetToken}`;
 
-    await sendEmail({
-      to: user.email,
-      subject: "Restablecer contraseña",
-      html: `
-        <p>Haz clic en el enlace para restablecer tu contraseña:</p>
-        <a href="${resetUrl}">Restablecer contraseña</a>
-        <p>Este enlace expira en 15 minutos.</p>
-      `,
+    await sendResetPasswordEmail(user.email, {
+      nombreUsuario: user.nombre || "Usuario",
+      resetUrl,
     });
-
     res.json({
       message: "Si el email existe, recibirás un correo con instrucciones.",
     });
