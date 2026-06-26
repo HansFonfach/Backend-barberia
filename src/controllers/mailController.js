@@ -3,13 +3,17 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const sendBaseEmail = async ({ to, subject, html, text }) => {
-  return await resend.emails.send({
-    from: "Agenda Fonfach <no-reply@agendafonfach.cl>",
+  const result = await resend.emails.send({
+    from: "Agenda Fonfach <onboarding@resend.dev>",
     to,
     subject,
     html,
     text,
   });
+
+  console.log("RESEND RESULT:", result);
+
+  return result;
 };
 
 const ctaButton = (href, label, color = "#1a73e8") => `
@@ -728,5 +732,172 @@ Este enlace expira en 15 minutos.
 
 Si no solicitaste este cambio, ignora este correo.
     `,
+  });
+};
+
+export const sendRecomendacionSuscripcionEmail = async (to, data) => {
+  const {
+    nombreCliente,
+    nombreEmpresa,
+    suscripcionSugerida,
+    nombrePlan,
+    motivo,
+    ahorroMensual,
+    ahorroAnual,
+    equivalenteCortes,
+    precioPlan,
+  } = data;
+
+  const planes = {
+    creditos: "Créditos de Corte",
+    combo_visita_corte_barba: "Corte + Barba",
+    barba: "Barba Semanal",
+  };
+
+  const iconosPlan = {
+    creditos: "✂️",
+    combo_visita_corte_barba: "💈",
+    barba: "🪒",
+  };
+
+  const nombrePlanFinal =
+    nombrePlan || planes[suscripcionSugerida] || "Plan personalizado";
+  const iconoPlan = iconosPlan[suscripcionSugerida] || "💈";
+  const whatsapp = "+56996817505";
+  const mensajeWhatsApp = encodeURIComponent(
+    `Hola, quiero activar la suscripción recomendada (${nombrePlanFinal})`,
+  );
+  const linkWhatsApp = `https://wa.me/${whatsapp.replace(/\D/g, "")}?text=${mensajeWhatsApp}`;
+
+  const formatCLP = (n) => `$${Number(n || 0).toLocaleString("es-CL")}`;
+
+  return await sendBaseEmail({
+    to,
+    subject: `${iconoPlan} ${nombreEmpresa} tiene un plan pensado para ti`,
+    html: layout(`
+      <!-- Header -->
+      <div style="text-align:center;padding:32px 0 24px;">
+        <div style="font-size:48px;line-height:1;margin-bottom:12px;">${iconoPlan}</div>
+        <h1 style="margin:0;font-size:22px;font-weight:700;color:#111;letter-spacing:-0.3px;">
+          Un plan pensado para ti
+        </h1>
+        <p style="margin:8px 0 0;color:#666;font-size:15px;">
+          Basado en tu historial de visitas en <strong>La Santa Barbería</strong>
+        </p>
+      </div>
+
+      <!-- Saludo -->
+      <p style="font-size:16px;color:#333;margin:0 0 20px;">
+        Hola <strong>${nombreCliente}</strong> 👋
+      </p>
+
+      <!-- Motivo -->
+      <div style="background:#f8f9ff;border-left:3px solid #4361ee;border-radius:0 8px 8px 0;padding:16px 20px;margin-bottom:28px;">
+        <p style="margin:0;color:#444;font-size:14px;line-height:1.7;">
+          ${motivo}
+        </p>
+      </div>
+
+      <!-- Plan recomendado -->
+      <div style="background:#fff;border:1.5px solid #e8eaff;border-radius:12px;overflow:hidden;margin-bottom:24px;">
+        <!-- Header plan -->
+        <div style="background:#4361ee;padding:16px 20px;">
+          <p style="margin:0;color:rgba(255,255,255,0.75);font-size:12px;text-transform:uppercase;letter-spacing:1px;font-weight:600;">
+            Plan recomendado
+          </p>
+          <p style="margin:4px 0 0;color:#fff;font-size:20px;font-weight:700;">
+            ${nombrePlanFinal}
+          </p>
+        </div>
+
+        <!-- Precio -->
+        ${
+          precioPlan
+            ? `
+        <div style="padding:16px 20px;border-bottom:1px solid #f0f0f0;">
+          <span style="font-size:28px;font-weight:700;color:#111;">${formatCLP(precioPlan)}</span>
+          <span style="font-size:14px;color:#888;margin-left:4px;">/ mes</span>
+        </div>
+        `
+            : ""
+        }
+
+        <!-- Beneficios -->
+        <div style="padding:20px;">
+          <table style="width:100%;border-collapse:collapse;">
+            <tr>
+              <td style="padding:10px 0;border-bottom:1px solid #f5f5f5;">
+                <span style="font-size:18px;">💰</span>
+                <span style="font-size:14px;color:#555;margin-left:8px;">Ahorro mensual</span>
+              </td>
+              <td style="text-align:right;font-weight:700;color:#111;font-size:15px;border-bottom:1px solid #f5f5f5;">
+                ${formatCLP(ahorroMensual)}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:10px 0;border-bottom:1px solid #f5f5f5;">
+                <span style="font-size:18px;">📅</span>
+                <span style="font-size:14px;color:#555;margin-left:8px;">Ahorro al año</span>
+              </td>
+              <td style="text-align:right;font-weight:700;color:#22c55e;font-size:15px;border-bottom:1px solid #f5f5f5;">
+                ${formatCLP(ahorroAnual)}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:10px 0;">
+                <span style="font-size:18px;">✂️</span>
+                <span style="font-size:14px;color:#555;margin-left:8px;">Equivale a cortes gratis</span>
+              </td>
+              <td style="text-align:right;font-weight:700;color:#111;font-size:15px;">
+                ${equivalenteCortes} cortes
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- Cómo activarlo -->
+      <div style="background:#f9fafb;border-radius:10px;padding:20px;margin-bottom:28px;">
+        <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#111;">¿Cómo activarlo?</p>
+        <p style="margin:0;font-size:14px;color:#555;line-height:1.7;">
+          Escríbele a tu barbero por WhatsApp. Él te explicará cómo funciona y cómo realizar el pago del plan.
+        </p>
+      </div>
+
+      <!-- CTA WhatsApp -->
+      <div style="text-align:center;margin-bottom:32px;">
+        <a href="${linkWhatsApp}"
+           style="display:inline-block;background:#25D366;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 28px;border-radius:10px;">
+          💬 Escribir al barbero por WhatsApp
+        </a>
+        <p style="margin:12px 0 0;color:#999;font-size:13px;">${whatsapp}</p>
+      </div>
+
+      <!-- Footer -->
+      <div style="border-top:1px solid #f0f0f0;padding-top:20px;text-align:center;">
+        <p style="margin:0;font-size:12px;color:#bbb;line-height:1.6;">
+          Este correo fue generado automáticamente según tu historial de visitas en ${nombreEmpresa}.<br/>
+          Si no deseas recibir más recomendaciones, responde este correo y lo gestionamos.
+        </p>
+      </div>
+    `),
+    text: `
+Hola ${nombreCliente},
+
+${nombreEmpresa} tiene un plan pensado para ti: ${nombrePlanFinal}.
+
+${motivo}
+
+${precioPlan ? `Precio: ${formatCLP(precioPlan)} / mes\n` : ""}
+Ahorro mensual: ${formatCLP(ahorroMensual)}
+Ahorro anual: ${formatCLP(ahorroAnual)}
+Equivale a: ${equivalenteCortes} cortes gratis
+
+Para activarlo, habla con tu barbero por WhatsApp:
+${whatsapp}
+${linkWhatsApp}
+
+Este correo fue generado automáticamente según tu historial de visitas.
+    `.trim(),
   });
 };
