@@ -113,7 +113,7 @@ export const crearSuscripcion = async (req, res) => {
       nombreCliente: usuario.nombre,
       fechaInicio: fechaInicio.toLocaleDateString("es-CL"),
       fechaFin: fechaFin.toLocaleDateString("es-CL"),
-      tipoPlan, 
+      tipoPlan,
     }).catch(console.error);
 
     return res.status(201).json({
@@ -379,7 +379,6 @@ export const listarSuscripciones = async (req, res) => {
   try {
     const filtro = { empresa: req.usuario.empresaId };
 
-    // Filtro por mes/año
     if (mes !== undefined && anio !== undefined) {
       const inicio = new Date(anio, mes, 1);
       inicio.setHours(0, 0, 0, 0);
@@ -388,7 +387,6 @@ export const listarSuscripciones = async (req, res) => {
       filtro.fechaInicio = { $gte: inicio, $lte: fin };
     }
 
-    // Solo activas
     if (activas === "true") {
       filtro.activa = true;
       filtro.fechaFin = { $gte: new Date() };
@@ -399,7 +397,40 @@ export const listarSuscripciones = async (req, res) => {
       .populate("usuario", "nombre apellido rut email telefono")
       .sort({ fechaInicio: -1 });
 
-    res.json({ ok: true, suscripciones });
+    const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
+    const SERVICIO_BARBA_ID = "6993a5495dada31f33304c19";
+
+    const suscripcionesConUso = await Promise.all(
+      suscripciones.map(async (sus) => {
+        const esCombo = sus.tipoPlan === "combo_visita_corte_barba";
+        const esBarba = sus.tipoPlan === "barba";
+
+        const reservas = await reservaModel
+          .find({
+            cliente: sus.usuario._id,
+            fecha: { $gte: sus.fechaInicio, $lte: new Date() },
+            estado: { $in: ["completada", "confirmada", "pendiente"] }, // excluye canceladas
+          })
+          .populate("servicio", "_id");
+
+        let serviciosUsados = 0;
+        for (const r of reservas) {
+          if (esCombo) {
+            if (r.servicio?._id?.toString() === SERVICIO_COMBO_ID)
+              serviciosUsados += 1;
+          } else if (esBarba) {
+            if (r.servicio?._id?.toString() === SERVICIO_BARBA_ID)
+              serviciosUsados += 1;
+          } else {
+            serviciosUsados += r.duracion >= 120 ? 2 : 1;
+          }
+        }
+
+        return { ...sus.toObject(), serviciosUsados };
+      }),
+    );
+
+    res.json({ ok: true, suscripciones: suscripcionesConUso });
   } catch (error) {
     console.error("Error al listar suscripciones:", error);
     res.status(500).json({ message: error.message });
