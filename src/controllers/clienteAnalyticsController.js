@@ -38,7 +38,7 @@ export const obtenerEstadoLookCliente = async (req, res) => {
    
     const empresaId = req.usuario.empresaId;
 
-     console.log(userId);
+
 
     const reservas = await reservaModel
       .find({ cliente: userId })
@@ -322,8 +322,7 @@ export const obtenerClientesCandidatosSuscripcion = async (req, res) => {
         )?.precio || 0,
     };
 
-    console.log("serviciosDB:", serviciosDB);
-    console.log("PRECIOS:", PRECIOS);
+
 
     for (const data of clientesMap.values()) {
       const { cliente, fechas, cortes, barbas, combos } = data;

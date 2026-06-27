@@ -1319,17 +1319,15 @@ export const responderConfirmacionAsistencia = async (req, res) => {
 
 export const reagendarReserva = async (req, res) => {
   try {
-    console.log("=== REAGENDAR INICIO ===");
-    console.log("params:", req.params);
-    console.log("body:", req.body);
+   
     const { id } = req.params; // ID reserva original
     const { fecha, hora } = req.body; // nuevo slot
     const adminId = req.usuario?.id;
 
-    console.log("fecha:", fecha, "hora:", hora);
+  
     // DEBE ESTAR ASÍ:
     if (!fecha || !hora) {
-      console.log("FALLA: fecha o hora vacíos");
+    
       return res.status(400).json({ message: "Fecha y hora son requeridas" });
     }
 
@@ -1352,13 +1350,6 @@ export const reagendarReserva = async (req, res) => {
       .findById(reservaOriginal.barbero)
       .populate("horariosDisponibles");
 
-    console.log("Validando con:", {
-      barbero: reservaOriginal.barbero._id,
-      servicio: reservaOriginal.servicio._id,
-      fecha,
-      hora,
-      duracion: reservaOriginal.duracion,
-    });
 
     // 2. Validar disponibilidad del nuevo slot
     const validacion = await validarDisponibilidad({

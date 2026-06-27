@@ -4,7 +4,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const sendBaseEmail = async ({ to, subject, html, text }) => {
   const result = await resend.emails.send({
-    from: "Agenda Fonfach <onboarding@resend.dev>",
+    from: "Agenda Fonfach <contacto@agendafonfach.cl>",
     to,
     subject,
     html,
