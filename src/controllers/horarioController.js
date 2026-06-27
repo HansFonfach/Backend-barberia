@@ -318,6 +318,14 @@ export const getHorasDisponibles = async (req, res) => {
       dayjs(r.fecha).tz("America/Santiago").format("HH:mm"),
     );
 
+    // 👇 NUEVO: contar cuántas reservas hay en cada hora exacta
+    const conteoReservasPorHora = {};
+    reservas.forEach((r) => {
+      const horaStr = dayjs(r.fecha).tz("America/Santiago").format("HH:mm");
+      conteoReservasPorHora[horaStr] =
+        (conteoReservasPorHora[horaStr] || 0) + 1;
+    });
+
     const vacacion = await ExcepcionHorarioModel.findOne({
       barbero: barberoId,
       tipo: "vacaciones",
@@ -358,6 +366,8 @@ export const getHorasDisponibles = async (req, res) => {
       .map((e) => e.horaInicio);
 
     const horasExtra = excepciones.filter((e) => e.tipo === "extra");
+    // 👇 NUEVO: set de horas que son "extra" (capacidad 2), para consultarlo rápido
+    const horasExtraSet = new Set(horasExtra.map((he) => he.horaInicio));
 
     /* ================= HORAS DISPONIBLES ================= */
     const horasDisponibles = new Set();
@@ -572,21 +582,19 @@ export const getHorasDisponibles = async (req, res) => {
         "America/Santiago",
       );
 
-      // Filtrar horas pasadas para usuarios normales
       if (!esPrivilegiado && inicio.isBefore(ahora)) return acc;
-
-      // Filtrar horas bloqueadas
       if (horasBloqueadas.includes(hora)) return acc;
-
-      // Si la hora tiene servicio exclusivo y no coincide, omitir
       if (mapaPermitidos[hora] && !mapaPermitidos[hora].includes(servicioId))
         return acc;
 
-      if (horasReservadas.includes(hora)) {
-        acc.push({ hora, estado: "reservada" });
-      } else {
-        acc.push({ hora, estado: "disponible" });
-      }
+      // 👇 NUEVO: capacidad 2 si es hora extra, 1 si es normal
+      const capacidad = horasExtraSet.has(hora) ? 2 : 1;
+      const ocupadas = conteoReservasPorHora[hora] || 0;
+
+      acc.push({
+        hora,
+        estado: ocupadas >= capacidad ? "reservada" : "disponible",
+      });
 
       return acc;
     }, []);

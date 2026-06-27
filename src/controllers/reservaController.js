@@ -326,15 +326,19 @@ export const createReserva = async (req, res) => {
     }
 
     let bloqueValido = null;
+    let esHoraExtra = false;
 
-    for (const h of horariosDelDia) {
+    // 👇 Primero revisamos las horas extra — tienen prioridad
+    for (const he of horasExtraDelDia) {
+      if (!he.horaFin) continue;
+
       const ini = dayjs.tz(
-        `${fecha} ${h.horaInicio}`,
+        `${fecha} ${he.horaInicio}`,
         "YYYY-MM-DD HH:mm",
         "America/Santiago",
       );
       const fin = dayjs.tz(
-        `${fecha} ${h.horaFin}`,
+        `${fecha} ${he.horaFin}`,
         "YYYY-MM-DD HH:mm",
         "America/Santiago",
       );
@@ -344,21 +348,21 @@ export const createReserva = async (req, res) => {
         finReservaChile.isSameOrBefore(fin)
       ) {
         bloqueValido = { inicio: ini, fin };
+        esHoraExtra = true;
         break;
       }
     }
 
+    // 👇 Si no matcheó ninguna hora extra, revisamos el horario normal
     if (!bloqueValido) {
-      for (const he of horasExtraDelDia) {
-        if (!he.horaFin) continue;
-
+      for (const h of horariosDelDia) {
         const ini = dayjs.tz(
-          `${fecha} ${he.horaInicio}`,
+          `${fecha} ${h.horaInicio}`,
           "YYYY-MM-DD HH:mm",
           "America/Santiago",
         );
         const fin = dayjs.tz(
-          `${fecha} ${he.horaFin}`,
+          `${fecha} ${h.horaFin}`,
           "YYYY-MM-DD HH:mm",
           "America/Santiago",
         );
@@ -374,7 +378,6 @@ export const createReserva = async (req, res) => {
     }
 
     if (!bloqueValido) {
- 
       return res.status(400).json({
         message: "El servicio no cabe en el horario del profesional",
       });
@@ -445,14 +448,39 @@ export const createReserva = async (req, res) => {
       estado: { $in: ["pendiente", "confirmada"] },
     });
 
-    for (const r of reservasDelDia) {
-      const ini = dayjs(r.fecha).tz("America/Santiago");
-      const fin = ini.add(r.duracion, "minute");
+    console.log(
+      "🔍 DEBUG reservasDelDia:",
+      reservasDelDia.map((r) => ({
+        fecha: dayjs(r.fecha).tz("America/Santiago").format("YYYY-MM-DD HH:mm"),
+        duracion: r.duracion,
+      })),
+    );
 
-      if (inicioReservaChile.isBefore(fin) && finReservaChile.isAfter(ini)) {
+    if (esHoraExtra) {
+      const CAPACIDAD_HORA_EXTRA = 2;
+
+      // 👇 Solo contar reservas que EMPIEZAN exactamente a la misma hora,
+      // no las que simplemente se solapan en el tiempo
+      const mismaHoraExacta = reservasDelDia.filter((r) => {
+        const ini = dayjs(r.fecha).tz("America/Santiago");
+        return ini.isSame(inicioReservaChile);
+      });
+
+      if (mismaHoraExacta.length >= CAPACIDAD_HORA_EXTRA) {
         return res.status(400).json({
-          message: "La hora ya está ocupada",
+          message: "Ya se alcanzó el cupo máximo para este horario extra",
         });
+      }
+    } else {
+      for (const r of reservasDelDia) {
+        const ini = dayjs(r.fecha).tz("America/Santiago");
+        const fin = ini.add(r.duracion, "minute");
+
+        if (inicioReservaChile.isBefore(fin) && finReservaChile.isAfter(ini)) {
+          return res.status(400).json({
+            message: "La hora ya está ocupada",
+          });
+        }
       }
     }
 
@@ -1319,15 +1347,12 @@ export const responderConfirmacionAsistencia = async (req, res) => {
 
 export const reagendarReserva = async (req, res) => {
   try {
-   
     const { id } = req.params; // ID reserva original
     const { fecha, hora } = req.body; // nuevo slot
     const adminId = req.usuario?.id;
 
-  
     // DEBE ESTAR ASÍ:
     if (!fecha || !hora) {
-    
       return res.status(400).json({ message: "Fecha y hora son requeridas" });
     }
 
@@ -1349,7 +1374,6 @@ export const reagendarReserva = async (req, res) => {
     const barberoDoc = await usuarioModel
       .findById(reservaOriginal.barbero)
       .populate("horariosDisponibles");
-
 
     // 2. Validar disponibilidad del nuevo slot
     const validacion = await validarDisponibilidad({
