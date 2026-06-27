@@ -4,7 +4,6 @@ import timezone from "dayjs/plugin/timezone.js";
 import excepcionHorarioModel from "../models/excepcionHorario.model.js";
 import reservaModel from "../models/reserva.model.js";
 
-
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
@@ -104,10 +103,6 @@ export const validarDisponibilidad = async ({
   }
 
   if (!bloqueValido) {
-    console.log("🔴 BLOQUEO EN createReserva");
-    console.log("horasExtraDelDia:", JSON.stringify(horasExtraDelDia, null, 2));
-    console.log("inicioReservaChile:", inicioReservaChile.format());
-    console.log("finReservaChile:", finReservaChile.format());
     return {
       ok: false,
       message: "El servicio no cabe en el horario del profesional",

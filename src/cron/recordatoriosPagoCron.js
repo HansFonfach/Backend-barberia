@@ -9,7 +9,6 @@ export const recordatorioPagoCron = {
   iniciar() {
     // Se ejecuta todos los días a las 9:00 AM
     cron.schedule("0 9 * * *", async () => {
-      console.log("🔔 Ejecutando cron recordatorio de pago...");
       await this.enviarRecordatoriosPago();
     });
   },
@@ -28,22 +27,11 @@ export const recordatorioPagoCron = {
         telefono: { $exists: true, $ne: null },
       });
 
-      console.log(`📋 Empresas con vencimiento hoy: ${empresas.length}`);
-
       for (const empresa of empresas) {
         const resultado = await whatsappService.enviarRecordatorioPago({
           telefono: empresa.telefono,
           nombreEmpresa: empresa.nombre,
         });
-
-        if (resultado.success) {
-          console.log(`✅ Recordatorio enviado a: ${empresa.nombre}`);
-        } else {
-          console.error(
-            `❌ Error enviando a ${empresa.nombre}:`,
-            resultado.error,
-          );
-        }
       }
     } catch (error) {
       console.error("❌ Error en cron recordatorio pago:", error.message);

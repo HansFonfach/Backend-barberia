@@ -11,8 +11,6 @@ export const sendBaseEmail = async ({ to, subject, html, text }) => {
     text,
   });
 
-  console.log("RESEND RESULT:", result);
-
   return result;
 };
 
@@ -436,19 +434,47 @@ export const sendProfesionalCancelReservationEmail = async (to, data) => {
 };
 
 export const sendRetentionEmail = async (to, data) => {
-  const { titulo, cuerpo, nombreEmpresa } = data;
+  const { titulo, cuerpo, nombreEmpresa, slotSugerido, linkAgendamiento } =
+    data;
+
+  const bloqueSlot =
+    slotSugerido && linkAgendamiento
+      ? `
+    <div style="background:#f8f9ff;border:1.5px solid #e8eaff;border-radius:12px;padding:20px;margin:24px 0;text-align:center;">
+      <p style="margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#888;font-weight:600;">
+        Tu próxima hora disponible
+      </p>
+      <p style="margin:8px 0;font-size:20px;font-weight:700;color:#111;">
+        ${slotSugerido.fecha}
+      </p>
+      <p style="margin:0 0 16px;font-size:24px;font-weight:800;color:#4361ee;">
+        🕐 ${slotSugerido.hora}
+      </p>
+      <a href="${linkAgendamiento}"
+         style="display:inline-block;background:#111;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 28px;border-radius:10px;">
+        ✅ Confirmar esta hora
+      </a>
+      <p style="margin:12px 0 0;font-size:12px;color:#aaa;">
+        Este enlace expira en 48 horas
+      </p>
+    </div>
+  `
+      : "";
 
   return await sendBaseEmail({
     to,
-    subject: `${titulo} – ${nombreEmpresa || "Agenda Fonfach"}`,
+    subject: `${titulo} – ${nombreEmpresa || "La Santa Barbería"}`,
     html: layout(`
-        <h2 style="margin-top:0;">${titulo}</h2>
-        <p style="color:#555;font-size:15px;line-height:1.7;">${cuerpo}</p>
-        <p style="color:#aaa;font-size:12px;margin-top:32px;">
-          Este recordatorio fue enviado por <strong>${nombreEmpresa || "Agenda Fonfach"}</strong>.
-        </p>
-      `),
-    text: `${titulo}\n\n${cuerpo.replace(/<[^>]*>/g, "")}`,
+      <h2 style="margin-top:0;">${titulo}</h2>
+      <p style="color:#555;font-size:15px;line-height:1.7;">${cuerpo}</p>
+      ${bloqueSlot}
+      <p style="color:#aaa;font-size:12px;margin-top:32px;">
+        Este recordatorio fue enviado por <strong>${nombreEmpresa || "La Santa Barbería"}</strong>.
+      </p>
+    `),
+    text: slotSugerido
+      ? `${titulo}\n\n${cuerpo.replace(/<[^>]*>/g, "")}\n\nTu próxima hora: ${slotSugerido.fecha} a las ${slotSugerido.hora}\nConfirmar: ${linkAgendamiento}`
+      : `${titulo}\n\n${cuerpo.replace(/<[^>]*>/g, "")}`,
   });
 };
 

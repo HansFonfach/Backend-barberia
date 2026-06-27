@@ -4,14 +4,22 @@ import {
   getReservaInfoPorToken,
   reservarComoInvitado,
 } from "../controllers/reservaInvitadoController.js";
+import {
+  obtenerDatosSlot,
+  confirmarSlotDesdeToken,
+} from "../controllers/confirmarSlotController.js";
 
 const router = Router();
 
-// 👇 Primero las rutas fijas
+// Rutas fijas primero
 router.post("/cancelar-reserva-invitado", cancelarReservaPorLink);
 router.get("/info-por-token", getReservaInfoPorToken);
 
-// 👇 Al final la dinámica
+// ✅ Confirmar slot desde correo de recordatorio
+router.get("/confirmar-slot", obtenerDatosSlot);
+router.post("/confirmar-slot", confirmarSlotDesdeToken);
+
+// Al final la dinámica
 router.post("/:slug", reservarComoInvitado);
 
 export default router;

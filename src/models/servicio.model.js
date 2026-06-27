@@ -12,7 +12,6 @@ const servicioSchema = new Schema({
   categoria: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Categoria", // 👈 ya estaba bien, ahora coincide con el modelo renombrado
-    required: true,
   },
 
   icono: {

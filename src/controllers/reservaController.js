@@ -374,13 +374,7 @@ export const createReserva = async (req, res) => {
     }
 
     if (!bloqueValido) {
-      console.log("🔴 BLOQUEO EN createReserva");
-      console.log(
-        "horasExtraDelDia:",
-        JSON.stringify(horasExtraDelDia, null, 2),
-      );
-      console.log("inicioReservaChile:", inicioReservaChile.format());
-      console.log("finReservaChile:", finReservaChile.format());
+ 
       return res.status(400).json({
         message: "El servicio no cabe en el horario del profesional",
       });

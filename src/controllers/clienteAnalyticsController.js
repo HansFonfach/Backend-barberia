@@ -33,8 +33,12 @@ const esCombo = (nombre = "") => {
 
 export const obtenerEstadoLookCliente = async (req, res) => {
   try {
-    const userId = req.usuario._id; // ✅ Corregido: userId no estaba definido
+    const userId = req.usuario.id; // ✅ Corregido: userId no estaba definido
+
+   
     const empresaId = req.usuario.empresaId;
+
+     console.log(userId);
 
     const reservas = await reservaModel
       .find({ cliente: userId })
@@ -142,20 +146,30 @@ export const obtenerEstadoLookCliente = async (req, res) => {
 
 export const obtenerClientesUnaVisitaNoRetornan = async (req, res) => {
   try {
-    const empresaId = req.usuario.empresaId;
+    const empresaId = "698de476677550fcd3d2209c" // ✅ desde el token
     const ahora = new Date();
+    const DIAS_MINIMOS = 20;
 
     const reservas = await reservaModel
       .find({
         empresa: empresaId,
-        estado: { $in: ["completada", "atendida"] },
+        estado: { $in: ["completada", "atendida", "terminada", "finalizada"] },
       })
-      .populate("cliente", "nombre apellido email telefono")
+      .populate("cliente", "nombre apellido email telefono rut")
       .sort({ fecha: 1 });
 
-    if (!reservas.length) {
-      return res.json({ success: true, data: [] });
-    }
+    if (!reservas.length) return res.json({ success: true, data: [] });
+
+    // ✅ Reservas futuras para excluir clientes que ya tienen hora
+    const reservasFuturas = await reservaModel.find({
+      empresa: empresaId,
+      fecha: { $gt: ahora },
+      estado: { $in: ["pendiente", "confirmada"] },
+    });
+
+    const clientesConHoraFutura = new Set(
+      reservasFuturas.map((r) => r.cliente?.toString()).filter(Boolean),
+    );
 
     const mapaClientes = new Map();
 
@@ -173,10 +187,19 @@ export const obtenerClientesUnaVisitaNoRetornan = async (req, res) => {
     const clientesPerdidos = [];
 
     mapaClientes.forEach((data) => {
+      // Solo 1 visita
       if (data.visitas.length !== 1) return;
+
+      const clienteId = data.cliente._id?.toString();
+
+      // ✅ Excluir si ya tiene hora futura
+      if (clientesConHoraFutura.has(clienteId)) return;
 
       const ultimaVisita = new Date(data.visitas[0]);
       const dias = Math.floor((ahora - ultimaVisita) / (1000 * 60 * 60 * 24));
+
+      // ✅ Solo los que llevan más de 20 días sin volver
+      if (dias < DIAS_MINIMOS) return;
 
       clientesPerdidos.push({
         cliente: data.cliente,
@@ -200,7 +223,6 @@ export const obtenerClientesUnaVisitaNoRetornan = async (req, res) => {
       .json({ success: false, message: "Error interno del servidor" });
   }
 };
-
 // =========================
 // MOTOR DE RECOMENDACIÓN
 // =========================
