@@ -13,7 +13,14 @@ const ExcepcionHorarioSchema = new Schema(
 
     tipo: {
       type: String,
-      enum: ["bloqueo_hora", "bloqueo", "hora_extra", "bloqueo_dia", "vacaciones" , "extra"],
+      enum: [
+        "bloqueo_hora",
+        "bloqueo",
+        "hora_extra",
+        "bloqueo_dia",
+        "vacaciones",
+        "extra",
+      ],
       required: true,
       index: true,
     },
@@ -24,6 +31,12 @@ const ExcepcionHorarioSchema = new Schema(
       index: true,
     },
 
+    serviciosPermitidos: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Servicio",
+      },
+    ],
     // Para vacaciones (rango)
     fechaInicio: Date,
     fechaFin: Date,

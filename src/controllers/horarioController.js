@@ -119,8 +119,6 @@ export const getHorasDisponibles = async (req, res) => {
     const usuario = req.usuario;
     const rolUsuario = req.usuario?.rol;
 
-   
-
     if (!fecha || !servicioId) {
       return res.status(400).json({ message: "Fecha y servicio requeridos" });
     }
@@ -534,25 +532,26 @@ export const getHorasDisponibles = async (req, res) => {
         }
       }
     }
-
+    const TZ = "America/Santiago";
     // Agregar horas extra
     horasExtra.forEach((he) => {
-      if (!he.horaFin) {
-        // registro viejo sin horaFin: lo agregamos igual para no romper compatibilidad,
-        // pero create Reserva lo va a validar de todas formas
-        horasDisponibles.add(he.horaInicio);
-        return;
+      // ✅ Si tiene servicios restringidos, verificar que el servicio solicitado esté permitido
+      if (he.serviciosPermitidos?.length > 0) {
+        const permitido = he.serviciosPermitidos
+          .map((s) => s.toString())
+          .includes(servicioId);
+        if (!permitido) return; // saltar esta hora extra para este servicio
       }
 
       const inicioExtra = dayjs.tz(
         `${fecha} ${he.horaInicio}`,
         "YYYY-MM-DD HH:mm",
-        "America/Santiago",
+        TZ,
       );
       const finExtra = dayjs.tz(
         `${fecha} ${he.horaFin}`,
         "YYYY-MM-DD HH:mm",
-        "America/Santiago",
+        TZ,
       );
       const finServicioEnExtra = inicioExtra.add(duracionServicio, "minute");
 
@@ -592,7 +591,6 @@ export const getHorasDisponibles = async (req, res) => {
       return acc;
     }, []);
 
- 
     return res.json({
       fecha,
       duracionServicio,

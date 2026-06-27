@@ -68,9 +68,14 @@ export const toggleHora = async (req, res) => {
     });
   }
 };
-
 export const agregarHoraExtra = async (req, res) => {
-  const { barbero, fecha, horaInicio, horaFin } = req.body;
+  const {
+    barbero,
+    fecha,
+    horaInicio,
+    horaFin,
+    serviciosPermitidos = [],
+  } = req.body;
   try {
     const fechaUTC = fechaChileToUTC(fecha);
 
@@ -80,6 +85,7 @@ export const agregarHoraExtra = async (req, res) => {
       horaInicio,
       horaFin,
       tipo: "extra",
+      serviciosPermitidos, // ✅
     });
 
     res.status(201).json({
