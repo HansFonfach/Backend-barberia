@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { detectarRecordatorios } from "../services/detectarRecordatorio.js";
 import { clasificarCliente } from "../helpers/clasificarCliente.js";
 import { generarMensajeRecordatorio } from "../helpers/generarMensajeRecordatorio.js";
+import { buscarSlotDisponible } from "../helpers/buscarSlotDisponible.js";
 import {
   sendBaseEmail,
   sendRetentionEmail,
@@ -24,11 +25,28 @@ const procesarRecordatorios = async () => {
         c.empresa, // 👈 ya viene populado con nombre y tipo
       );
 
-     
+      // 👇 Buscar la fecha más cercana real con la hora favorita del cliente
+      let slotSugerido = null;
+      let linkAgendamiento = null;
+
+      if (c.horaFavorita && c.barberoFavoritoId) {
+        slotSugerido = await buscarSlotDisponible({
+          barberoId: c.barberoFavoritoId,
+          servicioId: c.servicio._id,
+          horaFavorita: c.horaFavorita,
+          maxDias: 14,
+        });
+
+        if (slotSugerido) {
+          linkAgendamiento = `https://www.agendafonfach.cl/${c.empresa.slug}?barbero=${c.barberoFavoritoId}&servicio=${c.servicio._id}`;
+        }
+      }
 
       await sendRetentionEmail(c.cliente.email, {
         ...mensaje,
         nombreEmpresa: c.empresa?.nombre,
+        slotSugerido,
+        linkAgendamiento,
       });
 
       // 👇 findByIdAndUpdate es más seguro que c.save()
@@ -50,14 +68,10 @@ const init = () => {
   cron.schedule(
     "0 8 * * *", // minuto 0, hora 8, todos los días
     async () => {
-     
       const result = await procesarRecordatorios();
-      
     },
     { timezone: "America/Santiago" },
   );
-
-
 };
 
 // Para el router: fuerza el envío ahora mismo
