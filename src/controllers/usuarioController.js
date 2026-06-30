@@ -172,6 +172,80 @@ export const updatePerfil = async (req, res) => {
   }
 };
 
+export const updateUsuarioDesdeAdmin = async (req, res) => {
+  try {
+    const { nombre, apellido, correo, telefono } = req.body;
+    const { id } = req.params;
+    const empresaId = req.usuario.empresaId;
+
+    // ✅ NORMALIZAR CORREO: minúsculas y sin espacios
+    const correoNormalizado = correo?.toLowerCase().trim();
+
+    // 1. Validar que el usuario existe
+    const usuario = await usuarioModel.findOne({
+      _id: id,
+      empresa: empresaId,
+    });
+
+    if (!usuario) {
+      return res.status(404).json({
+        msg: "El usuario no existe o no pertenece a tu empresa",
+      });
+    }
+
+    // 2. Validar correo duplicado SOLO si cambió
+    // ✅ Comparar versiones normalizadas
+    const correoActualNormalizado = usuario.correo?.toLowerCase().trim();
+
+    if (correoNormalizado && correoNormalizado !== correoActualNormalizado) {
+      const correoExiste = await usuarioModel.findOne({
+        correo: correoNormalizado, // ← Guardar normalizado
+        empresa: empresaId,
+        _id: { $ne: id },
+      });
+
+      if (correoExiste) {
+        return res.status(400).json({
+          msg: "Ya existe un usuario con ese correo en tu empresa",
+        });
+      }
+    }
+
+    // 3. Preparar datos
+    const datosActualizar = {};
+    if (nombre) datosActualizar.nombre = nombre;
+    if (apellido) datosActualizar.apellido = apellido;
+    if (correoNormalizado) datosActualizar.correo = correoNormalizado; // ← Guardar normalizado
+    if (telefono) datosActualizar.telefono = telefono;
+
+    // 4. Actualizar
+    const usuarioActualizado = await usuarioModel.findByIdAndUpdate(
+      id,
+      datosActualizar,
+      { new: true, runValidators: true },
+    );
+
+    return res.status(200).json({
+      msg: "Usuario actualizado correctamente",
+      usuario: usuarioActualizado,
+    });
+  } catch (error) {
+    console.error("Error en updateUsuarioDesdeAdmin:", error);
+
+    if (error.code === 11000) {
+      return res.status(400).json({
+        msg: "Ya existe un usuario con ese correo en tu empresa",
+      });
+    }
+
+    return res.status(500).json({
+      msg: "Error interno del servidor",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+
 export const updateUsuario = async (req, res) => {
   try {
     const { id } = req.params;
@@ -420,7 +494,6 @@ export const crearBarbero = async (req, res) => {
 };
 export const getUsuarioByRutPublico = async (req, res) => {
   const { rut, slug } = req.params;
- 
 
   try {
     if (!rut || rut.trim() === "") {
