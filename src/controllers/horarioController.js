@@ -599,9 +599,8 @@ export const getHorasDisponibles = async (req, res) => {
 
       acc.push({
         hora,
-        estado: ocupadas >= capacidad ? "reservada" : "disponible",
+        estado: ocupadas >= 1 ? "reservada" : "disponible",
       });
-
       return acc;
     }, []);
 
