@@ -587,6 +587,12 @@ export const getHorasDisponibles = async (req, res) => {
       if (mapaPermitidos[hora] && !mapaPermitidos[hora].includes(servicioId))
         return acc;
 
+      if (
+        barberoServicio.horasPermitidas?.length > 0 &&
+        !barberoServicio.horasPermitidas.includes(hora)
+      )
+        return acc;
+
       // 👇 NUEVO: capacidad 2 si es hora extra, 1 si es normal
       const capacidad = horasExtraSet.has(hora) ? 2 : 1;
       const ocupadas = conteoReservasPorHora[hora] || 0;

@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { validarToken } from "../middlewares/validarToken.js";
 import {
+  actualizarHorasPermitidas,
+  actualizarHorasPermitidasBatch,
   asignarServiciosBarbero,
   obtenerServiciosDeBarbero,
 } from "../controllers/barberoServicioController.js";
@@ -14,7 +16,19 @@ router.post(
   asignarServiciosBarbero,
 );
 
+router.patch(
+  "/barberos/:barberoId/servicios/:servicioId/horas-permitidas",
+  validarToken,
+  actualizarHorasPermitidas,
+);
+
 // (Opcional pero MUY necesario para el front)
 router.get("/barberos/:barberoId/servicios", obtenerServiciosDeBarbero);
+
+router.patch(
+  "/barberos/:barberoId/horas-permitidas",
+  validarToken,
+  actualizarHorasPermitidasBatch,
+);
 
 export default router;
