@@ -191,7 +191,24 @@ export const sendGuestReservationEmail = async (to, data) => {
     direccion,
     telefonoEmpresa,
     mensajeCancelacionRecordatorio,
+    requiereAbono, // 👈 agregar
+    montoAbono, // 👈 agregar
+    datosPago, // 👈 agregar
   } = data;
+
+  const bloqueAbono = requiereAbono
+    ? `
+      <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:16px;margin-top:16px;">
+        <p style="margin:0 0 8px;"><strong>Debes transferir $${montoAbono.toLocaleString("es-CL")} para confirmar tu reserva.</strong></p>
+        <p style="margin:0;">Banco: ${datosPago.banco}<br/>
+        Tipo de cuenta: ${datosPago.tipoCuenta}<br/>
+        N° cuenta: ${datosPago.numeroCuenta}<br/>
+        Titular: ${datosPago.titular}<br/>
+        RUT: ${datosPago.rut}<br/>
+        Correo: ${datosPago.correo}</p>
+      </div>
+    `
+    : "";
 
   return await sendBaseEmail({
     to,
@@ -200,6 +217,7 @@ export const sendGuestReservationEmail = async (to, data) => {
       <h2 style="margin-top:0;">Reserva Confirmada 🗓️</h2>
       <p>Hola <strong>${nombreCliente}</strong>, tu reserva fue creada exitosamente.</p>
       ${detalles({ nombreBarbero, servicio, fecha, hora, direccion })}
+      ${bloqueAbono}
       ${bloqueInstrucciones(instrucciones)}
       ${bloquePolitica({ horasLimite, telefonoEmpresa, mensajeCancelacionRecordatorio })}
       ${
@@ -213,10 +231,13 @@ export const sendGuestReservationEmail = async (to, data) => {
             : ""
       }
     `),
-    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\nDirección: ${direccion ?? "No especificada"}${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${mensajeCancelacionRecordatorio ? `\n\n${mensajeCancelacionRecordatorio}` : horasLimite != null ? `\n\n⚠️ Puedes cancelar con al menos ${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación.${telefonoEmpresa ? ` Contáctate con tu profesional: ${telefonoEmpresa}` : ""}` : ""}${permiteCancelacion && cancelUrl && !mensajeCancelacionRecordatorio ? `\n\nCancelar reserva:\n${cancelUrl}` : !permiteCancelacion ? "\n\nEsta reserva no admite cancelaciones." : ""}`,
+    text: `Reserva confirmada\n\nHola ${nombreCliente}\n\nProfesional: ${nombreBarbero}\nServicio: ${servicio}\nFecha: ${fecha}\nHora: ${hora}\nDirección: ${direccion ?? "No especificada"}${
+      requiereAbono
+        ? `\n\nDebes transferir $${montoAbono.toLocaleString("es-CL")} para confirmar tu reserva.\nBanco: ${datosPago.banco}\nCuenta: ${datosPago.numeroCuenta}\nTitular: ${datosPago.titular}\nRUT: ${datosPago.rut}`
+        : ""
+    }${instrucciones ? `\n\nInstrucciones:\n${instrucciones}` : ""}${mensajeCancelacionRecordatorio ? `\n\n${mensajeCancelacionRecordatorio}` : horasLimite != null ? `\n\n⚠️ Puedes cancelar con al menos ${horasLimite} hora${horasLimite !== 1 ? "s" : ""} de anticipación.${telefonoEmpresa ? ` Contáctate con tu profesional: ${telefonoEmpresa}` : ""}` : ""}${permiteCancelacion && cancelUrl && !mensajeCancelacionRecordatorio ? `\n\nCancelar reserva:\n${cancelUrl}` : !permiteCancelacion ? "\n\nEsta reserva no admite cancelaciones." : ""}`,
   });
 };
-
 // ─────────────────────────────────────────────
 // EMAIL: Recordatorio de cita
 // ─────────────────────────────────────────────
