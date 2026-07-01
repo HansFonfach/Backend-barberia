@@ -229,6 +229,26 @@ const ReservaSchema = new Schema(
 
   { timestamps: true },
 );
+ReservaSchema.virtual("montoTotalReserva").get(function () {
+  const totalServicio =
+    this.totalServicio || this.servicioSnapshot?.precio || 0;
+  const totalProductos = this.totalProductos || 0;
+  const totalExtras = this.totalExtras || 0;
+
+  return totalServicio + totalProductos + totalExtras;
+});
+
+ReservaSchema.virtual("montoPendiente").get(function () {
+  const abonado = this.abono?.estado === "pagado" ? this.abono.monto || 0 : 0;
+
+  const pendiente = this.montoTotalReserva - abonado;
+  return pendiente > 0 ? pendiente : 0;
+});
+
+// 👇 ESTO es lo nuevo que falta agregar
+ReservaSchema.set("toJSON", { virtuals: true });
+ReservaSchema.set("toObject", { virtuals: true });
+
 ReservaSchema.index({ barbero: 1, fecha: 1, estado: 1 });
 ReservaSchema.index({ empresa: 1, fecha: 1 });
 

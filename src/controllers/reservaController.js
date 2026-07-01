@@ -1560,3 +1560,67 @@ export const actualizarReserva = async (req, res) => {
     res.status(400).json({ message: error.message });
   }
 };
+
+export const marcarAbono = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { monto } = req.body;
+
+    if (monto === undefined || monto === null || isNaN(monto)) {
+      return res.status(400).json({ message: "Debes indicar un monto válido" });
+    }
+
+    if (monto < 0) {
+      return res
+        .status(400)
+        .json({ message: "El monto no puede ser negativo" });
+    }
+
+    const reserva = await Reserva.findById(id);
+    if (!reserva) {
+      return res.status(404).json({ message: "Reserva no encontrada" });
+    }
+
+    const updateData = {
+      "abono.estado": "pagado",
+      "abono.monto": monto,
+      "abono.pagadoEn": new Date(),
+    };
+
+    const reservaActualizada = await Reserva.findByIdAndUpdate(id, updateData, {
+      new: true,
+    });
+
+    res.json({
+      message: "Abono registrado correctamente",
+      reserva: reservaActualizada,
+      montoPendiente: reservaActualizada.montoPendiente, // viene del virtual
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+export const revertirAbono = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const reservaActualizada = await Reserva.findByIdAndUpdate(
+      id,
+      {
+        "abono.estado": "pendiente",
+        "abono.monto": 0,
+        "abono.pagadoEn": null,
+      },
+      { new: true },
+    );
+
+    if (!reservaActualizada) {
+      return res.status(404).json({ message: "Reserva no encontrada" });
+    }
+
+    res.json({ message: "Abono revertido", reserva: reservaActualizada });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
