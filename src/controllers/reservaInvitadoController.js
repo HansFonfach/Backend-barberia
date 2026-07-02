@@ -22,10 +22,11 @@ export const reservarComoInvitado = async (req, res) => {
     return res.status(404).json({ message: "Empresa no encontrada" });
   }
 
-  // ✅ Buscar por RUT o email dentro de la misma empresa
+  // ✅ Buscar por RUT en TODA la empresa, sin importar el rol
+  // (tu índice único de rut es global, así que la búsqueda debe serlo también)
   let usuario = await usuarioModel.findOne({
     empresa: empresa._id,
-    $or: [{ rut }, { email }],
+    rut,
   });
 
   if (!usuario) {
@@ -38,15 +39,16 @@ export const reservarComoInvitado = async (req, res) => {
       rol: "invitado",
       empresa: empresa._id,
     });
-  } else {
+  } else if (usuario.rol === "invitado") {
+    // Solo actualizamos datos si es un invitado —
+    // no le pisamos el nombre/correo a alguien que ya es cliente con cuenta
     usuario.nombre = nombre;
     usuario.apellido = apellido;
     usuario.email = email;
     usuario.telefono = telefono;
-    if (rut) usuario.rut = rut;
-
     await usuario.save();
   }
+  // si usuario.rol === "cliente", lo dejamos intacto y solo lo usamos para la reserva
 
   req.usuario = {
     id: usuario._id,
@@ -58,7 +60,6 @@ export const reservarComoInvitado = async (req, res) => {
 
   return createReserva(req, res);
 };
-
 export const cancelarReservaPorLink = async (req, res) => {
   try {
     const { token } = req.body;

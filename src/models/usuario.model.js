@@ -70,7 +70,13 @@ const UsuarioSchema = new Schema(
 );
 
 UsuarioSchema.index({ empresa: 1, rut: 1 }, { unique: true, sparse: true });
-UsuarioSchema.index({ empresa: 1, email: 1 }, { unique: true });
+UsuarioSchema.index(
+  { empresa: 1, email: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { rol: "cliente" },
+  },
+);
 UsuarioSchema.index({ empresa: 1, rol: 1 });
 
 export default model("Usuario", UsuarioSchema);
