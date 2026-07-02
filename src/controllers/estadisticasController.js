@@ -533,7 +533,7 @@ export const getDashboardResumen = async (req, res) => {
       // 2. Total clientes
       usuarioModel.countDocuments({
         empresa: empresaId,
-        rol: "cliente",
+        rol: { $in: ["cliente", "invitado"] },
         estado: "activo",
       }),
 
