@@ -544,13 +544,15 @@ export const getHorasDisponibles = async (req, res) => {
     }
     const TZ = "America/Santiago";
     // Agregar horas extra
+
+    const horasExtraHabilitadas = new Set(); // 👈 nuevo
+
     horasExtra.forEach((he) => {
-      // ✅ Si tiene servicios restringidos, verificar que el servicio solicitado esté permitido
       if (he.serviciosPermitidos?.length > 0) {
         const permitido = he.serviciosPermitidos
           .map((s) => s.toString())
           .includes(servicioId);
-        if (!permitido) return; // saltar esta hora extra para este servicio
+        if (!permitido) return;
       }
 
       const inicioExtra = dayjs.tz(
@@ -567,6 +569,7 @@ export const getHorasDisponibles = async (req, res) => {
 
       if (finServicioEnExtra.isSameOrBefore(finExtra)) {
         horasDisponibles.add(he.horaInicio);
+        horasExtraHabilitadas.add(he.horaInicio); // 👈 nuevo
       }
     });
 
@@ -584,7 +587,11 @@ export const getHorasDisponibles = async (req, res) => {
 
       if (!esPrivilegiado && inicio.isBefore(ahora)) return acc;
       if (horasBloqueadas.includes(hora)) return acc;
-      if (mapaPermitidos[hora] && !mapaPermitidos[hora].includes(servicioId))
+      if (
+        mapaPermitidos[hora] &&
+        !mapaPermitidos[hora].includes(servicioId) &&
+        !horasExtraHabilitadas.has(hora) // 👈 nuevo: si vino de hora extra habilitada, no la bloquees
+      )
         return acc;
 
       if (
