@@ -1,6 +1,7 @@
 import barberoServicioModel from "../models/barberoServicio.model.js";
 import empresaModel from "../models/empresa.model.js";
 import Servicio from "../models/servicio.model.js";
+import { calcularPrecioServicio } from "../utils/calcularPreciosServicios.js";
 
 /**
  * Obtener todos los servicios de la empresa del usuario
@@ -65,8 +66,11 @@ export const updateServicio = async (req, res) => {
     duracion,
     instrucciones,
     cuidados,
-    categoriaId, // 👈 nuevo
+    categoriaId,
+    descuento, // 👈 nuevo: { activo, porcentaje, descripcion, fechaInicio, fechaFin }
   } = req.body;
+
+  console.log(descuento);
 
   try {
     const servicio = await Servicio.findOne({
@@ -87,6 +91,39 @@ export const updateServicio = async (req, res) => {
     servicio.cuidados = cuidados !== undefined ? cuidados : servicio.cuidados;
 
     servicio.categoria = categoriaId || servicio.categoria;
+
+    if (
+      descuento?.fechaInicio &&
+      descuento?.fechaFin &&
+      new Date(descuento.fechaInicio) > new Date(descuento.fechaFin)
+    ) {
+      return res.status(400).json({
+        message: "La fecha de inicio no puede ser posterior a la fecha de fin",
+      });
+    }
+
+    // 👇 NUEVO: actualizar descuento campo por campo, sin pisar lo que no venga
+    if (descuento !== undefined) {
+      if (descuento.activo !== undefined) {
+        servicio.descuento.activo = descuento.activo;
+      }
+      if (descuento.porcentaje !== undefined) {
+        servicio.descuento.porcentaje = descuento.porcentaje;
+      }
+      if (descuento.descripcion !== undefined) {
+        servicio.descuento.descripcion = descuento.descripcion;
+      }
+      if (descuento.fechaInicio !== undefined) {
+        servicio.descuento.fechaInicio = descuento.fechaInicio
+          ? new Date(descuento.fechaInicio)
+          : null;
+      }
+      if (descuento.fechaFin !== undefined) {
+        servicio.descuento.fechaFin = descuento.fechaFin
+          ? new Date(descuento.fechaFin)
+          : null;
+      }
+    }
 
     await servicio.save();
 
@@ -127,6 +164,9 @@ export const deleteServicio = async (req, res) => {
 
 export const getServiciosPublicos = async (req, res) => {
   const { slug } = req.params;
+  const { fecha } = req.query;
+
+  console.log(fecha);
 
   try {
     const empresa = await empresaModel.findOne({ slug });
@@ -168,13 +208,15 @@ export const getServiciosPublicos = async (req, res) => {
       serviciosMap[id].duraciones.push(bs.duracion);
     });
 
+    const fechaReserva = fecha ? new Date(fecha) : null;
+
     const servicios = Object.values(serviciosMap).map((s) => ({
       ...s,
+      precioFinal: calcularPrecioServicio(s, fechaReserva),
       duracionMin: Math.min(...s.duraciones),
       duracionMax: Math.max(...s.duraciones),
     }));
-
-    servicios.sort((a, b) => a.precio - b.precio);
+    servicios.sort((a, b) => a.precioFinal - b.precioFinal);
 
     res.json({
       servicios,

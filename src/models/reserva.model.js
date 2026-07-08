@@ -225,10 +225,32 @@ const ReservaSchema = new Schema(
       type: Date,
       default: null,
     },
+
+    descuento: {
+      activo: {
+        type: Boolean,
+        default: false,
+      },
+      porcentaje: {
+        type: Number,
+        min: 0,
+        max: 100,
+        default: 0,
+      },
+      descripcion: {
+        type: String,
+        default: null, // ej: "Descuento invierno"
+      },
+      fechaFin: {
+        type: Date,
+        default: null, // null = sin fecha de término, se apaga manualmente con "activo"
+      },
+    },
   },
 
   { timestamps: true },
 );
+
 ReservaSchema.virtual("montoTotalReserva").get(function () {
   const totalServicio =
     this.totalServicio || this.servicioSnapshot?.precio || 0;

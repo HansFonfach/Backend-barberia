@@ -287,7 +287,10 @@ export const createReserva = async (req, res) => {
       barberoServicio;
 
     // El precio viene del servicio poblado, no de BarberoServicio
-    const precioServicio = Number(barberoServicio.servicio?.precio ?? 0);
+    const servicioDoc = barberoServicio.servicio;
+    const precioServicio = servicioDoc?.calcularPrecioFinal
+      ? servicioDoc.calcularPrecioFinal(inicioReservaChile.toDate())
+      : Number(servicioDoc?.precio ?? 0);
 
     const nombreServicio = barberoServicio.servicio.nombre;
     const finReservaChile = inicioReservaChile.add(duracionServicio, "minute");
@@ -541,7 +544,6 @@ export const createReserva = async (req, res) => {
       servicio,
       fecha: inicioReservaUTC.toDate(),
       duracion: duracionServicio,
-      precio: precioServicio,
       estado: "pendiente",
       abono: abonoData, // 👈
       servicioSnapshot: {
