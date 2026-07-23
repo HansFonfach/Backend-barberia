@@ -206,8 +206,7 @@ export const estadoSuscripcionCliente = async (req, res) => {
         cliente: userId,
         fecha: {
           $gte: suscripcion.fechaInicio,
-          // Solo reservas que ya pasaron (asistencia confirmada implícita)
-          $lte: new Date(),
+          $lte: suscripcion.fechaFin, // 👈 antes decía new Date()
         },
         estado: { $ne: "cancelada" },
       })
@@ -340,7 +339,10 @@ export const getSuscripcionActiva = async (req, res) => {
     const reservas = await reservaModel
       .find({
         cliente: userId,
-        fecha: { $gte: sus.fechaInicio, $lte: sus.fechaFin },
+        fecha: {
+          $gte: sus.fechaInicio,
+          $lte: sus.fechaFin, // 👈 este ya está bien, no tocar
+        },
         estado: { $ne: "cancelada" },
       })
       .populate("servicio", "_id");
@@ -408,8 +410,8 @@ export const listarSuscripciones = async (req, res) => {
         const reservas = await reservaModel
           .find({
             cliente: sus.usuario._id,
-            fecha: { $gte: sus.fechaInicio, $lte: new Date() },
-            estado: { $in: ["completada", "confirmada", "pendiente"] }, // excluye canceladas
+            fecha: { $gte: sus.fechaInicio, $lte: sus.fechaFin }, // 👈 todo el período
+            estado: { $in: ["completada", "confirmada"] }, // excluye canceladas
           })
           .populate("servicio", "_id");
 

@@ -579,58 +579,6 @@ export const createReserva = async (req, res) => {
     }
 
     /* =============================
-   CONSUMIR CRÉDITO SUSCRIPCIÓN
-============================== */
-
-    const planesQueConsumenCredito = [
-      "creditos",
-      "padre_e_hijo",
-      "combo_visita_corte_barba",
-      "barba",
-    ];
-
-    const suscripcionActual = await suscripcionModel.findOne({
-      usuario: cliente,
-      empresa,
-      activa: true,
-      tipoPlan: { $in: planesQueConsumenCredito },
-      fechaInicio: { $lte: new Date() },
-      fechaFin: { $gte: new Date() },
-    });
-
-    if (suscripcionActual) {
-      // Para combo, solo consume si es el servicio específico
-      if (
-        suscripcionActual.tipoPlan === "combo_visita_corte_barba" &&
-        servicio.toString() !== SERVICIO_COMBO_ID
-      ) {
-        // No consumir crédito si no es el servicio del combo
-      }
-      // Para barba, solo consume si es el servicio de barba (ya validado arriba)
-      else if (
-        suscripcionActual.tipoPlan === "barba" &&
-        servicio.toString() !== SERVICIO_BARBA_ID
-      ) {
-        // No debería llegar aquí por la validación previa, pero por si acaso
-      } else {
-        // creditos, padre_e_hijo, barba con servicio correcto, combo con servicio correcto
-        const nuevosUsados = suscripcionActual.serviciosUsados + 1;
-        const agotar = nuevosUsados >= suscripcionActual.serviciosTotales;
-
-        await suscripcionModel.findByIdAndUpdate(suscripcionActual._id, {
-          $inc: { serviciosUsados: 1 },
-          ...(agotar && { $set: { activa: false } }),
-        });
-
-        if (agotar) {
-          await usuarioModel.findByIdAndUpdate(cliente, {
-            $set: { suscrito: false },
-          });
-        }
-      }
-    }
-
-    /* =============================
        RESPUESTA
     ============================== */
     res.status(201).json({
