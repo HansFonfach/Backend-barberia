@@ -1008,6 +1008,44 @@ export const getProximaHoraDisponible = async (req, res) => {
     });
   }
 };
+// ─── Helper: ¿este slot de `duracionSlot` min a partir de `hora` se solapa
+//     con alguna reserva ACTIVA (misma noción que usa el cliente)? ───
+const _slotSeSolapaConReserva = (hora, fecha, reservas, duracionSlot = 30) => {
+  const inicioSlot = dayjs.tz(
+    `${fecha} ${hora}`,
+    "YYYY-MM-DD HH:mm",
+    "America/Santiago",
+  );
+  const finSlot = inicioSlot.add(duracionSlot, "minute");
+
+  return reservas.some((r) => {
+    const inicioR = dayjs(r.fecha).tz("America/Santiago");
+    const finR = inicioR.add(r.duracion || 30, "minute");
+    return inicioR.isBefore(finSlot) && finR.isAfter(inicioSlot);
+  });
+};
+
+// ─── Helper: CUÁNTAS reservas activas se solapan con este slot (para
+//     poder respetar la capacidad extra = 2, igual que hace el cliente
+//     con `contarSolapamientos`). Sin esto, una hora con capacidad extra
+//     disponible se marca "ocupada" apenas hay UNA reserva encima, en vez
+//     de solo cuando se llega al tope real de capacidad. ───
+const _contarSolapamientos = (hora, fecha, reservas, duracionSlot = 30) => {
+  const inicioSlot = dayjs.tz(
+    `${fecha} ${hora}`,
+    "YYYY-MM-DD HH:mm",
+    "America/Santiago",
+  );
+  const finSlot = inicioSlot.add(duracionSlot, "minute");
+
+  return reservas.filter((r) => {
+    const inicioR = dayjs(r.fecha).tz("America/Santiago");
+    const finR = inicioR.add(r.duracion || 30, "minute");
+    return inicioR.isBefore(finSlot) && finR.isAfter(inicioSlot);
+  }).length;
+};
+
+const CAPACIDAD_EXTRA = 2; // 1 normal + 1 extra, igual que en getHorasDisponibles
 
 export const getHorasProfesionalPorDia = async (req, res) => {
   try {
@@ -1041,6 +1079,9 @@ export const getHorasProfesionalPorDia = async (req, res) => {
     const feriado = await verificarFeriadoConComportamiento(fecha);
 
     // ─── RESERVAS DEL DÍA ───
+    // 🔧 FIX: mismo filtro de estado que usa el cliente (getHorasDisponibles).
+    // "terminada" / "completada" NO deben bloquear disponibilidad, o el admin
+    // ve como "ocupada" una hora que el cliente ve libre.
     const inicioBusqueda = fechaConsulta
       .startOf("day")
       .subtract(4, "hour")
@@ -1055,29 +1096,67 @@ export const getHorasProfesionalPorDia = async (req, res) => {
     const reservas = await Reserva.find({
       barbero: barberoId,
       fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
-      estado: { $in: ["pendiente", "confirmada", "terminada", "completada"] },
+      estado: { $in: ["pendiente", "confirmada"] }, // 🔧 antes incluía terminada/completada
     })
       .populate("cliente", "nombre email telefono")
       .populate("servicio", "nombre");
 
-    // Map rápido hora → reserva (solo el inicio)
+    // Si además quieres mostrarle al admin el historial del día (citas ya
+    // realizadas), tráelas aparte SOLO para mostrar info, sin que afecten
+    // el cálculo de disponibilidad:
+    const reservasHistoricas = await Reserva.find({
+      barbero: barberoId,
+      fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
+      estado: { $in: ["terminada", "completada"] },
+    })
+      .populate("cliente", "nombre email telefono")
+      .populate("servicio", "nombre");
+
+    // Map rápido hora → reserva (solo el inicio) — activas
     const mapaReservas = {};
     reservas.forEach((r) => {
       const hora = dayjs(r.fecha).tz("America/Santiago").format("HH:mm");
       mapaReservas[hora] = r;
     });
 
+    // Map de históricas, para poder mostrarlas sin que bloqueen nada
+    const mapaHistoricas = {};
+    reservasHistoricas.forEach((r) => {
+      const hora = dayjs(r.fecha).tz("America/Santiago").format("HH:mm");
+      mapaHistoricas[hora] = r;
+    });
+
     // ─── HORAS OCUPADAS POR DESBORDE ───
-    const horasOcupadasPorReserva = new Set();
-    reservas.forEach((r) => {
-      const inicio = dayjs(r.fecha).tz("America/Santiago");
-      const duracion = r.duracion || 30;
-      let cursor = inicio;
-      while (cursor.isBefore(inicio.add(duracion, "minute"))) {
-        horasOcupadasPorReserva.add(cursor.format("HH:mm"));
+    // 🔧 FIX: solapamiento real de intervalos en vez de un cursor ciego de
+    // 30 en 30 desde la hora exacta de la reserva (fallaba si la reserva no
+    // arrancaba alineada a la grilla de 30 min).
+    const todasLasHorasPosibles = new Set();
+    // Generamos el universo de horas candidatas a partir de los horarios del
+    // día (igual que hace el loop de más abajo), para evaluar solapamiento.
+    for (const horario of horariosDelDia) {
+      let cursor = dayjs.tz(
+        `${fecha} ${horario.horaInicio}`,
+        "YYYY-MM-DD HH:mm",
+        "America/Santiago",
+      );
+      const fin = dayjs.tz(
+        `${fecha} ${horario.horaFin}`,
+        "YYYY-MM-DD HH:mm",
+        "America/Santiago",
+      );
+      while (cursor.isBefore(fin)) {
+        todasLasHorasPosibles.add(cursor.format("HH:mm"));
         cursor = cursor.add(30, "minute");
       }
-    });
+    }
+
+    const horasOcupadasPorReserva = new Set(
+      [...todasLasHorasPosibles].filter(
+        (hora) =>
+          !mapaReservas[hora] && // no es el inicio de una reserva (esa ya se marca "reservada")
+          _slotSeSolapaConReserva(hora, fecha, reservas),
+      ),
+    );
 
     // ─── EXCEPCIONES ───
     const inicioDiaUTC = fechaConsulta.startOf("day").utc().toDate();
@@ -1127,7 +1206,6 @@ export const getHorasProfesionalPorDia = async (req, res) => {
     }
 
     // 2. Horas del horario base
-
     for (const horario of horariosDelDia) {
       const usaAncla =
         empresaDoc?.configuracion?.usaHorasAncla === true &&
@@ -1163,9 +1241,7 @@ export const getHorasProfesionalPorDia = async (req, res) => {
         "America/Santiago",
       );
 
-      let iteraciones = 0;
       while (cursor.isBefore(fin)) {
-        iteraciones++;
         if (usaAncla) {
           for (const ancla of horario.horasAncla) {
             const hora = ancla.hora;
@@ -1218,6 +1294,9 @@ export const getHorasProfesionalPorDia = async (req, res) => {
           } else if (horasOcupadasPorReserva.has(hora)) {
             resultado.set(hora, { hora, estado: "ocupada", esDesborde: true });
           } else {
+            // 🔧 Antes podía quedar "ocupada" indebidamente; ahora si no hay
+            // solapamiento real con ninguna reserva activa, queda disponible
+            // y por lo tanto bloqueable — igual que lo ve el cliente.
             resultado.set(hora, { hora, estado: "disponible" });
           }
         }
@@ -1227,47 +1306,85 @@ export const getHorasProfesionalPorDia = async (req, res) => {
     }
 
     // 3. Horas extra
+    // 🔧 CORRECCIÓN DE CONCEPTO: una excepción "extra" NO es una sucesión de
+    // slots de 30 min cada uno reservable por separado. Es UN solo punto de
+    // inicio reservable (extra.horaInicio) con capacidad extra (2 cupos), y
+    // extra.horaFin es solo el margen de duración disponible para que quepa
+    // un servicio largo — exactamente como lo calcula getHorasDisponibles
+    // (el cliente), que solo evalúa `he.horaInicio` como posible inicio.
+    // Antes generábamos una fila "Extra" por cada slot de 30 min dentro del
+    // rango (13:30, 14:00, 14:30...), lo cual no corresponde a nada
+    // reservable real para el cliente y solo generaba confusión + el bug
+    // del botón "Eliminar" mandando una hora que no existe en la BD.
     horasExtra.forEach((extra) => {
-      let cursor = dayjs(`${fecha} ${extra.horaInicio}`, "YYYY-MM-DD HH:mm");
+      const hora = extra.horaInicio; // único punto de inicio real, ej "13:30"
 
-      const fin = dayjs(`${fecha} ${extra.horaFin}`, "YYYY-MM-DD HH:mm");
+      if (mapaReservas[hora]) {
+        // Ya hay una reserva que arranca justo en el inicio de la hora extra.
+        // Igual calculamos cupoUsado/cupoTotal: aunque el estado visual sea
+        // "reservada", la hora extra puede seguir teniendo capacidad para
+        // una SEGUNDA reserva en paralelo (ej. 1 de 2 cupos usados).
+        const solapandoConReserva = _contarSolapamientos(hora, fecha, reservas);
+        resultado.set(hora, {
+          hora,
+          estado: "reservada",
+          esExtra: true,
+          horaInicioOriginal: extra.horaInicio,
+          horaFinExtra: extra.horaFin,
+          cupoUsado: solapandoConReserva,
+          cupoTotal: CAPACIDAD_EXTRA,
+          tieneCupoLibre: solapandoConReserva < CAPACIDAD_EXTRA,
+          reserva: _miniReserva(mapaReservas[hora]),
+        });
+      } else {
+        // ¿Cuántas reservas activas se solapan con el punto de inicio de
+        // esta hora extra? (igual noción de capacidad que usa el cliente)
+        const solapando = _contarSolapamientos(hora, fecha, reservas);
 
-      while (cursor.isBefore(fin)) {
-        const hora = cursor.format("HH:mm");
-
-        if (mapaReservas[hora]) {
-          resultado.set(hora, {
-            hora,
-            estado: "reservada",
-            esExtra: true,
-            reserva: _miniReserva(mapaReservas[hora]),
-          });
-        } else if (horasOcupadasPorReserva.has(hora)) {
+        if (solapando >= CAPACIDAD_EXTRA) {
           resultado.set(hora, {
             hora,
             estado: "ocupada",
             esExtra: true,
             esDesborde: true,
+            horaInicioOriginal: extra.horaInicio,
           });
         } else {
           resultado.set(hora, {
             hora,
             estado: "extra",
             esExtra: true,
+            horaInicioOriginal: extra.horaInicio,
+            horaFinExtra: extra.horaFin, // para mostrar "13:30 → 15:00" si quieres
+            cupoUsado: solapando,
+            cupoTotal: CAPACIDAD_EXTRA,
           });
         }
-
-        cursor = cursor.add(30, "minute");
       }
     });
 
-    // 4. Reservas edge case
+    // 4. Reservas edge case (activas que no cayeron en ningún bloque/extra)
     Object.entries(mapaReservas).forEach(([hora, r]) => {
       if (!resultado.has(hora)) {
         resultado.set(hora, {
           hora,
           estado: "reservada",
           esExtra: true,
+          reserva: _miniReserva(r),
+        });
+      }
+    });
+
+    // 5. Históricas (terminada/completada): se muestran informativamente
+    //    SOLO si el slot no quedó ya definido por algo más relevante.
+    //    Nunca bloquean ni pisan un estado "disponible"/"reservada" real.
+    Object.entries(mapaHistoricas).forEach(([hora, r]) => {
+      const actual = resultado.get(hora);
+      if (!actual || actual.estado === "disponible") {
+        resultado.set(hora, {
+          hora,
+          estado: "reservada",
+          esHistorica: true,
           reserva: _miniReserva(r),
         });
       }

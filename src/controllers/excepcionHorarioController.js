@@ -101,6 +101,8 @@ export const agregarHoraExtra = async (req, res) => {
 export const eliminarHoraExtra = async (req, res) => {
   const { barbero, fecha, horaInicio } = req.body;
 
+  console.log(fecha);
+
   try {
     const fechaUTC = fechaChileToUTC(fecha);
 
