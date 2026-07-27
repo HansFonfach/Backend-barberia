@@ -127,7 +127,8 @@ const ReservaSchema = new Schema(
     },
 
     recordatorioEnviado: { type: Boolean, default: false }, // 24h — ya existe
-    recordatorio3hEnviado: { type: Boolean, default: false }, // 3h — agregar esto
+    recordatorio3hEnviado: { type: Boolean, default: false }, // 3h — ya existe
+    whatsappBotonesEnviado: { type: Boolean, default: false }, // 🆕 flag independiente para el whatsapp con botones
 
     confirmacionAsistencia: {
       solicitada: { type: Boolean, default: false },
@@ -138,6 +139,16 @@ const ReservaSchema = new Schema(
       respondidaEn: { type: Date },
     },
     confirmacionAsistenciaEnviada: { type: Boolean, default: false }, // flag para el cron
+
+    // 🆕 Confirmación vía WhatsApp con botones (3h antes) — independiente del correo
+    confirmacionAsistenciaWhatsapp: {
+      solicitada: { type: Boolean, default: false },
+      respondida: { type: Boolean, default: false },
+      respuesta: { type: String, enum: ["confirma", "cancela"], default: null },
+      token: { type: String, default: null }, // para el botón de WhatsApp
+      enviadaEn: { type: Date },
+      respondidaEn: { type: Date },
+    },
 
     // SNAPSHOT DEL SERVICIO
     servicioSnapshot: {

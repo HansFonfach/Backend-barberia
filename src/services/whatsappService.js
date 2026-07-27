@@ -111,6 +111,8 @@ class WhatsAppService {
   }) {
     try {
       const telefonoFormateado = this.formatearTelefono(telefono);
+      const telefonoClienteFormateado =
+        "+" + this.formatearTelefono(telefonoCliente);
 
       const body = {
         messaging_product: "whatsapp",
@@ -128,7 +130,7 @@ class WhatsAppService {
                 { type: "text", text: fecha || "-" },
                 { type: "text", text: hora || "-" },
                 { type: "text", text: servicio || "-" },
-                { type: "text", text: telefonoCliente || "-" },
+                { type: "text", text: telefonoClienteFormateado || "-" },
               ],
             },
           ],
@@ -143,7 +145,7 @@ class WhatsAppService {
         },
         body: JSON.stringify(body),
       });
-
+      enviarNotificacionProfesional;
       const data = await res.json();
 
       if (!res.ok) {
@@ -260,6 +262,87 @@ class WhatsAppService {
       return { success: true, data };
     } catch (error) {
       console.error("❌ Error enviando cancelación al cliente:", error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /* =============================
+   RECORDATORIO CON CONFIRMAR/CANCELAR (botones)
+============================== */
+  async enviarRecordatorioConBotones({
+    telefono,
+    nombreCliente,
+    nombreEmpresa,
+    nombreProfesional,
+    fecha,
+    hora,
+    servicio,
+    direccion,
+    telefonoEmpresa,
+    token, // 👈 el mismo token que ya generas para el email
+  }) {
+    try {
+      const telefonoFormateado = this.formatearTelefono(telefono);
+
+      const body = {
+        messaging_product: "whatsapp",
+        to: telefonoFormateado,
+        type: "template",
+        template: {
+          name: "recordatorio_cita_con_confirmacion",
+          language: { code: "es" },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: nombreCliente || "-" },
+                { type: "text", text: nombreEmpresa || "-" },
+                { type: "text", text: nombreProfesional || "-" },
+                { type: "text", text: fecha || "-" },
+                { type: "text", text: hora || "-" },
+                { type: "text", text: servicio || "-" },
+                { type: "text", text: direccion || "-" },
+                { type: "text", text: telefonoEmpresa || "-" },
+              ],
+            },
+            {
+              type: "button",
+              sub_type: "url",
+              index: "0", // botón "Confirmar asistencia"
+              parameters: [{ type: "text", text: token }],
+            },
+            {
+              type: "button",
+              sub_type: "url",
+              index: "1", // botón "Cancelar asistencia"
+              parameters: [{ type: "text", text: token }],
+            },
+          ],
+        },
+      };
+
+      const res = await fetch(this.apiUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("❌ Error Meta API (recordatorio con botones):", data);
+        return { success: false, error: data };
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error(
+        "❌ Error enviando recordatorio con botones:",
+        error.message,
+      );
       return { success: false, error: error.message };
     }
   }

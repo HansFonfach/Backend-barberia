@@ -13,6 +13,8 @@ import {
   actualizarReserva,
   marcarAbono,
   revertirAbono,
+  confirmarAsistenciaWhatsapp,
+  cancelarAsistenciaWhatsapp,
 } from "../controllers/reservaController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 import { optionalAuth } from "../middlewares/optionalAuth.js";
@@ -38,5 +40,8 @@ router.patch("/:id/no-asistio", validarToken, updateMarcarNoAsistioReserva);
 
 router.patch("/:id/marcarAbono", validarToken, marcarAbono);
 router.patch("/:id/revertirAbono", validarToken, revertirAbono);
+
+router.get("/confirmar-reserva", confirmarAsistenciaWhatsapp);
+router.get("/cancelar-reserva", cancelarAsistenciaWhatsapp);
 
 export default router;

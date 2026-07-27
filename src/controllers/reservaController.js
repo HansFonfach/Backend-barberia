@@ -1574,3 +1574,102 @@ export const revertirAbono = async (req, res) => {
     res.status(400).json({ message: error.message });
   }
 };
+
+// GET /confirmar-reserva?token=xxx  (botón "Confirmar asistencia")
+export const confirmarAsistenciaWhatsapp = async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    const reserva = await Reserva.findOne({
+      "confirmacionAsistenciaWhatsapp.token": token,
+    })
+      .populate("cliente", "nombre email telefono")
+      .populate("barbero", "nombre apellido email")
+      .populate("servicio", "nombre")
+      .populate("empresa");
+
+    if (!reserva) {
+      return res.status(404).json({ error: "token" });
+    }
+
+    const slug = reserva.empresa?.slug || "";
+
+    if (reserva.confirmacionAsistenciaWhatsapp.respondida) {
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/${slug}/ya-respondiste?respuesta=${reserva.confirmacionAsistenciaWhatsapp.respuesta}`,
+      );
+    }
+
+    if (reserva.fecha < new Date()) {
+      return res.redirect(`${process.env.FRONTEND_URL}/${slug}/link-expirado`);
+    }
+
+    reserva.confirmacionAsistenciaWhatsapp.respondida = true;
+    reserva.confirmacionAsistenciaWhatsapp.respuesta = "confirma";
+    reserva.confirmacionAsistenciaWhatsapp.respondidaEn = new Date();
+    reserva.confirmacionUsuario = true;
+    reserva.fechaConfirmacion = new Date();
+    reserva.estado = "confirmada";
+    await reserva.save();
+
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/${slug}/reserva-confirmada`,
+    );
+  } catch (error) {
+    console.error("❌ Error confirmarAsistenciaWhatsapp:", error);
+    return res.status(500).json({ error: "servidor" });
+  }
+};
+
+// GET /cancelar-reserva?token=xxx  (botón "Cancelar asistencia")
+export const cancelarAsistenciaWhatsapp = async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    const reserva = await Reserva.findOne({
+      "confirmacionAsistenciaWhatsapp.token": token,
+    })
+      .populate("cliente", "nombre email telefono")
+      .populate("barbero", "nombre apellido email")
+      .populate("servicio", "nombre")
+      .populate("empresa");
+
+    if (!reserva) {
+      return res.status(404).json({ error: "token" });
+    }
+
+    const slug = reserva.empresa?.slug || "";
+
+    if (reserva.confirmacionAsistenciaWhatsapp.respondida) {
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/${slug}/ya-respondiste?respuesta=${reserva.confirmacionAsistenciaWhatsapp.respuesta}`,
+      );
+    }
+
+    if (reserva.fecha < new Date()) {
+      return res.redirect(`${process.env.FRONTEND_URL}/${slug}/link-expirado`);
+    }
+
+    reserva.confirmacionAsistenciaWhatsapp.respondida = true;
+    reserva.confirmacionAsistenciaWhatsapp.respuesta = "cancela";
+    reserva.confirmacionAsistenciaWhatsapp.respondidaEn = new Date();
+
+    const resultado = await procesarCancelacionReserva(
+      reserva,
+      "Cancelada por el cliente desde WhatsApp",
+    );
+
+    if (resultado.error === "politica") {
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/${slug}/no-se-puede-cancelar`,
+      );
+    }
+
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/${slug}/reserva-cancelada`,
+    );
+  } catch (error) {
+    console.error("❌ Error cancelarAsistenciaWhatsapp:", error);
+    return res.status(500).json({ error: "servidor" });
+  }
+};

@@ -35,10 +35,7 @@ export const obtenerEstadoLookCliente = async (req, res) => {
   try {
     const userId = req.usuario.id; // ✅ Corregido: userId no estaba definido
 
-   
     const empresaId = req.usuario.empresaId;
-
-
 
     const reservas = await reservaModel
       .find({ cliente: userId })
@@ -146,62 +143,63 @@ export const obtenerEstadoLookCliente = async (req, res) => {
 
 export const obtenerClientesUnaVisitaNoRetornan = async (req, res) => {
   try {
-    const empresaId = "698de476677550fcd3d2209c" // ✅ desde el token
     const ahora = new Date();
     const DIAS_MINIMOS = 20;
 
+    // 🔴 Ya NO filtramos por empresa: trae reservas de todas
     const reservas = await reservaModel
       .find({
-        empresa: empresaId,
         estado: { $in: ["completada", "atendida", "terminada", "finalizada"] },
       })
       .populate("cliente", "nombre apellido email telefono rut")
       .sort({ fecha: 1 });
 
-    if (!reservas.length) return res.json({ success: true, data: [] });
+    if (!reservas.length)
+      return res.json({ success: true, total: 0, data: [] });
 
-    // ✅ Reservas futuras para excluir clientes que ya tienen hora
     const reservasFuturas = await reservaModel.find({
-      empresa: empresaId,
       fecha: { $gt: ahora },
       estado: { $in: ["pendiente", "confirmada"] },
     });
 
     const clientesConHoraFutura = new Set(
-      reservasFuturas.map((r) => r.cliente?.toString()).filter(Boolean),
+      reservasFuturas
+        .map((r) => `${r.empresa}_${r.cliente?.toString()}`)
+        .filter(Boolean),
     );
 
+    // 🔑 clave compuesta: empresa + cliente (para no mezclar clientes del mismo id en distintas empresas)
     const mapaClientes = new Map();
 
     reservas.forEach((r) => {
-      const id = r.cliente?._id?.toString();
-      if (!id) return;
+      const clienteId = r.cliente?._id?.toString();
+      if (!clienteId) return;
 
-      if (!mapaClientes.has(id)) {
-        mapaClientes.set(id, { cliente: r.cliente, visitas: [] });
+      const key = `${r.empresa}_${clienteId}`;
+
+      if (!mapaClientes.has(key)) {
+        mapaClientes.set(key, {
+          empresa: r.empresa,
+          cliente: r.cliente,
+          visitas: [],
+        });
       }
-
-      mapaClientes.get(id).visitas.push(r.fecha);
+      mapaClientes.get(key).visitas.push(r.fecha);
     });
 
     const clientesPerdidos = [];
 
-    mapaClientes.forEach((data) => {
-      // Solo 1 visita
+    mapaClientes.forEach((data, key) => {
       if (data.visitas.length !== 1) return;
-
-      const clienteId = data.cliente._id?.toString();
-
-      // ✅ Excluir si ya tiene hora futura
-      if (clientesConHoraFutura.has(clienteId)) return;
+      if (clientesConHoraFutura.has(key)) return;
 
       const ultimaVisita = new Date(data.visitas[0]);
       const dias = Math.floor((ahora - ultimaVisita) / (1000 * 60 * 60 * 24));
 
-      // ✅ Solo los que llevan más de 20 días sin volver
       if (dias < DIAS_MINIMOS) return;
 
       clientesPerdidos.push({
+        empresa: data.empresa,
         cliente: data.cliente,
         totalVisitas: 1,
         ultimaVisita,
@@ -321,8 +319,6 @@ export const obtenerClientesCandidatosSuscripcion = async (req, res) => {
           (s) => s._id.toString() === IDS_SERVICIOS_SUSCRIPCION.combo,
         )?.precio || 0,
     };
-
-
 
     for (const data of clientesMap.values()) {
       const { cliente, fechas, cortes, barbas, combos } = data;

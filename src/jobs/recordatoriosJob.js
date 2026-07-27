@@ -389,6 +389,82 @@ class RecordatoriosJob {
       console.error("❌ Error en enviarCuidadosPosteriores:", error);
     }
   }
+
+  /* =============================
+   RECORDATORIO 3H CON WHATSAPP + BOTONES (nuevo, independiente)
+============================== */
+  async enviarRecordatorioWhatsappBotones3h() {
+    try {
+      const ahora = dayjs().utc();
+      const desde = ahora.add(2, "hour").add(45, "minute").toDate();
+      const hasta = ahora.add(3, "hour").add(15, "minute").toDate();
+
+      const reservas = await Reserva.find({
+        fecha: { $gte: desde, $lte: hasta },
+        estado: { $in: ["pendiente", "confirmada"] },
+        whatsappBotonesEnviado: { $ne: true }, // 👈 campo nuevo, no toca los otros flags
+      })
+        .populate("servicio", "nombre instrucciones")
+        .populate("barbero", "nombre apellido")
+        .populate(
+          "empresa",
+          "nombre direccion telefono politicaCancelacion slug",
+        );
+
+      for (const reserva of reservas) {
+        try {
+          const resultado = await this.obtenerDatosReserva(reserva);
+          if (!resultado) continue;
+
+          const { cliente, datos, esHorarioTemprano } = resultado;
+
+          // Marca antes de enviar, para evitar duplicados si el cron corre en paralelo
+          const yaActualizada = await Reserva.findOneAndUpdate(
+            { _id: reserva._id, whatsappBotonesEnviado: { $ne: true } },
+            { whatsappBotonesEnviado: true },
+            { new: true },
+          );
+
+          if (!yaActualizada) continue;
+          if (!cliente.telefono) continue;
+
+          const token = crypto.randomUUID();
+
+          const resWa = await WhatsAppService.enviarRecordatorioConBotones({
+            telefono: cliente.telefono,
+            nombreCliente: datos.nombreCliente,
+            nombreEmpresa: datos.nombreEmpresa,
+            nombreProfesional: datos.nombreBarbero,
+            fecha: datos.fecha,
+            hora: datos.hora,
+            servicio: datos.servicio,
+            direccion: datos.direccion,
+            telefonoEmpresa: datos.telefonoEmpresa,
+            token,
+          });
+
+          if (resWa.success) {
+            await Reserva.findByIdAndUpdate(reserva._id, {
+              "confirmacionAsistenciaWhatsapp.solicitada": true,
+              "confirmacionAsistenciaWhatsapp.token": token,
+              "confirmacionAsistenciaWhatsapp.enviadaEn": new Date(),
+            });
+          } else {
+            console.error("❌ Falló WhatsApp con botones:", resWa.error);
+          }
+
+          await new Promise((r) => setTimeout(r, 500));
+        } catch (error) {
+          console.error(
+            `❌ Error procesando reserva ${reserva._id} (whatsapp botones):`,
+            error.message,
+          );
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error en enviarRecordatorioWhatsappBotones3h:", error);
+    }
+  }
 }
 
 export default new RecordatoriosJob();
