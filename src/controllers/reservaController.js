@@ -722,6 +722,228 @@ export const getReservasByBarberId = async (req, res) => {
     return res.status(500).json({ message: "Error al obtener reservas" });
   }
 };
+
+export const procesarCancelacionReserva = async (
+  reserva,
+  motivo,
+  { rolQuienCancela, empresaDoc: empresaDocParam } = {},
+) => {
+  // 1️⃣ Empresa: usa la que ya venga poblada en la reserva, si no la busca
+  const empresaDoc =
+    empresaDocParam ||
+    (reserva.empresa &&
+    typeof reserva.empresa === "object" &&
+    reserva.empresa.politicaCancelacion !== undefined
+      ? reserva.empresa
+      : await empresaModel.findById(reserva.empresa));
+
+  // 2️⃣ Política de cancelación (solo aplica a cliente/invitado, o cuando no
+  //    se especifica quién cancela — ej. link público de WhatsApp)
+  const esClienteOInvitado = !rolQuienCancela || rolQuienCancela === "cliente";
+
+  if (esClienteOInvitado) {
+    const politica = empresaDoc?.politicaCancelacion;
+
+    if (politica?.permiteCancelacion === false) {
+      return {
+        error: "politica",
+        message:
+          politica.mensajePolitica || "Esta empresa no permite cancelaciones.",
+      };
+    }
+
+    if (politica?.horasLimite > 0) {
+      const ahoraChile = dayjs().tz("America/Santiago");
+      const fechaReservaChile = dayjs(reserva.fecha).tz("America/Santiago");
+      const limiteCancelacion = fechaReservaChile.subtract(
+        politica.horasLimite,
+        "hour",
+      );
+
+      if (ahoraChile.isAfter(limiteCancelacion)) {
+        return {
+          error: "politica",
+          message:
+            politica.mensajePolitica ||
+            `No puedes cancelar con menos de ${politica.horasLimite} horas de anticipación.`,
+        };
+      }
+    }
+  }
+
+  // 3️⃣ Cancelar reserva
+  reserva.estado = "cancelada";
+  reserva.motivoCancelacion = motivo || "Cancelada por el usuario";
+  await reserva.save();
+
+  // 4️⃣ Datos compartidos para emails
+  const emailCliente = reserva.cliente?.email || reserva.invitado?.email;
+  const nombreCliente = reserva.cliente?.nombre || reserva.invitado?.nombre;
+
+  const fechaReserva = new Date(reserva.fecha);
+  const fechaFormateada = fechaReserva.toLocaleDateString("es-CL", {
+    timeZone: "America/Santiago",
+  });
+  const horaFormateada = fechaReserva.toLocaleTimeString("es-CL", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Santiago",
+  });
+
+  const emailData = {
+    nombreCliente,
+    nombreBarbero: reserva.barbero?.nombre || "Tu barbero",
+    fecha: fechaFormateada,
+    hora: horaFormateada,
+    servicio: reserva.servicio?.nombre || "Servicio",
+    motivo: reserva.motivoCancelacion,
+    direccion: empresaDoc?.direccion || null,
+  };
+
+  // 5️⃣ Email al cliente — siempre
+  if (emailCliente) {
+    sendCancelReservationEmail(emailCliente, emailData).catch((error) =>
+      console.error("❌ Error enviando correo de cancelación:", error.message),
+    );
+  }
+
+  // 6️⃣ WhatsApp al cliente — solo si cancela el barbero
+  const telefonoCliente =
+    reserva.cliente?.telefono || reserva.invitado?.telefono;
+
+  if (telefonoCliente && rolQuienCancela === "barbero") {
+    WhatsappService.enviarCancelacionCliente({
+      telefono: telefonoCliente,
+      nombreCliente,
+      motivo: reserva.motivoCancelacion,
+      nombreProfesional: reserva.barbero?.nombre || "Profesional",
+      servicio: reserva.servicio?.nombre || "Servicio",
+      fecha: fechaFormateada,
+      hora: horaFormateada,
+      direccion: empresaDoc?.direccion || "-",
+    }).catch((err) =>
+      console.error(
+        "❌ Error enviando WhatsApp de cancelación al cliente:",
+        err.message,
+      ),
+    );
+  }
+
+  // 7️⃣ Email al barbero
+  if (empresaDoc?.envioNotificacionReserva && reserva.barbero?.email) {
+    sendProfesionalCancelReservationEmail(
+      reserva.barbero.email,
+      emailData,
+    ).catch((error) =>
+      console.error(
+        "❌ Error enviando notificación al barbero:",
+        error.message,
+      ),
+    );
+  }
+
+  // 8️⃣ WhatsApp al barbero — cuando cancela cliente/invitado (ver nota arriba)
+  if (reserva.barbero?.telefono && esClienteOInvitado) {
+    WhatsappService.enviarNotificacionProfesional({
+      telefono: reserva.barbero.telefono,
+      nombreProfesional: reserva.barbero.nombre,
+      nombreCliente: `${reserva.cliente?.nombre || nombreCliente || ""} ${
+        reserva.cliente?.apellido || ""
+      }`.trim(),
+      fecha: fechaFormateada,
+      hora: horaFormateada,
+      servicio: reserva.servicio?.nombre || "Servicio",
+      telefonoCliente: reserva.cliente?.telefono,
+    }).catch((err) => console.error("❌ Error WhatsApp barbero:", err.message));
+  }
+
+  // 9️⃣ Notificar lista de espera
+  const fechaInicio = new Date(reserva.fecha);
+  fechaInicio.setSeconds(0, 0);
+  const fechaFin = new Date(reserva.fecha);
+  fechaFin.setSeconds(59, 999);
+
+  const notificaciones = await notificacionModel
+    .find({
+      barberoId: reserva.barbero._id,
+      fecha: { $gte: fechaInicio, $lte: fechaFin },
+      enviado: false,
+    })
+    .populate("usuarioId")
+    .populate("barberoId");
+
+  await Promise.all(
+    notificaciones.map(async (noti) => {
+      const barbero = noti.barberoId;
+      const fechaNoti = new Date(noti.fecha);
+
+      const fechaFormateadaNoti = fechaNoti.toLocaleDateString("es-CL", {
+        timeZone: "America/Santiago",
+      });
+      const horaFormateadaNoti = fechaNoti.toLocaleTimeString("es-CL", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "America/Santiago",
+      });
+
+      if (noti.esInvitado && noti.emailInvitado) {
+        try {
+          const result = await sendWaitlistNotificationEmail(
+            noti.emailInvitado,
+            {
+              nombreCliente: "Cliente",
+              nombreBarbero: barbero?.nombre || "Tu barbero",
+              fecha: fechaFormateadaNoti,
+              hora: horaFormateadaNoti,
+            },
+          );
+
+          if (!result?.error) {
+            noti.enviado = true;
+            await noti.save();
+          }
+        } catch (err) {
+          console.error(
+            `❌ Error notificando invitado ${noti.emailInvitado}:`,
+            err.message,
+          );
+        }
+        return;
+      }
+
+      const usuario = noti.usuarioId;
+      if (!usuario?.email) return;
+
+      try {
+        const result = await sendWaitlistNotificationEmail(usuario.email, {
+          nombreCliente: usuario.nombre,
+          nombreBarbero: barbero?.nombre || "Tu barbero",
+          fecha: fechaFormateadaNoti,
+          hora: horaFormateadaNoti,
+        });
+
+        if (result?.error) {
+          console.error(
+            `❌ Error enviando notificación a ${usuario.email}:`,
+            result.error,
+          );
+          return;
+        }
+
+        noti.enviado = true;
+        await noti.save();
+      } catch (err) {
+        console.error(
+          `❌ Error enviando notificación a ${usuario.nombre}:`,
+          err.message,
+        );
+      }
+    }),
+  );
+
+  return { success: true, notificacionesEnviadas: notificaciones.length };
+};
+
 export const postDeleteReserva = async (req, res) => {
   try {
     const { id } = req.params;
@@ -783,184 +1005,18 @@ export const postDeleteReserva = async (req, res) => {
       }
     }
 
-    // 3️⃣ Cancelar reserva
-    existeReserva.estado = "cancelada";
-    existeReserva.motivoCancelacion = motivo || "Cancelada por el usuario";
-    await existeReserva.save();
-
-    // 4️⃣ Datos compartidos para emails
-    const emailCliente =
-      existeReserva.cliente?.email || existeReserva.invitado?.email;
-    const nombreCliente =
-      existeReserva.cliente?.nombre || existeReserva.invitado?.nombre;
-
-    const fechaReserva = new Date(existeReserva.fecha);
-    const fechaFormateada = fechaReserva.toLocaleDateString("es-CL", {
-      timeZone: "America/Santiago",
-    });
-    const horaFormateada = fechaReserva.toLocaleTimeString("es-CL", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "America/Santiago",
+    const resultado = await procesarCancelacionReserva(existeReserva, motivo, {
+      rolQuienCancela: req.usuario?.rol,
+      empresaDoc,
     });
 
-    const emailData = {
-      nombreCliente,
-      nombreBarbero: existeReserva.barbero?.nombre || "Tu barbero",
-      fecha: fechaFormateada,
-      hora: horaFormateada,
-      servicio: existeReserva.servicio?.nombre || "Servicio",
-      motivo: existeReserva.motivoCancelacion,
-      direccion: empresaDoc?.direccion || null,
-    };
-
-    // 5️⃣ Email al cliente — siempre
-    if (emailCliente) {
-      sendCancelReservationEmail(emailCliente, emailData).catch((error) =>
-        console.error(
-          "❌ Error enviando correo de cancelación:",
-          error.message,
-        ),
-      );
+    if (resultado.error === "politica") {
+      return res.status(403).json({ message: resultado.message });
     }
-
-    // 6️⃣ WhatsApp al cliente — solo si cancela el barbero
-    const telefonoCliente =
-      existeReserva.cliente?.telefono || existeReserva.invitado?.telefono;
-
-    if (telefonoCliente && rolUsuario === "barbero") {
-      WhatsappService.enviarCancelacionCliente({
-        telefono: telefonoCliente,
-        nombreCliente,
-        motivo: existeReserva.motivoCancelacion,
-        nombreProfesional: existeReserva.barbero?.nombre || "Profesional",
-        servicio: existeReserva.servicio?.nombre || "Servicio",
-        fecha: fechaFormateada,
-        hora: horaFormateada,
-        direccion: empresaDoc?.direccion || "-",
-      }).catch((err) =>
-        console.error(
-          "❌ Error enviando WhatsApp de cancelación al cliente:",
-          err.message,
-        ),
-      );
-    }
-
-    // 7️⃣ Email al barbero
-    if (empresaDoc?.envioNotificacionReserva && existeReserva.barbero?.email) {
-      sendProfesionalCancelReservationEmail(
-        existeReserva.barbero.email,
-        emailData,
-      ).catch((error) =>
-        console.error(
-          "❌ Error enviando notificación al barbero:",
-          error.message,
-        ),
-      );
-    }
-
-    // 8️⃣ WhatsApp al barbero — solo si cancela el cliente
-    if (existeReserva.barbero?.telefono && rolUsuario === "cliente") {
-      WhatsappService.enviarNotificacionProfesional({
-        telefono: existeReserva.barbero.telefono,
-        nombreProfesional: existeReserva.barbero.nombre,
-        nombreCliente: `${existeReserva.cliente?.nombre} ${existeReserva.cliente?.apellido}`,
-        fecha: fechaFormateada,
-        hora: horaFormateada,
-        servicio: existeReserva.servicio?.nombre || "Servicio",
-        telefonoCliente: existeReserva.cliente?.telefono,
-      }).catch((err) =>
-        console.error(`❌ Error WhatsApp barbero:`, err.message),
-      );
-    }
-
-    // 9️⃣ Notificar lista de espera
-    const fechaInicio = new Date(existeReserva.fecha);
-    fechaInicio.setSeconds(0, 0);
-    const fechaFin = new Date(existeReserva.fecha);
-    fechaFin.setSeconds(59, 999);
-
-    const notificaciones = await notificacionModel
-      .find({
-        barberoId: existeReserva.barbero._id,
-        fecha: { $gte: fechaInicio, $lte: fechaFin },
-        enviado: false,
-      })
-      .populate("usuarioId")
-      .populate("barberoId");
-
-    await Promise.all(
-      notificaciones.map(async (noti) => {
-        const barbero = noti.barberoId;
-        const fechaNoti = new Date(noti.fecha);
-
-        const fechaFormateadaNoti = fechaNoti.toLocaleDateString("es-CL", {
-          timeZone: "America/Santiago",
-        });
-        const horaFormateadaNoti = fechaNoti.toLocaleTimeString("es-CL", {
-          hour: "2-digit",
-          minute: "2-digit",
-          timeZone: "America/Santiago",
-        });
-
-        if (noti.esInvitado && noti.emailInvitado) {
-          try {
-            const result = await sendWaitlistNotificationEmail(
-              noti.emailInvitado,
-              {
-                nombreCliente: "Cliente",
-                nombreBarbero: barbero?.nombre || "Tu barbero",
-                fecha: fechaFormateadaNoti,
-                hora: horaFormateadaNoti,
-              },
-            );
-
-            if (!result?.error) {
-              noti.enviado = true;
-              await noti.save();
-            }
-          } catch (err) {
-            console.error(
-              `❌ Error notificando invitado ${noti.emailInvitado}:`,
-              err.message,
-            );
-          }
-          return;
-        }
-
-        const usuario = noti.usuarioId;
-        if (!usuario?.email) return;
-
-        try {
-          const result = await sendWaitlistNotificationEmail(usuario.email, {
-            nombreCliente: usuario.nombre,
-            nombreBarbero: barbero?.nombre || "Tu barbero",
-            fecha: fechaFormateadaNoti,
-            hora: horaFormateadaNoti,
-          });
-
-          if (result?.error) {
-            console.error(
-              `❌ Error enviando notificación a ${usuario.email}:`,
-              result.error,
-            );
-            return;
-          }
-
-          noti.enviado = true;
-          await noti.save();
-        } catch (err) {
-          console.error(
-            `❌ Error enviando notificación a ${usuario.nombre}:`,
-            err.message,
-          );
-        }
-      }),
-    );
 
     return res.status(200).json({
       message: "Reserva cancelada correctamente",
-      notificacionesEnviadas: notificaciones.length,
+      notificacionesEnviadas: resultado.notificacionesEnviadas,
     });
   } catch (error) {
     console.error("❌ Error al eliminar reserva:", error);
@@ -1579,7 +1635,7 @@ export const revertirAbono = async (req, res) => {
 export const confirmarAsistenciaWhatsapp = async (req, res) => {
   try {
     const { token } = req.query;
- 
+
     const reserva = await Reserva.findOne({
       "confirmacionAsistenciaWhatsapp.token": token,
     })
@@ -1587,15 +1643,15 @@ export const confirmarAsistenciaWhatsapp = async (req, res) => {
       .populate("barbero", "nombre apellido email")
       .populate("servicio", "nombre")
       .populate("empresa");
- 
+
     if (!reserva) {
       return res.status(404).json({ error: "token" });
     }
- 
+
     const empresaInfo = reserva.empresa
       ? { nombre: reserva.empresa.nombre, slug: reserva.empresa.slug }
       : null;
- 
+
     if (reserva.confirmacionAsistenciaWhatsapp.respondida) {
       return res.json({
         respuesta: reserva.confirmacionAsistenciaWhatsapp.respuesta,
@@ -1603,11 +1659,11 @@ export const confirmarAsistenciaWhatsapp = async (req, res) => {
         empresa: empresaInfo,
       });
     }
- 
+
     if (reserva.fecha < new Date()) {
       return res.status(410).json({ error: "expirado", empresa: empresaInfo });
     }
- 
+
     reserva.confirmacionAsistenciaWhatsapp.respondida = true;
     reserva.confirmacionAsistenciaWhatsapp.respuesta = "confirma";
     reserva.confirmacionAsistenciaWhatsapp.respondidaEn = new Date();
@@ -1615,35 +1671,35 @@ export const confirmarAsistenciaWhatsapp = async (req, res) => {
     reserva.fechaConfirmacion = new Date();
     reserva.estado = "confirmada";
     await reserva.save();
- 
+
     return res.json({ respuesta: "confirma", empresa: empresaInfo });
   } catch (error) {
     console.error("❌ Error confirmarAsistenciaWhatsapp:", error);
     return res.status(500).json({ error: "servidor" });
   }
 };
- 
+
 // GET /reservas/cancelar-reserva?token=xxx
 export const cancelarAsistenciaWhatsapp = async (req, res) => {
   try {
     const { token } = req.query;
- 
+
     const reserva = await Reserva.findOne({
       "confirmacionAsistenciaWhatsapp.token": token,
     })
       .populate("cliente", "nombre email telefono")
-      .populate("barbero", "nombre apellido email")
+      .populate("barbero", "nombre apellido email telefono")
       .populate("servicio", "nombre")
       .populate("empresa");
- 
+
     if (!reserva) {
       return res.status(404).json({ error: "token" });
     }
- 
+
     const empresaInfo = reserva.empresa
       ? { nombre: reserva.empresa.nombre, slug: reserva.empresa.slug }
       : null;
- 
+
     if (reserva.confirmacionAsistenciaWhatsapp.respondida) {
       return res.json({
         respuesta: reserva.confirmacionAsistenciaWhatsapp.respuesta,
@@ -1651,24 +1707,25 @@ export const cancelarAsistenciaWhatsapp = async (req, res) => {
         empresa: empresaInfo,
       });
     }
- 
+
     if (reserva.fecha < new Date()) {
       return res.status(410).json({ error: "expirado", empresa: empresaInfo });
     }
- 
+
     reserva.confirmacionAsistenciaWhatsapp.respondida = true;
     reserva.confirmacionAsistenciaWhatsapp.respuesta = "cancela";
     reserva.confirmacionAsistenciaWhatsapp.respondidaEn = new Date();
- 
+
     const resultado = await procesarCancelacionReserva(
       reserva,
       "Cancelada por el cliente desde WhatsApp",
+      { rolQuienCancela: "cliente", empresaDoc: reserva.empresa },
     );
- 
+
     if (resultado.error === "politica") {
       return res.status(409).json({ error: "politica", empresa: empresaInfo });
     }
- 
+
     return res.json({ respuesta: "cancela", empresa: empresaInfo });
   } catch (error) {
     console.error("❌ Error cancelarAsistenciaWhatsapp:", error);
