@@ -1579,7 +1579,7 @@ export const revertirAbono = async (req, res) => {
 export const confirmarAsistenciaWhatsapp = async (req, res) => {
   try {
     const { token } = req.query;
-
+ 
     const reserva = await Reserva.findOne({
       "confirmacionAsistenciaWhatsapp.token": token,
     })
@@ -1587,27 +1587,27 @@ export const confirmarAsistenciaWhatsapp = async (req, res) => {
       .populate("barbero", "nombre apellido email")
       .populate("servicio", "nombre")
       .populate("empresa");
-
+ 
     if (!reserva) {
-      // sin slug conocido, redirige a un slug genérico o a home con error
-      return res.redirect(
-        `${process.env.FRONTEND_URL}/confirmar-reserva?error=token`,
-      );
+      return res.status(404).json({ error: "token" });
     }
-
-    const slug = reserva.empresa?.slug || "";
-    const base = `${process.env.FRONTEND_URL}/${slug}/confirmar-reserva`;
-
+ 
+    const empresaInfo = reserva.empresa
+      ? { nombre: reserva.empresa.nombre, slug: reserva.empresa.slug }
+      : null;
+ 
     if (reserva.confirmacionAsistenciaWhatsapp.respondida) {
-      return res.redirect(
-        `${base}?respuesta=${reserva.confirmacionAsistenciaWhatsapp.respuesta}&ya_respondida=true`,
-      );
+      return res.json({
+        respuesta: reserva.confirmacionAsistenciaWhatsapp.respuesta,
+        yaRespondida: true,
+        empresa: empresaInfo,
+      });
     }
-
+ 
     if (reserva.fecha < new Date()) {
-      return res.redirect(`${base}?error=expirado`);
+      return res.status(410).json({ error: "expirado", empresa: empresaInfo });
     }
-
+ 
     reserva.confirmacionAsistenciaWhatsapp.respondida = true;
     reserva.confirmacionAsistenciaWhatsapp.respuesta = "confirma";
     reserva.confirmacionAsistenciaWhatsapp.respondidaEn = new Date();
@@ -1615,21 +1615,19 @@ export const confirmarAsistenciaWhatsapp = async (req, res) => {
     reserva.fechaConfirmacion = new Date();
     reserva.estado = "confirmada";
     await reserva.save();
-
-    return res.redirect(`${base}?respuesta=confirma`);
+ 
+    return res.json({ respuesta: "confirma", empresa: empresaInfo });
   } catch (error) {
     console.error("❌ Error confirmarAsistenciaWhatsapp:", error);
-    return res.redirect(
-      `${process.env.FRONTEND_URL}/confirmar-reserva?error=servidor`,
-    );
+    return res.status(500).json({ error: "servidor" });
   }
 };
-
-// GET /cancelar-reserva?token=xxx  (botón "Cancelar asistencia")
+ 
+// GET /reservas/cancelar-reserva?token=xxx
 export const cancelarAsistenciaWhatsapp = async (req, res) => {
   try {
     const { token } = req.query;
-
+ 
     const reserva = await Reserva.findOne({
       "confirmacionAsistenciaWhatsapp.token": token,
     })
@@ -1637,44 +1635,43 @@ export const cancelarAsistenciaWhatsapp = async (req, res) => {
       .populate("barbero", "nombre apellido email")
       .populate("servicio", "nombre")
       .populate("empresa");
-
+ 
     if (!reserva) {
-      return res.redirect(
-        `${process.env.FRONTEND_URL}/confirmar-reserva?error=token`,
-      );
+      return res.status(404).json({ error: "token" });
     }
-
-    const slug = reserva.empresa?.slug || "";
-    const base = `${process.env.FRONTEND_URL}/${slug}/confirmar-reserva`;
-
+ 
+    const empresaInfo = reserva.empresa
+      ? { nombre: reserva.empresa.nombre, slug: reserva.empresa.slug }
+      : null;
+ 
     if (reserva.confirmacionAsistenciaWhatsapp.respondida) {
-      return res.redirect(
-        `${base}?respuesta=${reserva.confirmacionAsistenciaWhatsapp.respuesta}&ya_respondida=true`,
-      );
+      return res.json({
+        respuesta: reserva.confirmacionAsistenciaWhatsapp.respuesta,
+        yaRespondida: true,
+        empresa: empresaInfo,
+      });
     }
-
+ 
     if (reserva.fecha < new Date()) {
-      return res.redirect(`${base}?error=expirado`);
+      return res.status(410).json({ error: "expirado", empresa: empresaInfo });
     }
-
+ 
     reserva.confirmacionAsistenciaWhatsapp.respondida = true;
     reserva.confirmacionAsistenciaWhatsapp.respuesta = "cancela";
     reserva.confirmacionAsistenciaWhatsapp.respondidaEn = new Date();
-
+ 
     const resultado = await procesarCancelacionReserva(
       reserva,
       "Cancelada por el cliente desde WhatsApp",
     );
-
+ 
     if (resultado.error === "politica") {
-      return res.redirect(`${base}?error=politica`);
+      return res.status(409).json({ error: "politica", empresa: empresaInfo });
     }
-
-    return res.redirect(`${base}?respuesta=cancela`);
+ 
+    return res.json({ respuesta: "cancela", empresa: empresaInfo });
   } catch (error) {
     console.error("❌ Error cancelarAsistenciaWhatsapp:", error);
-    return res.redirect(
-      `${process.env.FRONTEND_URL}/confirmar-reserva?error=servidor`,
-    );
+    return res.status(500).json({ error: "servidor" });
   }
 };
