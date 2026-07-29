@@ -28,6 +28,10 @@ router.get("/", validarToken, getReservas);
 router.patch("/:id/actualizar", validarToken, actualizarReserva);
 router.get("/barbero", validarToken, getReservasByBarberId);
 router.get("/confirmacion/:token", responderConfirmacionAsistencia);
+
+router.get("/confirmar-reserva", confirmarAsistenciaWhatsapp);
+router.get("/cancelar-reserva", cancelarAsistenciaWhatsapp);
+
 router.get("/:id", validarToken, getReservasByUserId);
 router.patch("/:id/reagendar", validarToken, reagendarReserva);
 
@@ -40,8 +44,5 @@ router.patch("/:id/no-asistio", validarToken, updateMarcarNoAsistioReserva);
 
 router.patch("/:id/marcarAbono", validarToken, marcarAbono);
 router.patch("/:id/revertirAbono", validarToken, revertirAbono);
-
-router.get("/confirmar-reserva", confirmarAsistenciaWhatsapp);
-router.get("/cancelar-reserva", cancelarAsistenciaWhatsapp);
 
 export default router;
