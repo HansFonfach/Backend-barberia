@@ -145,7 +145,7 @@ class WhatsAppService {
         },
         body: JSON.stringify(body),
       });
-      enviarNotificacionProfesional;
+      this.enviarNotificacionProfesional;
       const data = await res.json();
 
       if (!res.ok) {
@@ -290,7 +290,7 @@ class WhatsAppService {
         type: "template",
         template: {
           name: "recordatorio_cita_con_confirmacion",
-          language: { code: "es" },
+          language: { code: "es_CL" },
           components: [
             {
               type: "body",

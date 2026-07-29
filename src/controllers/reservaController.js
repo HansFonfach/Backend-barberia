@@ -1589,19 +1589,23 @@ export const confirmarAsistenciaWhatsapp = async (req, res) => {
       .populate("empresa");
 
     if (!reserva) {
-      return res.status(404).json({ error: "token" });
+      // sin slug conocido, redirige a un slug genérico o a home con error
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/confirmar-reserva?error=token`,
+      );
     }
 
     const slug = reserva.empresa?.slug || "";
+    const base = `${process.env.FRONTEND_URL}/${slug}/confirmar-reserva`;
 
     if (reserva.confirmacionAsistenciaWhatsapp.respondida) {
       return res.redirect(
-        `${process.env.FRONTEND_URL}/${slug}/ya-respondiste?respuesta=${reserva.confirmacionAsistenciaWhatsapp.respuesta}`,
+        `${base}?respuesta=${reserva.confirmacionAsistenciaWhatsapp.respuesta}&ya_respondida=true`,
       );
     }
 
     if (reserva.fecha < new Date()) {
-      return res.redirect(`${process.env.FRONTEND_URL}/${slug}/link-expirado`);
+      return res.redirect(`${base}?error=expirado`);
     }
 
     reserva.confirmacionAsistenciaWhatsapp.respondida = true;
@@ -1612,12 +1616,12 @@ export const confirmarAsistenciaWhatsapp = async (req, res) => {
     reserva.estado = "confirmada";
     await reserva.save();
 
-    return res.redirect(
-      `${process.env.FRONTEND_URL}/${slug}/reserva-confirmada`,
-    );
+    return res.redirect(`${base}?respuesta=confirma`);
   } catch (error) {
     console.error("❌ Error confirmarAsistenciaWhatsapp:", error);
-    return res.status(500).json({ error: "servidor" });
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/confirmar-reserva?error=servidor`,
+    );
   }
 };
 
@@ -1635,19 +1639,22 @@ export const cancelarAsistenciaWhatsapp = async (req, res) => {
       .populate("empresa");
 
     if (!reserva) {
-      return res.status(404).json({ error: "token" });
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/confirmar-reserva?error=token`,
+      );
     }
 
     const slug = reserva.empresa?.slug || "";
+    const base = `${process.env.FRONTEND_URL}/${slug}/confirmar-reserva`;
 
     if (reserva.confirmacionAsistenciaWhatsapp.respondida) {
       return res.redirect(
-        `${process.env.FRONTEND_URL}/${slug}/ya-respondiste?respuesta=${reserva.confirmacionAsistenciaWhatsapp.respuesta}`,
+        `${base}?respuesta=${reserva.confirmacionAsistenciaWhatsapp.respuesta}&ya_respondida=true`,
       );
     }
 
     if (reserva.fecha < new Date()) {
-      return res.redirect(`${process.env.FRONTEND_URL}/${slug}/link-expirado`);
+      return res.redirect(`${base}?error=expirado`);
     }
 
     reserva.confirmacionAsistenciaWhatsapp.respondida = true;
@@ -1660,16 +1667,14 @@ export const cancelarAsistenciaWhatsapp = async (req, res) => {
     );
 
     if (resultado.error === "politica") {
-      return res.redirect(
-        `${process.env.FRONTEND_URL}/${slug}/no-se-puede-cancelar`,
-      );
+      return res.redirect(`${base}?error=politica`);
     }
 
-    return res.redirect(
-      `${process.env.FRONTEND_URL}/${slug}/reserva-cancelada`,
-    );
+    return res.redirect(`${base}?respuesta=cancela`);
   } catch (error) {
     console.error("❌ Error cancelarAsistenciaWhatsapp:", error);
-    return res.status(500).json({ error: "servidor" });
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/confirmar-reserva?error=servidor`,
+    );
   }
 };

@@ -22,6 +22,10 @@ class RecordatoriosJob {
       await this.enviarRecordatorios3h();
       await this.enviarCuidadosPosteriores();
     });
+
+    cron.schedule("*/15 * * * *", async () => {
+      await this.enviarRecordatorioWhatsappBotones3h();
+    });
   }
 
   /* =============================

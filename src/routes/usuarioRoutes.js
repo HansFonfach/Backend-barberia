@@ -38,7 +38,7 @@ router.get("/barbero/:slug/barberos", getBarberosPublicos);
 router.post(
   "/barbero/crearBarbero",
   validarToken,
-  verificarRol("esAdmin"),
+  verificarRol(),
   upload.single("fotoPerfil"),
   crearBarbero,
 );
@@ -48,14 +48,14 @@ router.get("/:id", validarToken, getUsuarioById);
 router.put(
   "/:id",
   validarToken,
-  verificarRol("esAdmin"),
+  verificarRol(),
   upload.single("fotoPerfil"),
   updateUsuario,
 );
 router.patch(
   "/:id/estado",
   validarToken,
-  verificarRol("esAdmin"),
+  verificarRol(),
   cambiarEstadoUsuario,
 );
 

@@ -11,7 +11,11 @@ import {
 import { validarToken } from "../middlewares/validarToken.js";
 import { validarTokenOpcional } from "../middlewares/validarTokenOpcional.js";
 import { verificarRol } from "../middlewares/verificarRol.js";
-import { crearBloqueoVacaciones, eliminarBloqueoVacaciones, obtenerVacaciones } from "../controllers/excepcionHorarioController.js";
+import {
+  crearBloqueoVacaciones,
+  eliminarBloqueoVacaciones,
+  obtenerVacaciones,
+} from "../controllers/excepcionHorarioController.js";
 
 const router = Router();
 
@@ -42,28 +46,22 @@ router.get("/proximaHoraDisponible", validarToken, getProximaHoraDisponible);
 router.get(
   "/admin/:id/horas",
   validarToken,
-  verificarRol("esAdmin"),
-  getHorasProfesionalPorDia
+  verificarRol(""),
+  getHorasProfesionalPorDia,
 );
 
-router.post(
-  "/vacaciones",
-  
-  crearBloqueoVacaciones,
-);
+router.post("/vacaciones", verificarRol(""), crearBloqueoVacaciones);
 router.delete(
   "/vacaciones",
   validarToken,
-  verificarRol("esAdmin"),
+  verificarRol(""),
   eliminarBloqueoVacaciones,
 );
 router.get(
   "/vacaciones/:barberoId",
   validarToken,
-  verificarRol("esAdmin"),
+  verificarRol(""),
   obtenerVacaciones,
 );
-
-
 
 export default router;
