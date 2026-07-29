@@ -19,7 +19,7 @@ class RecordatoriosJob {
     cron.schedule("*/15 * * * *", async () => {
       await this.enviarRecordatorios24h();
       await this.enviarRecordatorios14h();
-      await this.enviarRecordatorios3h();
+      //await this.enviarRecordatorios3h();
       await this.enviarCuidadosPosteriores();
     });
 
