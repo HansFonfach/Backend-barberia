@@ -257,20 +257,14 @@ export const getHorasDisponibles = async (req, res) => {
 
     /* ================= LÍMITE DE DÍAS ================= */
 
-    const diasPorPlan = {
-      combo_visita_corte_barba: 40,
-    };
-
-    let diasPermitidosSuscripcion = 31;
-
+    const diasPermitidos = empresaDoc?.diasMostradosCalendario ?? 15;
+    const limiteNormal = ahora.add(diasPermitidos, "day").endOf("day");
+    let limiteDias = limiteNormal;
     if (suscripcionActiva) {
-      diasPermitidosSuscripcion = diasPorPlan[suscripcionActiva.tipoPlan] ?? 31;
-
       const limiteSuscripcion = dayjs(suscripcionActiva.fechaInicio)
         .tz("America/Santiago")
-        .add(diasPermitidosSuscripcion, "day")
+        .add(40, "day")
         .endOf("day");
-
       limiteDias = limiteSuscripcion.isAfter(limiteNormal)
         ? limiteSuscripcion
         : limiteNormal;
@@ -279,17 +273,15 @@ export const getHorasDisponibles = async (req, res) => {
     if (rolUsuario !== "barbero" && fechaConsulta.isAfter(limiteDias, "day")) {
       return res.status(400).json({
         message: suscripcionActiva
-          ? `No puedes reservar más allá de los ${diasPermitidosSuscripcion} días de tu suscripción`
+          ? "No puedes reservar más allá de los 40 días de tu suscripción"
           : `No puedes reservar con más de ${diasPermitidos} días de anticipación`,
       });
     }
 
     const diaSemana = fechaConsulta.day();
-
     const horariosDelDia = barbero.horariosDisponibles.filter(
       (h) => Number(h.diaSemana) === diaSemana,
     );
-
     if (!horariosDelDia.length) {
       return res.json({
         fecha,
