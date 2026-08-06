@@ -1,6 +1,5 @@
 import reservaModel from "../models/reserva.model.js";
 import usuarioModel from "../models/usuario.model.js";
-import empresaModel from "../models/empresa.model.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
@@ -13,11 +12,181 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 /* =====================================================
+   CONSTANTES
+===================================================== */
+const PRECIO_SUSCRIPCION = 25000;
+const ZONA = "America/Santiago";
+
+// Estados que NO cuentan como ingreso ni como atención realizada
+const ESTADOS_VALIDOS = { $nin: ["cancelada", "no_asistio"] };
+
+/**
+ * ⚠️ REVISAR: nombre del campo que guarda al profesional en
+ * ventaDirecta.model.js. Si en tu schema se llama distinto
+ * (vendedor, usuario, atendidoPor), cámbialo acá y listo.
+ * Si el campo no existe, los barberos no admin verán $0 en
+ * ventas directas (falla hacia el lado seguro, no hacia el lado
+ * de mostrar plata que no les corresponde).
+ */
+const CAMPO_BARBERO_VENTA = "barbero";
+
+/* =====================================================
    UTIL
 ===================================================== */
 const ok = (res, data) => res.json({ ok: true, data });
 const err = (res, msg, status = 500) =>
   res.status(status).json({ ok: false, message: msg });
+
+const toId = (valor) => new mongoose.Types.ObjectId(String(valor));
+
+/**
+ * ⚠️ REQUISITO: el middleware de auth tiene que dejar esAdmin
+ * dentro de req.usuario. Si no viene, todos quedan como NO admin
+ * y solo ven lo suyo.
+ */
+const esAdmin = (req) => req.usuario?.esAdmin === true;
+
+/** Etiqueta que el front puede usar para el título de la tarjeta */
+const alcanceDe = (req) => (esAdmin(req) ? "empresa" : "personal");
+
+/**
+ * Filtro de reservas: vacío para admin (ve toda la empresa),
+ * acotado al profesional para el resto.
+ */
+const filtroBarbero = (req) =>
+  esAdmin(req) ? {} : { barbero: toId(req.usuario.id) };
+
+/** Lo mismo para ventas directas */
+const filtroVentaBarbero = (req) =>
+  esAdmin(req) ? {} : { [CAMPO_BARBERO_VENTA]: toId(req.usuario.id) };
+
+const rangoDia = (fecha = new Date()) => {
+  const inicio = new Date(fecha);
+  inicio.setHours(0, 0, 0, 0);
+  const fin = new Date(fecha);
+  fin.setHours(23, 59, 59, 999);
+  return { inicio, fin };
+};
+
+const rangoMes = (anio, mes) => {
+  const inicio = new Date(anio, mes, 1);
+  inicio.setHours(0, 0, 0, 0);
+  const fin = new Date(anio, mes + 1, 0);
+  fin.setHours(23, 59, 59, 999);
+  return { inicio, fin };
+};
+
+const agruparPor = (lista, obtenerClave) => {
+  const mapa = new Map();
+  for (const item of lista) {
+    const clave = obtenerClave(item);
+    if (!clave) continue;
+    if (!mapa.has(clave)) mapa.set(clave, []);
+    mapa.get(clave).push(item);
+  }
+  return mapa;
+};
+
+const formatearRangoHora = (hora) => `${hora}:00 - ${hora + 1}:00`;
+
+/** Suma totalFinal de ventas directas en una sola pasada de Mongo */
+const sumarVentasDirectas = async (match) => {
+  const [resultado] = await ventaDirectaModel.aggregate([
+    { $match: match },
+    { $group: { _id: null, total: { $sum: "$totalFinal" } } },
+  ]);
+  return resultado?.total || 0;
+};
+
+/* =====================================================
+   CÁLCULO DE INGRESO POR RESERVAS
+
+   Una reserva NO genera ingreso si el cliente tenía una
+   suscripción vigente y todavía no agota los servicios
+   incluidos en ella.
+
+   Antes esto se hacía con dos queries dentro del for
+   (una por reserva). Con 300 reservas en el mes eran 600
+   consultas y por eso el front se quedaba pegado.
+   Ahora son 2 queries en total, sin importar el volumen.
+
+   Ojo: el conteo de servicios acumulados mira TODAS las
+   reservas del cliente en la empresa, no solo las del
+   barbero. La suscripción es del cliente, no del profesional.
+===================================================== */
+const calcularIngresoConSuscripciones = async (reservas, empresaId) => {
+  if (!reservas.length) return 0;
+
+  const clienteIds = [
+    ...new Set(reservas.map((r) => r.cliente?.toString()).filter(Boolean)),
+  ];
+
+  const suscripciones = await suscripcionModel
+    .find({ usuario: { $in: clienteIds }, empresa: empresaId })
+    .lean();
+
+  // Sin suscripciones vigentes: todo suma y nos ahorramos la segunda query
+  if (!suscripciones.length) {
+    return reservas.reduce(
+      (acc, r) => acc + (r.precio || r.servicio?.precio || 0),
+      0,
+    );
+  }
+
+  const susPorCliente = agruparPor(suscripciones, (s) => s.usuario.toString());
+
+  const desde = new Date(
+    Math.min(...suscripciones.map((s) => new Date(s.fechaInicio).getTime())),
+  );
+  const hasta = new Date(
+    Math.max(...reservas.map((r) => new Date(r.fecha).getTime())),
+  );
+
+  const historial = await reservaModel
+    .find({
+      empresa: empresaId,
+      cliente: { $in: clienteIds },
+      fecha: { $gte: desde, $lte: hasta },
+      estado: ESTADOS_VALIDOS,
+    })
+    .select("cliente fecha duracion")
+    .sort({ fecha: 1 })
+    .lean();
+
+  const historialPorCliente = agruparPor(historial, (r) =>
+    r.cliente.toString(),
+  );
+
+  let ingreso = 0;
+
+  for (const reserva of reservas) {
+    const precio = reserva.precio || reserva.servicio?.precio || 0;
+    const clave = reserva.cliente?.toString();
+
+    const sus = (susPorCliente.get(clave) || []).find(
+      (s) =>
+        new Date(s.fechaInicio) <= new Date(reserva.fecha) &&
+        new Date(s.fechaFin) >= new Date(reserva.fecha),
+    );
+
+    if (!sus) {
+      ingreso += precio;
+      continue;
+    }
+
+    let serviciosAcumulados = 0;
+    for (const r of historialPorCliente.get(clave) || []) {
+      if (new Date(r.fecha) >= new Date(sus.fechaInicio)) {
+        serviciosAcumulados += r.duracion >= 120 ? 2 : 1;
+      }
+      if (r._id.toString() === reserva._id.toString()) break;
+    }
+
+    if (serviciosAcumulados > sus.serviciosTotales) ingreso += precio;
+  }
+
+  return ingreso;
+};
 
 /* =====================================================
    RESERVAS HOY (BARBERO)
@@ -25,11 +194,7 @@ const err = (res, msg, status = 500) =>
 export const totalReservasHoyBarbero = async (req, res) => {
   try {
     const userId = req.usuario.id;
-    const hoy = new Date();
-    const inicio = new Date(hoy);
-    inicio.setHours(0, 0, 0, 0);
-    const fin = new Date(hoy);
-    fin.setHours(23, 59, 59, 999);
+    const { inicio, fin } = rangoDia();
 
     const total = await reservaModel.countDocuments({
       barbero: userId,
@@ -46,6 +211,7 @@ export const totalReservasHoyBarbero = async (req, res) => {
 
 /* =====================================================
    SUSCRIPCIONES ACTIVAS
+   (dato de la empresa, no se reparte por profesional)
 ===================================================== */
 export const totalSuscripcionesActivas = async (req, res) => {
   try {
@@ -71,22 +237,18 @@ export const totalSuscripcionesActivas = async (req, res) => {
 export const ultimaReserva = async (req, res) => {
   try {
     const userId = req.usuario.id;
-
-    const ahoraChile = new Date(
-      new Date().toLocaleString("en-US", {
-        timeZone: "America/Santiago",
-      }),
-    );
+    const ahoraChile = dayjs().tz(ZONA).toDate();
 
     const reserva = await reservaModel
       .findOne({ cliente: userId, fecha: { $lt: ahoraChile } })
       .sort({ fecha: -1 })
+      .select("fecha")
       .lean();
 
     if (!reserva) return err(res, "No se encontraron reservas pasadas", 404);
 
     const fechaChile = new Date(reserva.fecha).toLocaleString("es-CL", {
-      timeZone: "America/Santiago",
+      timeZone: ZONA,
       day: "2-digit",
       month: "short",
       year: "numeric",
@@ -94,7 +256,6 @@ export const ultimaReserva = async (req, res) => {
       minute: "2-digit",
     });
 
-    // Separar fecha y hora
     const [fecha, hora] = fechaChile.split(", ");
 
     return ok(res, { fecha, hora });
@@ -110,12 +271,7 @@ export const ultimaReserva = async (req, res) => {
 export const proximaReserva = async (req, res) => {
   try {
     const clienteId = req.usuario.id;
-
-    const ahoraChile = new Date(
-      new Date().toLocaleString("en-US", {
-        timeZone: "America/Santiago",
-      }),
-    );
+    const ahoraChile = dayjs().tz(ZONA).toDate();
 
     const reserva = await reservaModel
       .findOne({
@@ -124,12 +280,13 @@ export const proximaReserva = async (req, res) => {
         estado: "pendiente",
       })
       .sort({ fecha: 1 })
+      .select("fecha")
       .lean();
 
     if (!reserva) return err(res, "Aún no tienes reservas futuras", 404);
 
     const fechaChile = new Date(reserva.fecha).toLocaleString("es-CL", {
-      timeZone: "America/Santiago",
+      timeZone: ZONA,
       day: "2-digit",
       month: "short",
       year: "numeric",
@@ -168,7 +325,7 @@ export const getProximoCliente = async (req, res) => {
 
     if (!reserva) return ok(res, null);
 
-    const fechaChile = dayjs(reserva.fecha).tz("America/Santiago");
+    const fechaChile = dayjs(reserva.fecha).tz(ZONA);
 
     return ok(res, {
       fecha: fechaChile.format("YYYY-MM-DD"),
@@ -186,175 +343,96 @@ export const getProximoCliente = async (req, res) => {
 
 /* =====================================================
    INGRESO MENSUAL
+
+   Admin  → ingreso de toda la empresa (incluye suscripciones)
+   Barbero → solo sus reservas y sus ventas directas
 ===================================================== */
 export const ingresoMensual = async (req, res) => {
-  const empresaId = req.usuario?.empresaId;
-  if (!empresaId) return err(res, "Empresa no identificada", 400);
-
-  const hoy = new Date();
-  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  inicioMes.setHours(0, 0, 0, 0);
-
-  const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
-  finMes.setHours(23, 59, 59, 999);
-
-  const PRECIO_SUSCRIPCION = 25000;
-
   try {
-    // ── RESERVAS DEL MES ──
-    const reservasPasadas = await reservaModel
-      .find({
-        empresa: empresaId,
-        fecha: { $gte: inicioMes, $lte: hoy },
-        estado: { $nin: ["cancelada", "no_asistio"] },
-      })
-      .populate("servicio", "precio");
+    const empresaIdRaw = req.usuario?.empresaId;
+    if (!empresaIdRaw) return err(res, "Empresa no identificada", 400);
 
-    let ingresoReservas = 0;
+    const empresaId = toId(empresaIdRaw);
+    const admin = esAdmin(req);
+    const filtro = filtroBarbero(req);
+    const filtroVenta = filtroVentaBarbero(req);
 
-    for (const reserva of reservasPasadas) {
-      const precio = reserva.precio || reserva.servicio?.precio || 0;
+    const hoy = new Date();
+    const { inicio: inicioMes, fin: finMes } = rangoMes(
+      hoy.getFullYear(),
+      hoy.getMonth(),
+    );
 
-      const sus = await suscripcionModel.findOne({
-        usuario: reserva.cliente,
-        empresa: empresaId,
-        fechaInicio: { $lte: reserva.fecha },
-        fechaFin: { $gte: reserva.fecha },
-      });
+    const [reservasPasadas, reservasFuturas, suscripcionesMes, ingresoVentasDirectas] =
+      await Promise.all([
+        reservaModel
+          .find({
+            empresa: empresaId,
+            ...filtro,
+            fecha: { $gte: inicioMes, $lte: hoy },
+            estado: ESTADOS_VALIDOS,
+          })
+          .populate("servicio", "precio")
+          .lean(),
 
-      if (!sus) {
-        ingresoReservas += precio;
-        continue;
-      }
+        reservaModel
+          .find({
+            empresa: empresaId,
+            ...filtro,
+            fecha: { $gt: hoy, $lte: finMes },
+            estado: ESTADOS_VALIDOS,
+          })
+          .populate("servicio", "precio")
+          .lean(),
 
-      const reservasAnteriores = await reservaModel
-        .find({
+        // Las suscripciones son ingreso del negocio, no de un profesional
+        admin
+          ? suscripcionModel.countDocuments({
+              empresa: empresaId,
+              fechaInicio: { $gte: inicioMes, $lte: finMes },
+            })
+          : 0,
+
+        sumarVentasDirectas({
           empresa: empresaId,
-          cliente: reserva.cliente,
-          fecha: { $gte: sus.fechaInicio, $lte: reserva.fecha },
-          estado: { $nin: ["cancelada", "no_asistio"] },
-        })
-        .sort({ fecha: 1 });
+          ...filtroVenta,
+          fecha: { $gte: inicioMes, $lte: finMes },
+          anulada: false,
+        }),
+      ]);
 
-      let serviciosAcumulados = 0;
-
-      for (const r of reservasAnteriores) {
-        serviciosAcumulados += r.duracion >= 120 ? 2 : 1;
-        if (r._id.toString() === reserva._id.toString()) break;
-      }
-
-      if (serviciosAcumulados > sus.serviciosTotales) {
-        ingresoReservas += precio;
-      }
-    }
-
-    // ── SUSCRIPCIONES NUEVAS ──
-    const suscripcionesMes = await suscripcionModel.countDocuments({
-      empresa: empresaId,
-      fechaInicio: { $gte: inicioMes, $lte: finMes },
-    });
+    const [ingresoReservas, posibleIngreso] = await Promise.all([
+      calcularIngresoConSuscripciones(reservasPasadas, empresaId),
+      calcularIngresoConSuscripciones(reservasFuturas, empresaId),
+    ]);
 
     const ingresoSuscripciones = suscripcionesMes * PRECIO_SUSCRIPCION;
 
-    // ── PRODUCTOS EN RESERVAS ──
     const ingresoProductosReservas = reservasPasadas.reduce(
       (acc, r) => acc + (r.totalProductos || 0),
       0,
     );
+    const ingresoProductos = ingresoProductosReservas + ingresoVentasDirectas;
 
-    // ── VENTAS DIRECTAS ──
-    const ventasDirectasMes = await ventaDirectaModel
-      .find({
-        empresa: empresaId,
-        fecha: { $gte: inicioMes, $lte: finMes },
-        anulada: false,
-      })
-      .lean();
-
-    const ingresoVentasDirectas = ventasDirectasMes.reduce(
-      (acc, v) => acc + (v.totalFinal || 0),
-      0,
-    );
-
-    // ── EXTRAS ──
     const ingresoExtras = reservasPasadas.reduce(
       (acc, r) => acc + (r.totalExtras || 0),
       0,
     );
 
-    // ── PRODUCTOS (UNIFICADO) ──
-    const ingresoProductos = ingresoProductosReservas + ingresoVentasDirectas;
+    const ingresoTotalMes =
+      ingresoReservas + ingresoSuscripciones + ingresoProductos + ingresoExtras;
 
-    // ── RESERVAS FUTURAS (POSIBLE INGRESO) ──
-    const reservasFuturas = await reservaModel
-      .find({
-        empresa: empresaId,
-        fecha: { $gt: hoy, $lte: finMes },
-        estado: { $nin: ["cancelada", "no_asistio"] },
-      })
-      .populate("servicio", "precio");
-
-    let posibleIngreso = 0;
-
-    for (const reserva of reservasFuturas) {
-      const precio = reserva.precio || reserva.servicio?.precio || 0;
-
-      const sus = await suscripcionModel.findOne({
-        usuario: reserva.cliente,
-        empresa: empresaId,
-        fechaInicio: { $lte: reserva.fecha },
-        fechaFin: { $gte: reserva.fecha },
-      });
-
-      if (!sus) {
-        posibleIngreso += precio;
-        continue;
-      }
-
-      const reservasAnteriores = await reservaModel
-        .find({
-          empresa: empresaId,
-          cliente: reserva.cliente,
-          fecha: { $gte: sus.fechaInicio, $lte: reserva.fecha },
-          estado: { $nin: ["cancelada", "no_asistio"] },
-        })
-        .sort({ fecha: 1 });
-
-      let serviciosAcumulados = 0;
-
-      for (const r of reservasAnteriores) {
-        serviciosAcumulados += r.duracion >= 120 ? 2 : 1;
-        if (r._id.toString() === reserva._id.toString()) break;
-      }
-
-      if (serviciosAcumulados > sus.serviciosTotales) {
-        posibleIngreso += precio;
-      }
-    }
-
-    // ── RESPONSE ──
-    return res.json({
-      ok: true,
-      data: {
-        ingresoTotal:
-          ingresoReservas +
-          ingresoSuscripciones +
-          ingresoProductos +
-          ingresoExtras,
-
-        detalle: {
-          ingresoReservas,
-          ingresoProductos,
-          ingresoExtras,
-          ingresoSuscripciones,
-          suscripcionesNuevas: suscripcionesMes,
-          posibleIngreso:
-            ingresoReservas +
-            ingresoSuscripciones +
-            ingresoProductos +
-            ingresoExtras +
-            posibleIngreso,
-        },
+    return ok(res, {
+      alcance: alcanceDe(req),
+      esAdmin: admin,
+      ingresoTotal: ingresoTotalMes,
+      detalle: {
+        ingresoReservas,
+        ingresoProductos,
+        ingresoExtras,
+        ingresoSuscripciones,
+        suscripcionesNuevas: suscripcionesMes,
+        posibleIngreso: ingresoTotalMes + posibleIngreso,
       },
     });
   } catch (error) {
@@ -364,91 +442,77 @@ export const ingresoMensual = async (req, res) => {
 };
 
 /* =====================================================
-   INGRESO TOTAL
+   INGRESO TOTAL (HISTÓRICO)
+
+   Admin  → todo el histórico de la empresa
+   Barbero → solo lo suyo
 ===================================================== */
 export const ingresoTotal = async (req, res) => {
   try {
-    const empresaId = req.usuario.empresaId;
+    const empresaId = toId(req.usuario.empresaId);
+    const admin = esAdmin(req);
+    const filtro = filtroBarbero(req);
+    const filtroVenta = filtroVentaBarbero(req);
 
-    // ── 1. SERVICIOS (reservas completadas) ──
-    const serviciosAgg = await reservaModel.aggregate([
-      {
-        $match: {
-          estado: "completada",
-          empresa: new mongoose.Types.ObjectId(empresaId),
-        },
-      },
-      {
-        $lookup: {
-          from: "servicios",
-          localField: "servicio",
-          foreignField: "_id",
-          as: "servicioData",
-        },
-      },
-      { $unwind: "$servicioData" },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: "$servicioData.precio" },
-        },
-      },
-    ]);
+    const [serviciosAgg, totalesAgg, ingresoVentasDirectas, suscripciones] =
+      await Promise.all([
+        // Servicios de reservas completadas
+        reservaModel.aggregate([
+          { $match: { empresa: empresaId, ...filtro, estado: "completada" } },
+          {
+            $lookup: {
+              from: "servicios",
+              localField: "servicio",
+              foreignField: "_id",
+              as: "servicioData",
+            },
+          },
+          { $unwind: "$servicioData" },
+          { $group: { _id: null, total: { $sum: "$servicioData.precio" } } },
+        ]),
+
+        // Productos y extras: antes se traían TODAS las reservas a memoria
+        // solo para sumarlas. Ahora lo hace Mongo en una pasada.
+        reservaModel.aggregate([
+          { $match: { empresa: empresaId, ...filtro } },
+          {
+            $group: {
+              _id: null,
+              productos: { $sum: "$totalProductos" },
+              extras: { $sum: "$totalExtras" },
+            },
+          },
+        ]),
+
+        sumarVentasDirectas({
+          empresa: empresaId,
+          ...filtroVenta,
+          anulada: false,
+        }),
+
+        admin ? suscripcionModel.countDocuments({ empresa: empresaId }) : 0,
+      ]);
 
     const ingresoServicios = serviciosAgg[0]?.total || 0;
+    const ingresoProductos = totalesAgg[0]?.productos || 0;
+    const ingresoExtras = totalesAgg[0]?.extras || 0;
+    const ingresoSuscripciones = suscripciones * PRECIO_SUSCRIPCION;
 
-    // ── 2. PRODUCTOS + EXTRAS (reservas) ──
-    const reservas = await reservaModel.find({ empresa: empresaId }).lean();
-
-    const ingresoProductos = reservas.reduce(
-      (acc, r) => acc + (r.totalProductos || 0),
-      0,
-    );
-
-    const ingresoExtras = reservas.reduce(
-      (acc, r) => acc + (r.totalExtras || 0),
-      0,
-    );
-
-    // ── 3. VENTAS DIRECTAS ──
-    const ventasDirectas = await ventaDirectaModel
-      .find({
-        empresa: empresaId,
-        anulada: false,
-      })
-      .lean();
-
-    const ingresoVentasDirectas = ventasDirectas.reduce(
-      (acc, v) => acc + (v.totalFinal || 0),
-      0,
-    );
-
-    // ── 4. SUSCRIPCIONES (si las quieres incluir aquí) ──
-    const suscripciones = await suscripcionModel
-      .find({ empresa: empresaId })
-      .lean();
-
-    const ingresoSuscripciones = suscripciones.length * 25000;
-
-    // ── TOTAL ──
-    const total =
-      ingresoServicios +
-      ingresoProductos +
-      ingresoExtras +
-      ingresoVentasDirectas +
-      ingresoSuscripciones;
-
-    return res.json({
-      ok: true,
-      data: {
-        total,
-        detalle: {
-          ingresoServicios,
-          ingresoProductos,
-          ingresoExtras,
-          ingresoVentasDirectas,
-          ingresoSuscripciones,
-        },
+    return ok(res, {
+      alcance: alcanceDe(req),
+      esAdmin: admin,
+      total:
+        ingresoServicios +
+        ingresoProductos +
+        ingresoExtras +
+        ingresoVentasDirectas +
+        ingresoSuscripciones,
+      detalle: {
+        ingresoServicios,
+        ingresoProductos,
+        ingresoExtras,
+        ingresoVentasDirectas,
+        ingresoSuscripciones,
       },
     });
   } catch (error) {
@@ -457,28 +521,32 @@ export const ingresoTotal = async (req, res) => {
   }
 };
 
+/* =====================================================
+   HORA MÁS SOLICITADA
+===================================================== */
 export const getHoraMasSolicitada = async (req, res) => {
   try {
-    const empresaId = req.usuario.empresaId;
+    const empresaId = toId(req.usuario.empresaId);
+    const filtro = filtroBarbero(req);
 
     const resultado = await reservaModel.aggregate([
-      { $match: { empresa: new mongoose.Types.ObjectId(empresaId) } },
+      { $match: { empresa: empresaId, ...filtro } },
       {
-        $addFields: {
-          hora: { $hour: { date: "$fecha", timezone: "America/Santiago" } },
+        $group: {
+          _id: { $hour: { date: "$fecha", timezone: ZONA } },
+          total: { $sum: 1 },
         },
       },
-      { $group: { _id: "$hora", total: { $sum: 1 } } },
       { $sort: { total: -1 } },
       { $limit: 1 },
     ]);
 
     if (!resultado.length) return ok(res, { total: null });
 
-    const hora = resultado[0]._id;
     return ok(res, {
-      total: `${hora}:00 - ${hora + 1}:00`,
+      total: formatearRangoHora(resultado[0]._id),
       totalReservas: resultado[0].total,
+      alcance: alcanceDe(req),
     });
   } catch (error) {
     console.error(error);
@@ -486,24 +554,29 @@ export const getHoraMasSolicitada = async (req, res) => {
   }
 };
 
+/* =====================================================
+   RESUMEN DASHBOARD
+
+   Todo lo que sale de reservas queda acotado al profesional
+   cuando no es admin. Lo que no se puede atribuir a nadie
+   (suscripciones) solo lo ve el admin.
+===================================================== */
 export const getDashboardResumen = async (req, res) => {
   try {
-    const empresaId = new mongoose.Types.ObjectId(req.usuario.empresaId);
+    const empresaId = toId(req.usuario.empresaId);
+    const admin = esAdmin(req);
+    const filtro = filtroBarbero(req);
+    const filtroVenta = filtroVentaBarbero(req);
+
     const ahora = new Date();
-    const PRECIO_SUSCRIPCION = 25000;
+    const { inicio: inicioHoy, fin: finHoy } = rangoDia(ahora);
+    const { inicio: inicioMes, fin: finMes } = rangoMes(
+      ahora.getFullYear(),
+      ahora.getMonth(),
+    );
 
-    // ── Rangos de fecha ──────────────────────────────
-    const inicioHoy = new Date(ahora);
-    inicioHoy.setHours(0, 0, 0, 0);
-    const finHoy = new Date(ahora);
-    finHoy.setHours(23, 59, 59, 999);
+    const base = { empresa: empresaId, ...filtro };
 
-    const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
-    inicioMes.setHours(0, 0, 0, 0);
-    const finMes = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0);
-    finMes.setHours(23, 59, 59, 999);
-
-    // ── Queries en paralelo ──────────────────────────
     const [
       reservasHoy,
       totalClientes,
@@ -522,49 +595,55 @@ export const getDashboardResumen = async (req, res) => {
       reservasPasadasMes,
       reservasFuturasMes,
       suscripcionesMes,
+      ventasDirectasMes,
     ] = await Promise.all([
       // 1. Reservas hoy
       reservaModel.countDocuments({
-        empresa: empresaId,
+        ...base,
         fecha: { $gte: inicioHoy, $lte: finHoy },
         estado: { $ne: "cancelada" },
       }),
 
-      // 2. Total clientes
-      usuarioModel.countDocuments({
-        empresa: empresaId,
-        rol: { $in: ["cliente", "invitado"] },
-        estado: "activo",
-      }),
+      // 2. Clientes: el admin ve la cartera completa,
+      //    el barbero cuenta los clientes que ha atendido
+      admin
+        ? usuarioModel.countDocuments({
+            empresa: empresaId,
+            rol: { $in: ["cliente", "invitado"] },
+            estado: "activo",
+          })
+        : reservaModel
+            .distinct("cliente", { ...base, estado: ESTADOS_VALIDOS })
+            .then((lista) => lista.length),
 
       // 3. Citas este mes
       reservaModel.countDocuments({
-        empresa: empresaId,
+        ...base,
         fecha: { $gte: inicioMes, $lt: finMes },
         estado: { $ne: "cancelada" },
       }),
 
       // 4. Completadas
-      reservaModel.countDocuments({ empresa: empresaId, estado: "completada" }),
+      reservaModel.countDocuments({ ...base, estado: "completada" }),
 
       // 5. Canceladas
-      reservaModel.countDocuments({ empresa: empresaId, estado: "cancelada" }),
+      reservaModel.countDocuments({ ...base, estado: "cancelada" }),
 
       // 6. No asistió
-      reservaModel.countDocuments({ empresa: empresaId, estado: "no_asistio" }),
+      reservaModel.countDocuments({ ...base, estado: "no_asistio" }),
 
       // 7. Total para tasas
       reservaModel.countDocuments({
-        empresa: empresaId,
+        ...base,
         estado: { $in: ["completada", "cancelada", "no_asistio"] },
       }),
 
       // 8. Hora más cancelada
       reservaModel.aggregate([
-        { $match: { empresa: empresaId, estado: "cancelada" } },
+        { $match: { ...base, estado: "cancelada" } },
         {
           $group: {
-            _id: { $hour: { date: "$fecha", timezone: "America/Santiago" } },
+            _id: { $hour: { date: "$fecha", timezone: ZONA } },
             total: { $sum: 1 },
           },
         },
@@ -574,13 +653,13 @@ export const getDashboardResumen = async (req, res) => {
 
       // 9. Hora más solicitada
       reservaModel.aggregate([
-        { $match: { empresa: empresaId } },
+        { $match: base },
         {
-          $addFields: {
-            hora: { $hour: { date: "$fecha", timezone: "America/Santiago" } },
+          $group: {
+            _id: { $hour: { date: "$fecha", timezone: ZONA } },
+            total: { $sum: 1 },
           },
         },
-        { $group: { _id: "$hora", total: { $sum: 1 } } },
         { $sort: { total: -1 } },
         { $limit: 1 },
       ]),
@@ -589,7 +668,7 @@ export const getDashboardResumen = async (req, res) => {
       reservaModel.aggregate([
         {
           $match: {
-            empresa: empresaId,
+            ...base,
             estado: { $in: ["completada", "confirmada", "pendiente"] },
           },
         },
@@ -616,7 +695,7 @@ export const getDashboardResumen = async (req, res) => {
 
       // 11. Top 5 asistentes
       reservaModel.aggregate([
-        { $match: { empresa: empresaId, estado: "completada" } },
+        { $match: { ...base, estado: "completada" } },
         {
           $lookup: {
             from: "usuarios",
@@ -651,7 +730,7 @@ export const getDashboardResumen = async (req, res) => {
 
       // 12. Top 5 canceladores
       reservaModel.aggregate([
-        { $match: { empresa: empresaId, estado: "cancelada" } },
+        { $match: { ...base, estado: "cancelada" } },
         {
           $lookup: {
             from: "usuarios",
@@ -677,7 +756,7 @@ export const getDashboardResumen = async (req, res) => {
 
       // 13. Top 5 no asistidos
       reservaModel.aggregate([
-        { $match: { empresa: empresaId, estado: "no_asistio" } },
+        { $match: { ...base, estado: "no_asistio" } },
         {
           $lookup: {
             from: "usuarios",
@@ -701,9 +780,9 @@ export const getDashboardResumen = async (req, res) => {
         { $limit: 5 },
       ]),
 
-      // 14. Ingreso total histórico
+      // 14. Ingreso histórico
       reservaModel.aggregate([
-        { $match: { empresa: empresaId, estado: "completada" } },
+        { $match: { ...base, estado: "completada" } },
         {
           $lookup: {
             from: "servicios",
@@ -716,137 +795,86 @@ export const getDashboardResumen = async (req, res) => {
         { $group: { _id: null, total: { $sum: "$servicioData.precio" } } },
       ]),
 
-      // 15. Reservas pasadas del mes (para ingreso mensual)
+      // 15. Reservas pasadas del mes
       reservaModel
         .find({
-          empresa: empresaId,
+          ...base,
           fecha: { $gte: inicioMes, $lte: ahora },
-          estado: { $nin: ["cancelada", "no_asistio"] },
+          estado: ESTADOS_VALIDOS,
         })
         .populate("servicio", "precio")
         .lean(),
 
-      // 16. Reservas futuras del mes (para posible ingreso)
+      // 16. Reservas futuras del mes
       reservaModel
         .find({
-          empresa: empresaId,
+          ...base,
           fecha: { $gt: ahora, $lte: finMes },
-          estado: { $nin: ["cancelada", "no_asistio"] },
+          estado: ESTADOS_VALIDOS,
         })
         .populate("servicio", "precio")
         .lean(),
 
-      // 17. Suscripciones nuevas del mes
-      suscripcionModel.countDocuments({
+      // 17. Suscripciones nuevas del mes (solo admin)
+      admin
+        ? suscripcionModel.countDocuments({
+            empresa: empresaId,
+            fechaInicio: { $gte: inicioMes, $lte: finMes },
+          })
+        : 0,
+
+      // 18. Ventas directas del mes
+      sumarVentasDirectas({
         empresa: empresaId,
-        fechaInicio: { $gte: inicioMes, $lte: finMes },
+        ...filtroVenta,
+        fecha: { $gte: inicioMes, $lte: finMes },
+        anulada: false,
       }),
     ]);
 
-    // ── Calcular ingreso mensual (fix N+1) ───────────
-    const calcularIngresoConSus = async (reservas) => {
-      if (!reservas.length) return 0;
-
-      // Una sola query para todas las suscripciones relevantes
-      const clienteIds = [
-        ...new Set(reservas.map((r) => r.cliente?.toString())),
-      ];
-      const todasLasSus = await suscripcionModel
-        .find({ usuario: { $in: clienteIds }, empresa: empresaId })
-        .lean();
-
-      // Map clienteId → suscripciones[]
-      const susMap = new Map();
-      for (const s of todasLasSus) {
-        const key = s.usuario.toString();
-        if (!susMap.has(key)) susMap.set(key, []);
-        susMap.get(key).push(s);
-      }
-
-      // Todas las reservas del mes de estos clientes (para contar servicios acumulados)
-      const todasReservasMes = await reservaModel
-        .find({
-          empresa: empresaId,
-          cliente: { $in: clienteIds },
-          fecha: { $gte: inicioMes, $lte: finMes },
-          estado: { $nin: ["cancelada", "no_asistio"] },
-        })
-        .sort({ fecha: 1 })
-        .lean();
-
-      // Map clienteId → reservas ordenadas
-      const reservasPorCliente = new Map();
-      for (const r of todasReservasMes) {
-        const key = r.cliente.toString();
-        if (!reservasPorCliente.has(key)) reservasPorCliente.set(key, []);
-        reservasPorCliente.get(key).push(r);
-      }
-
-      let ingreso = 0;
-      for (const reserva of reservas) {
-        const precio = reserva.precio || reserva.servicio?.precio || 0;
-        const clienteKey = reserva.cliente?.toString();
-        const suscripciones = susMap.get(clienteKey) || [];
-
-        const sus = suscripciones.find(
-          (s) =>
-            new Date(s.fechaInicio) <= new Date(reserva.fecha) &&
-            new Date(s.fechaFin) >= new Date(reserva.fecha),
-        );
-
-        if (!sus) {
-          ingreso += precio;
-          continue;
-        }
-
-        const reservasCliente = reservasPorCliente.get(clienteKey) || [];
-        let serviciosAcumulados = 0;
-        for (const r of reservasCliente) {
-          serviciosAcumulados += r.duracion >= 120 ? 2 : 1;
-          if (r._id.toString() === reserva._id.toString()) break;
-        }
-
-        if (serviciosAcumulados > sus.serviciosTotales) ingreso += precio;
-      }
-
-      return ingreso;
-    };
-
     const [ingresoReservas, posibleIngreso] = await Promise.all([
-      calcularIngresoConSus(reservasPasadasMes),
-      calcularIngresoConSus(reservasFuturasMes),
+      calcularIngresoConSuscripciones(reservasPasadasMes, empresaId),
+      calcularIngresoConSuscripciones(reservasFuturasMes, empresaId),
     ]);
 
     const ingresoSuscripciones = suscripcionesMes * PRECIO_SUSCRIPCION;
     const ingresoTotalHistorico = ingresoTotalAggregate[0]?.total || 0;
 
-    // ── Formatear tasas ──────────────────────────────
-    const tasaCancelacion =
+    const ingresoProductosMes =
+      reservasPasadasMes.reduce((acc, r) => acc + (r.totalProductos || 0), 0) +
+      ventasDirectasMes;
+    const ingresoExtrasMes = reservasPasadasMes.reduce(
+      (acc, r) => acc + (r.totalExtras || 0),
+      0,
+    );
+
+    const ingresoMesTotal =
+      ingresoReservas +
+      ingresoSuscripciones +
+      ingresoProductosMes +
+      ingresoExtrasMes;
+
+    // ── Tasas ────────────────────────────────────────
+    const porcentaje = (parte) =>
       totalParaTasa === 0
         ? "0%"
-        : `${((totalCanceladas / totalParaTasa) * 100).toFixed(2)}%`;
+        : `${((parte / totalParaTasa) * 100).toFixed(2)}%`;
 
-    const tasaAsistencia =
-      totalParaTasa === 0
-        ? "0%"
-        : `${((totalCompletadas / totalParaTasa) * 100).toFixed(2)}%`;
-
-    // ── Formatear hora más cancelada/solicitada ──────
+    // ── Horas ────────────────────────────────────────
     const horaCancelada = horaMasCancelada[0]
       ? {
-          rango: `${horaMasCancelada[0]._id}:00 - ${horaMasCancelada[0]._id + 1}:00`,
+          rango: formatearRangoHora(horaMasCancelada[0]._id),
           cantidad: horaMasCancelada[0].total,
         }
       : null;
 
     const horaSolicitada = horaMasSolicitada[0]
       ? {
-          rango: `${horaMasSolicitada[0]._id}:00 - ${horaMasSolicitada[0]._id + 1}:00`,
+          rango: formatearRangoHora(horaMasSolicitada[0]._id),
           totalReservas: horaMasSolicitada[0].total,
         }
       : null;
 
-    // ── Formatear top clientes ───────────────────────
     const formatter = new Intl.NumberFormat("es-CL", {
       style: "currency",
       currency: "CLP",
@@ -854,6 +882,10 @@ export const getDashboardResumen = async (req, res) => {
     });
 
     return ok(res, {
+      // Contexto para que el front sepa qué está mostrando
+      alcance: alcanceDe(req),
+      esAdmin: admin,
+
       // Conteos generales
       reservasHoy,
       totalClientes,
@@ -866,12 +898,12 @@ export const getDashboardResumen = async (req, res) => {
 
       // Tasas
       tasaCancelacion: {
-        porcentaje: tasaCancelacion,
+        porcentaje: porcentaje(totalCanceladas),
         canceladas: totalCanceladas,
         totalReservas: totalParaTasa,
       },
       tasaAsistencia: {
-        porcentaje: tasaAsistencia,
+        porcentaje: porcentaje(totalCompletadas),
         completadas: totalCompletadas,
         noAsistio: totalNoAsistio,
         totalReservas: totalParaTasa,
@@ -887,13 +919,14 @@ export const getDashboardResumen = async (req, res) => {
       // Ingresos
       ingresoTotal: ingresoTotalHistorico,
       ingresoMensual: {
-        ingresoTotal: ingresoReservas + ingresoSuscripciones,
+        ingresoTotal: ingresoMesTotal,
         detalle: {
           ingresoReservas,
+          ingresoProductos: ingresoProductosMes,
+          ingresoExtras: ingresoExtrasMes,
           ingresoSuscripciones,
           suscripcionesNuevas: suscripcionesMes,
-          posibleIngreso:
-            ingresoReservas + ingresoSuscripciones + posibleIngreso,
+          posibleIngreso: ingresoMesTotal + posibleIngreso,
         },
       },
 
@@ -924,108 +957,82 @@ export const getDashboardResumen = async (req, res) => {
   }
 };
 
+/* =====================================================
+   INGRESOS POR MES
+   GET /estadisticas/ingresos?mes=3&anio=2025   (mes 0-11)
+===================================================== */
 export const ingresosPorMes = async (req, res) => {
-  const empresaId = req.usuario?.empresaId;
-  if (!empresaId) return err(res, "Empresa no identificada", 400);
-
-  const PRECIO_SUSCRIPCION = 25000;
-
-  // ── Leer mes y año desde query params ──
-  // Ejemplo: GET /estadisticas/ingresos?mes=3&anio=2025
-  const mes = parseInt(req.query.mes); // 0-11 (igual que JS Date)
-  const anio = parseInt(req.query.anio);
-
-  if (isNaN(mes) || isNaN(anio)) {
-    return err(res, "Debes enviar mes (0-11) y anio como query params", 400);
-  }
-
-  const ahora = new Date();
-  const inicioMes = new Date(anio, mes, 1);
-  inicioMes.setHours(0, 0, 0, 0);
-  const finMes = new Date(anio, mes + 1, 0);
-  finMes.setHours(23, 59, 59, 999);
-
-  // Si es el mes actual, solo hasta ahora. Si es pasado, todo el mes.
-  const esMesActual = anio === ahora.getFullYear() && mes === ahora.getMonth();
-  const finConsulta = esMesActual ? ahora : finMes;
-
   try {
-    const reservasPasadas = await reservaModel
-      .find({
-        empresa: empresaId,
-        fecha: { $gte: inicioMes, $lte: finConsulta },
-        estado: { $nin: ["cancelada", "no_asistio"] },
-      })
-      .populate("servicio", "precio")
-      .lean();
+    const empresaIdRaw = req.usuario?.empresaId;
+    if (!empresaIdRaw) return err(res, "Empresa no identificada", 400);
 
-    // ── Calcular ingreso respetando suscripciones ──
-    const clienteIds = [
-      ...new Set(
-        reservasPasadas.map((r) => r.cliente?.toString()).filter(Boolean),
-      ),
-    ];
+    const empresaId = toId(empresaIdRaw);
+    const admin = esAdmin(req);
+    const filtro = filtroBarbero(req);
+    const filtroVenta = filtroVentaBarbero(req);
 
-    const todasLasSus = await suscripcionModel
-      .find({ usuario: { $in: clienteIds }, empresa: empresaId })
-      .lean();
+    const mes = parseInt(req.query.mes);
+    const anio = parseInt(req.query.anio);
 
-    const susMap = new Map();
-    for (const s of todasLasSus) {
-      const key = s.usuario.toString();
-      if (!susMap.has(key)) susMap.set(key, []);
-      susMap.get(key).push(s);
+    if (isNaN(mes) || isNaN(anio) || mes < 0 || mes > 11) {
+      return err(res, "Debes enviar mes (0-11) y anio como query params", 400);
     }
 
-    const todasReservasMes = await reservaModel
-      .find({
-        empresa: empresaId,
-        cliente: { $in: clienteIds },
-        fecha: { $gte: inicioMes, $lte: finConsulta },
-        estado: { $nin: ["cancelada", "no_asistio"] },
-      })
-      .sort({ fecha: 1 })
-      .lean();
+    const ahora = new Date();
+    const { inicio: inicioMes, fin: finMes } = rangoMes(anio, mes);
 
-    const reservasPorCliente = new Map();
-    for (const r of todasReservasMes) {
-      const key = r.cliente.toString();
-      if (!reservasPorCliente.has(key)) reservasPorCliente.set(key, []);
-      reservasPorCliente.get(key).push(r);
-    }
+    // Mes actual: solo hasta ahora. Mes pasado: el mes completo.
+    const esMesActual = anio === ahora.getFullYear() && mes === ahora.getMonth();
+    const finConsulta = esMesActual ? ahora : finMes;
 
-    let ingresoReservas = 0;
-    for (const reserva of reservasPasadas) {
-      const precio = reserva.precio || reserva.servicio?.precio || 0;
-      const clienteKey = reserva.cliente?.toString();
-      const sus = (susMap.get(clienteKey) || []).find(
-        (s) =>
-          new Date(s.fechaInicio) <= new Date(reserva.fecha) &&
-          new Date(s.fechaFin) >= new Date(reserva.fecha),
-      );
+    const [reservasPasadas, reservasFuturas, suscripcionesMes, ingresoVentasDirectas] =
+      await Promise.all([
+        reservaModel
+          .find({
+            empresa: empresaId,
+            ...filtro,
+            fecha: { $gte: inicioMes, $lte: finConsulta },
+            estado: ESTADOS_VALIDOS,
+          })
+          .populate("servicio", "precio")
+          .lean(),
 
-      if (!sus) {
-        ingresoReservas += precio;
-        continue;
-      }
+        esMesActual
+          ? reservaModel
+              .find({
+                empresa: empresaId,
+                ...filtro,
+                fecha: { $gt: ahora, $lte: finMes },
+                estado: ESTADOS_VALIDOS,
+              })
+              .populate("servicio", "precio")
+              .lean()
+          : [],
 
-      const reservasCliente = reservasPorCliente.get(clienteKey) || [];
-      let serviciosAcumulados = 0;
-      for (const r of reservasCliente) {
-        serviciosAcumulados += r.duracion >= 120 ? 2 : 1;
-        if (r._id.toString() === reserva._id.toString()) break;
-      }
-      if (serviciosAcumulados > sus.serviciosTotales) ingresoReservas += precio;
-    }
+        admin
+          ? suscripcionModel.countDocuments({
+              empresa: empresaId,
+              fechaInicio: { $gte: inicioMes, $lte: finMes },
+            })
+          : 0,
 
-    // ── Suscripciones nuevas del mes ──
-    const suscripcionesMes = await suscripcionModel.countDocuments({
-      empresa: empresaId,
-      fechaInicio: { $gte: inicioMes, $lte: finMes },
-    });
+        sumarVentasDirectas({
+          empresa: empresaId,
+          ...filtroVenta,
+          fecha: { $gte: inicioMes, $lte: finConsulta },
+          anulada: false,
+        }),
+      ]);
+
+    const [ingresoReservas, posibleIngreso] = await Promise.all([
+      calcularIngresoConSuscripciones(reservasPasadas, empresaId),
+      // Las futuras también respetan la suscripción; antes se sumaban
+      // completas y por eso el "posible ingreso" salía inflado.
+      calcularIngresoConSuscripciones(reservasFuturas, empresaId),
+    ]);
+
     const ingresoSuscripciones = suscripcionesMes * PRECIO_SUSCRIPCION;
 
-    // ── Productos y extras ──
     const ingresoProductos = reservasPasadas.reduce(
       (acc, r) => acc + (r.totalProductos || 0),
       0,
@@ -1035,64 +1042,25 @@ export const ingresosPorMes = async (req, res) => {
       0,
     );
 
-    // ── Ventas directas del mes ──
-    const ventasDirectasMes = await ventaDirectaModel
-      .find({
-        empresa: empresaId,
-        fecha: { $gte: inicioMes, $lte: finConsulta },
-        anulada: false,
-      })
-      .lean();
+    const ingresoTotalMes =
+      ingresoReservas + ingresoSuscripciones + ingresoProductos + ingresoExtras;
 
-    const ingresoVentasDirectas = ventasDirectasMes.reduce(
-      (acc, v) => acc + (v.totalFinal || 0),
-      0,
-    );
-
-    // ── Posible ingreso (solo si es mes actual, futuras del mes) ──
-    let posibleIngreso = 0;
-    if (esMesActual) {
-      const reservasFuturas = await reservaModel
-        .find({
-          empresa: empresaId,
-          fecha: { $gt: ahora, $lte: finMes },
-          estado: { $nin: ["cancelada", "no_asistio"] },
-        })
-        .populate("servicio", "precio")
-        .lean();
-
-      for (const reserva of reservasFuturas) {
-        const precio = reserva.precio || reserva.servicio?.precio || 0;
-        posibleIngreso += precio;
-      }
-    }
-
-    return res.json({
-      ok: true,
-      data: {
-        mes,
-        anio,
-        ingresoTotal:
-          ingresoReservas +
-          ingresoSuscripciones +
-          ingresoProductos +
-          ingresoExtras,
+    return ok(res, {
+      alcance: alcanceDe(req),
+      esAdmin: admin,
+      mes,
+      anio,
+      ingresoTotal: ingresoTotalMes,
+      ingresoVentasDirectas,
+      detalle: {
+        ingresoReservas,
+        ingresoProductos,
+        ingresoExtras,
+        ingresoSuscripciones,
+        suscripcionesNuevas: suscripcionesMes,
         ingresoVentasDirectas,
-        detalle: {
-          ingresoReservas,
-          ingresoProductos,
-          ingresoExtras,
-          ingresoSuscripciones,
-          suscripcionesNuevas: suscripcionesMes,
-          ingresoVentasDirectas,
-          posibleIngreso: esMesActual
-            ? ingresoReservas +
-              ingresoSuscripciones +
-              ingresoProductos +
-              ingresoExtras +
-              posibleIngreso
-            : null, // en meses pasados no tiene sentido
-        },
+        // En meses pasados no tiene sentido proyectar
+        posibleIngreso: esMesActual ? ingresoTotalMes + posibleIngreso : null,
       },
     });
   } catch (error) {
@@ -1101,28 +1069,46 @@ export const ingresosPorMes = async (req, res) => {
   }
 };
 
+/* =====================================================
+   ESTADÍSTICAS DE PRODUCTOS
+
+   Ventas → acotadas al profesional si no es admin
+   Stock  → siempre de la empresa (el inventario es compartido)
+===================================================== */
 export const estadisticasProductos = async (req, res) => {
   try {
     const empresaId = req.usuario?.empresaId;
-    if (!empresaId)
-      return res.status(400).json({ message: "Empresa no identificada" });
+    if (!empresaId) return err(res, "Empresa no identificada", 400);
 
+    const filtro = filtroBarbero(req);
     const hoy = new Date();
-    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    inicioMes.setHours(0, 0, 0, 0);
+    const { inicio: inicioMes } = rangoMes(hoy.getFullYear(), hoy.getMonth());
 
-    // reservas completadas del mes con productos
-    const reservas = await reservaModel
-      .find({
-        empresa: empresaId,
-        estado: { $nin: ["cancelada", "no_asistio"] }, // excluye solo los inválidos
-        fecha: { $gte: inicioMes, $lte: hoy },
-        "productos.0": { $exists: true },
-      })
-      .populate("cliente", "nombre apellido")
-      .sort({ fecha: -1 });
+    const [reservas, stockBajo] = await Promise.all([
+      reservaModel
+        .find({
+          empresa: empresaId,
+          ...filtro,
+          estado: ESTADOS_VALIDOS,
+          fecha: { $gte: inicioMes, $lte: hoy },
+          "productos.0": { $exists: true },
+        })
+        .populate("cliente", "nombre apellido")
+        .select("fecha cliente productos")
+        .sort({ fecha: -1 })
+        .lean(),
 
-    // ── 1. ventas recientes ──
+      productoModel
+        .find({
+          empresa: empresaId,
+          activo: true,
+          stock: { $ne: null, $lte: 3, $gt: 0 },
+        })
+        .select("nombre stock")
+        .lean(),
+    ]);
+
+    // ── 1. Ventas recientes ──
     const ventasRecientes = reservas.flatMap((r) =>
       r.productos.map((p) => ({
         fecha: r.fecha,
@@ -1135,45 +1121,36 @@ export const estadisticasProductos = async (req, res) => {
       })),
     );
 
-    // ── 2. productos más vendidos ──
-    const mapaProductos = {};
-    for (const r of reservas) {
-      for (const p of r.productos) {
-        const key = p.nombre;
-        if (!mapaProductos[key]) {
-          mapaProductos[key] = { nombre: p.nombre, unidades: 0, total: 0 };
-        }
-        mapaProductos[key].unidades += p.cantidad;
-        mapaProductos[key].total += p.subtotal;
-      }
+    // ── 2. Más vendidos ──
+    const mapaProductos = new Map();
+    for (const venta of ventasRecientes) {
+      const actual = mapaProductos.get(venta.producto) || {
+        nombre: venta.producto,
+        unidades: 0,
+        total: 0,
+      };
+      actual.unidades += venta.cantidad;
+      actual.total += venta.subtotal;
+      mapaProductos.set(venta.producto, actual);
     }
-    const masVendidos = Object.values(mapaProductos).sort(
+
+    const masVendidos = [...mapaProductos.values()].sort(
       (a, b) => b.unidades - a.unidades,
     );
 
-    // ── 3. stock bajo (menos de 3 unidades) ──
-    const stockBajo = await productoModel
-      .find({
-        empresa: empresaId,
-        activo: true,
-        stock: { $ne: null, $lte: 3, $gt: 0 },
-      })
-      .select("nombre stock");
-
-    // ── 4. total vendido en el mes ──
+    // ── 3. Total del mes ──
     const totalMes = ventasRecientes.reduce((acc, v) => acc + v.subtotal, 0);
 
-    res.json({
-      ok: true,
-      data: {
-        totalMes,
-        ventasRecientes,
-        masVendidos,
-        stockBajo,
-      },
+    return ok(res, {
+      alcance: alcanceDe(req),
+      esAdmin: esAdmin(req),
+      totalMes,
+      ventasRecientes,
+      masVendidos,
+      stockBajo,
     });
   } catch (error) {
     console.error("❌ Error estadisticasProductos:", error);
-    res.status(500).json({ message: error.message });
+    return err(res, "Error al obtener estadísticas de productos");
   }
 };
