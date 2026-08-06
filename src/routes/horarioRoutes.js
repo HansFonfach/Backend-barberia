@@ -46,7 +46,6 @@ router.get("/proximaHoraDisponible", validarToken, getProximaHoraDisponible);
 router.get(
   "/admin/:id/horas",
   validarToken,
-  verificarRol(""),
   getHorasProfesionalPorDia,
 );
 
