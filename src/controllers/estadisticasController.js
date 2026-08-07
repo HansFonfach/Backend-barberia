@@ -363,43 +363,47 @@ export const ingresoMensual = async (req, res) => {
       hoy.getMonth(),
     );
 
-    const [reservasPasadas, reservasFuturas, suscripcionesMes, ingresoVentasDirectas] =
-      await Promise.all([
-        reservaModel
-          .find({
-            empresa: empresaId,
-            ...filtro,
-            fecha: { $gte: inicioMes, $lte: hoy },
-            estado: ESTADOS_VALIDOS,
-          })
-          .populate("servicio", "precio")
-          .lean(),
-
-        reservaModel
-          .find({
-            empresa: empresaId,
-            ...filtro,
-            fecha: { $gt: hoy, $lte: finMes },
-            estado: ESTADOS_VALIDOS,
-          })
-          .populate("servicio", "precio")
-          .lean(),
-
-        // Las suscripciones son ingreso del negocio, no de un profesional
-        admin
-          ? suscripcionModel.countDocuments({
-              empresa: empresaId,
-              fechaInicio: { $gte: inicioMes, $lte: finMes },
-            })
-          : 0,
-
-        sumarVentasDirectas({
+    const [
+      reservasPasadas,
+      reservasFuturas,
+      suscripcionesMes,
+      ingresoVentasDirectas,
+    ] = await Promise.all([
+      reservaModel
+        .find({
           empresa: empresaId,
-          ...filtroVenta,
-          fecha: { $gte: inicioMes, $lte: finMes },
-          anulada: false,
-        }),
-      ]);
+          ...filtro,
+          fecha: { $gte: inicioMes, $lte: hoy },
+          estado: ESTADOS_VALIDOS,
+        })
+        .populate("servicio", "precio")
+        .lean(),
+
+      reservaModel
+        .find({
+          empresa: empresaId,
+          ...filtro,
+          fecha: { $gt: hoy, $lte: finMes },
+          estado: ESTADOS_VALIDOS,
+        })
+        .populate("servicio", "precio")
+        .lean(),
+
+      // Las suscripciones son ingreso del negocio, no de un profesional
+      admin
+        ? suscripcionModel.countDocuments({
+            empresa: empresaId,
+            fechaInicio: { $gte: inicioMes, $lte: finMes },
+          })
+        : 0,
+
+      sumarVentasDirectas({
+        empresa: empresaId,
+        ...filtroVenta,
+        fecha: { $gte: inicioMes, $lte: finMes },
+        anulada: false,
+      }),
+    ]);
 
     const [ingresoReservas, posibleIngreso] = await Promise.all([
       calcularIngresoConSuscripciones(reservasPasadas, empresaId),
@@ -961,6 +965,97 @@ export const getDashboardResumen = async (req, res) => {
    INGRESOS POR MES
    GET /estadisticas/ingresos?mes=3&anio=2025   (mes 0-11)
 ===================================================== */
+/* =====================================================
+   1) PEGAR ESTA FUNCIÓN EN estadisticasController.js
+      Justo debajo de calcularIngresoConSuscripciones.
+
+      Va acá y no en helpers/ porque necesita cuatro cosas
+      que ya viven en este archivo: calcularIngresoConSuscripciones,
+      agruparPor, ventaDirectaModel y usuarioModel.
+
+      No vuelve a consultar reservas: reutiliza las que el
+      endpoint ya trajo. Por eso los números cuadran con el
+      total de la pantalla en vez de ser un cálculo paralelo.
+===================================================== */
+const ingresosPorProfesional = async (reservas, empresaId, rangoFecha) => {
+  const porBarbero = agruparPor(reservas, (r) => r.barbero?.toString());
+
+  const ventasAgg = await ventaDirectaModel.aggregate([
+    {
+      $match: {
+        empresa: empresaId,
+        anulada: false,
+        fecha: rangoFecha,
+      },
+    },
+    {
+      $group: {
+        _id: `$${CAMPO_BARBERO_VENTA}`,
+        total: { $sum: "$totalFinal" },
+      },
+    },
+  ]);
+
+  const ventasPorBarbero = new Map(
+    ventasAgg.filter((v) => v._id).map((v) => [String(v._id), v.total]),
+  );
+
+  // Quien vendió productos pero no atendió a nadie también aparece
+  for (const id of ventasPorBarbero.keys()) {
+    if (!porBarbero.has(id)) porBarbero.set(id, []);
+  }
+
+  const ids = [...porBarbero.keys()];
+  if (!ids.length) return [];
+
+  const usuarios = await usuarioModel
+    .find({ _id: { $in: ids } })
+    .select("nombre apellido")
+    .lean();
+
+  const nombrePorId = new Map(
+    usuarios.map((u) => [
+      String(u._id),
+      `${u.nombre || ""} ${u.apellido || ""}`.trim(),
+    ]),
+  );
+
+  const resultado = await Promise.all(
+    ids.map(async (id) => {
+      const suyas = porBarbero.get(id);
+
+      const ingresoReservas = await calcularIngresoConSuscripciones(
+        suyas,
+        empresaId,
+      );
+
+      const ingresoProductos =
+        suyas.reduce((acc, r) => acc + (r.totalProductos || 0), 0) +
+        (ventasPorBarbero.get(id) || 0);
+
+      const ingresoExtras = suyas.reduce(
+        (acc, r) => acc + (r.totalExtras || 0),
+        0,
+      );
+
+      return {
+        barberoId: id,
+        nombre: nombrePorId.get(id) || "Sin nombre",
+        ingresoReservas,
+        ingresoProductos,
+        ingresoExtras,
+        cantidadReservas: suyas.length,
+        total: ingresoReservas + ingresoProductos + ingresoExtras,
+      };
+    }),
+  );
+
+  return resultado.sort((a, b) => b.total - a.total);
+};
+
+/* =====================================================
+   2) REEMPLAZAR ingresosPorMes COMPLETA POR ESTA
+===================================================== */
 export const ingresosPorMes = async (req, res) => {
   try {
     const empresaIdRaw = req.usuario?.empresaId;
@@ -982,47 +1077,54 @@ export const ingresosPorMes = async (req, res) => {
     const { inicio: inicioMes, fin: finMes } = rangoMes(anio, mes);
 
     // Mes actual: solo hasta ahora. Mes pasado: el mes completo.
-    const esMesActual = anio === ahora.getFullYear() && mes === ahora.getMonth();
+    const esMesActual =
+      anio === ahora.getFullYear() && mes === ahora.getMonth();
     const finConsulta = esMesActual ? ahora : finMes;
 
-    const [reservasPasadas, reservasFuturas, suscripcionesMes, ingresoVentasDirectas] =
-      await Promise.all([
-        reservaModel
-          .find({
-            empresa: empresaId,
-            ...filtro,
-            fecha: { $gte: inicioMes, $lte: finConsulta },
-            estado: ESTADOS_VALIDOS,
-          })
-          .populate("servicio", "precio")
-          .lean(),
+    const rangoVentas = { $gte: inicioMes, $lte: finConsulta };
 
-        esMesActual
-          ? reservaModel
-              .find({
-                empresa: empresaId,
-                ...filtro,
-                fecha: { $gt: ahora, $lte: finMes },
-                estado: ESTADOS_VALIDOS,
-              })
-              .populate("servicio", "precio")
-              .lean()
-          : [],
-
-        admin
-          ? suscripcionModel.countDocuments({
-              empresa: empresaId,
-              fechaInicio: { $gte: inicioMes, $lte: finMes },
-            })
-          : 0,
-
-        sumarVentasDirectas({
+    const [
+      reservasPasadas,
+      reservasFuturas,
+      suscripcionesMes,
+      ingresoVentasDirectas,
+    ] = await Promise.all([
+      reservaModel
+        .find({
           empresa: empresaId,
-          ...filtroVenta,
+          ...filtro,
           fecha: { $gte: inicioMes, $lte: finConsulta },
-          anulada: false,
-        }),
-      ]);
+          estado: ESTADOS_VALIDOS,
+        })
+        .populate("servicio", "precio")
+        .lean(),
+
+      esMesActual
+        ? reservaModel
+            .find({
+              empresa: empresaId,
+              ...filtro,
+              fecha: { $gt: ahora, $lte: finMes },
+              estado: ESTADOS_VALIDOS,
+            })
+            .populate("servicio", "precio")
+            .lean()
+        : [],
+
+      admin
+        ? suscripcionModel.countDocuments({
+            empresa: empresaId,
+            fechaInicio: { $gte: inicioMes, $lte: finMes },
+          })
+        : 0,
+
+      sumarVentasDirectas({
+        empresa: empresaId,
+        ...filtroVenta,
+        fecha: rangoVentas,
+        anulada: false,
+      }),
+    ]);
 
     const [ingresoReservas, posibleIngreso] = await Promise.all([
       calcularIngresoConSuscripciones(reservasPasadas, empresaId),
@@ -1033,10 +1135,13 @@ export const ingresosPorMes = async (req, res) => {
 
     const ingresoSuscripciones = suscripcionesMes * PRECIO_SUSCRIPCION;
 
-    const ingresoProductos = reservasPasadas.reduce(
-      (acc, r) => acc + (r.totalProductos || 0),
-      0,
-    );
+    // Las ventas directas van dentro de productos, igual que en
+    // ingresoMensual. Antes quedaban fuera del total y por eso esta
+    // pantalla mostraba menos plata que el dashboard.
+    const ingresoProductos =
+      reservasPasadas.reduce((acc, r) => acc + (r.totalProductos || 0), 0) +
+      ingresoVentasDirectas;
+
     const ingresoExtras = reservasPasadas.reduce(
       (acc, r) => acc + (r.totalExtras || 0),
       0,
@@ -1045,6 +1150,12 @@ export const ingresosPorMes = async (req, res) => {
     const ingresoTotalMes =
       ingresoReservas + ingresoSuscripciones + ingresoProductos + ingresoExtras;
 
+    // Solo el admin ve el desglose por persona. Acá está el control
+    // de acceso real: al resto le llega un array vacío.
+    const porProfesional = admin
+      ? await ingresosPorProfesional(reservasPasadas, empresaId, rangoVentas)
+      : [];
+
     return ok(res, {
       alcance: alcanceDe(req),
       esAdmin: admin,
@@ -1052,6 +1163,7 @@ export const ingresosPorMes = async (req, res) => {
       anio,
       ingresoTotal: ingresoTotalMes,
       ingresoVentasDirectas,
+      porProfesional,
       detalle: {
         ingresoReservas,
         ingresoProductos,
@@ -1068,7 +1180,6 @@ export const ingresosPorMes = async (req, res) => {
     return err(res, "Error al obtener ingresos del mes");
   }
 };
-
 /* =====================================================
    ESTADÍSTICAS DE PRODUCTOS
 
