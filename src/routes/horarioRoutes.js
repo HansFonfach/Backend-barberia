@@ -49,7 +49,9 @@ router.get(
   getHorasProfesionalPorDia,
 );
 
-router.post("/vacaciones", verificarRol(""), crearBloqueoVacaciones);
+router.post("/vacaciones", validarToken,  verificarRol(""), crearBloqueoVacaciones);
+
+
 router.delete(
   "/vacaciones",
   validarToken,
