@@ -2,9 +2,27 @@ import excepcionHorario from "../models/excepcionHorario.model.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
+import feriados from "../models/feriados.js";
+
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+
+// Rango completo del día en Chile → UTC (mismo criterio que obtenerExcepcionesPorDia)
+const rangoDiaChileUTC = (fechaStr) => {
+  const inicio = dayjs.tz(
+    `${fechaStr} 00:00`,
+    "YYYY-MM-DD HH:mm",
+    "America/Santiago",
+  );
+  const fin = dayjs.tz(
+    `${fechaStr} 23:59:59.999`,
+    "YYYY-MM-DD HH:mm:ss.SSS",
+    "America/Santiago",
+  );
+
+  return { inicioUTC: inicio.utc().toDate(), finUTC: fin.utc().toDate() };
+};
 
 // Función auxiliar para convertir fecha Chile a UTC
 const fechaChileToUTC = (fechaChileStr) => {
@@ -298,6 +316,118 @@ export const obtenerVacaciones = async (req, res) => {
 
     res.status(500).json({
       message: "Error al obtener vacaciones",
+    });
+  }
+};
+
+export const toggleTrabajoFeriado = async (req, res) => {
+  const { barbero, fecha } = req.body;
+
+  if (!barbero || !fecha) {
+    return res.status(400).json({ message: "barbero y fecha son requeridos" });
+  }
+
+  try {
+    const { inicioUTC, finUTC } = rangoDiaChileUTC(fecha);
+
+    const feriado = await feriados.findOne({
+      fecha: { $gte: inicioUTC, $lte: finUTC },
+      activo: true,
+    });
+
+    if (!feriado) {
+      return res
+        .status(404)
+        .json({ message: "No hay un feriado activo en esa fecha" });
+    }
+
+    const existente = await excepcionHorario.findOne({
+      barbero,
+      tipo: "trabajo_feriado",
+      fecha: { $gte: inicioUTC, $lte: finUTC },
+    });
+
+    if (existente) {
+      await excepcionHorario.findByIdAndDelete(existente._id);
+
+      return res.status(200).json({
+        message: `Ya no trabajarás el feriado "${feriado.nombre}"`,
+        trabaja: false,
+        fechaOriginal: fecha,
+        barbero,
+      });
+    }
+
+    const nuevaExcepcion = await excepcionHorario.create({
+      barbero,
+      tipo: "trabajo_feriado",
+      fecha: fechaChileToUTC(fecha),
+      motivo: `Trabaja el feriado ${feriado.nombre}`,
+    });
+
+    return res.status(201).json({
+      message: `Trabajarás el feriado "${feriado.nombre}"`,
+      trabaja: true,
+      fechaOriginal: fecha,
+      barbero,
+      excepcion: nuevaExcepcion,
+    });
+  } catch (error) {
+    console.error("❌ Error en toggleTrabajoFeriado:", error);
+    res.status(500).json({
+      message: "Error al actualizar el feriado",
+      error: error.message,
+    });
+  }
+};
+
+export const obtenerFeriadosConEstado = async (req, res) => {
+  const { barberoId } = req.params;
+
+  try {
+    const hoyUTC = dayjs().tz("America/Santiago").startOf("day").utc().toDate();
+
+    const [feriado, excepciones] = await Promise.all([
+      feriados.find({ activo: true, fecha: { $gte: hoyUTC } })
+        .sort({ fecha: 1 })
+        .lean(),
+      excepcionHorario
+        .find({
+          barbero: barberoId,
+          tipo: "trabajo_feriado",
+          fecha: { $gte: hoyUTC },
+        })
+        .lean(),
+    ]);
+
+    const trabajaEn = new Set(
+      excepciones.map((e) =>
+        dayjs(e.fecha).tz("America/Santiago").format("YYYY-MM-DD"),
+      ),
+    );
+
+    const resultado = feriado.map((f) => {
+      const fechaChile = dayjs(f.fecha)
+        .tz("America/Santiago")
+        .format("YYYY-MM-DD");
+
+      return {
+        id: f._id,
+        nombre: f.nombre,
+        fecha: fechaChile,
+        trabaja: trabajaEn.has(fechaChile),
+      };
+    });
+
+    return res.status(200).json({
+      feriados: resultado,
+      total: resultado.length,
+    });
+  } catch (error) {
+    console.error("❌ Error en obtenerFeriadosConEstado:", error);
+    res.status(500).json({
+      message: "Error al obtener feriados",
+      error: error.message,
     });
   }
 };

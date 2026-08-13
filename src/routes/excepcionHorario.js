@@ -5,9 +5,8 @@ import {
   agregarHoraExtra,
   eliminarHoraExtra, // ← Renombrada
   obtenerExcepcionesPorDia,
-  // revertirHora,  // ← Ya no se usa
-  // cancelarHora,  // ← Ya no se usa
-  // cancelarHoraExtra,  // ← Renombrada
+  toggleTrabajoFeriado, // 👈 nuevo
+  obtenerFeriadosConEstado, // 👈 nuevo
 } from "../controllers/excepcionHorarioController.js";
 
 const router = Router();
@@ -23,6 +22,9 @@ router.post("/agregar-hora-extra", validarToken, agregarHoraExtra);
 // Ruta para eliminar hora extra (renombrada de cancelar-hora-extra)
 router.post("/eliminar-hora-extra", validarToken, eliminarHoraExtra);
 
+// 👇 nuevas, ANTES de la genérica
+router.post("/feriado/toggle", validarToken, toggleTrabajoFeriado);
+router.get("/feriado/:barberoId", validarToken, obtenerFeriadosConEstado);
 // Ruta para obtener excepciones por día (se mantiene igual)
 router.get("/:barberoId", validarToken, obtenerExcepcionesPorDia);
 

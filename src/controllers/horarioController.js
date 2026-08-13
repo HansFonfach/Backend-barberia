@@ -149,26 +149,27 @@ export const getHorasDisponibles = async (req, res) => {
 
     /* ================= FERIADOS ================= */
     const feriado = await verificarFeriadoConComportamiento(fecha);
+    let trabajaFeriado = false;
 
     if (feriado?.comportamiento === "bloquear_todo") {
-      const fechaConsultaInicio = fechaConsulta
+      const inicioFeriado = fechaConsulta
         .startOf("day")
         .subtract(4, "hour")
         .utc()
         .toDate();
-      const fechaConsultaFin = fechaConsulta
+      const finFeriado = fechaConsulta
         .endOf("day")
         .add(4, "hour")
         .utc()
         .toDate();
 
-      const excepcionesFeriado = await ExcepcionHorarioModel.find({
+      const excepcionFeriado = await ExcepcionHorarioModel.findOne({
         barbero: barberoId,
-        fecha: { $gte: fechaConsultaInicio, $lt: fechaConsultaFin },
-        tipo: "extra",
+        tipo: "trabajo_feriado",
+        fecha: { $gte: inicioFeriado, $lt: finFeriado },
       });
 
-      if (excepcionesFeriado.length === 0) {
+      if (!excepcionFeriado) {
         return res.json({
           fecha,
           horas: [],
@@ -178,57 +179,7 @@ export const getHorasDisponibles = async (req, res) => {
         });
       }
 
-      const horasHabilitadas = excepcionesFeriado.map((e) => e.horaInicio);
-
-      const inicioBusqueda = fechaConsulta
-        .startOf("day")
-        .subtract(4, "hour")
-        .utc()
-        .toDate();
-      const finBusqueda = fechaConsulta
-        .endOf("day")
-        .add(4, "hour")
-        .utc()
-        .toDate();
-
-      const reservas = await Reserva.find({
-        barbero: barberoId,
-        fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
-        estado: { $in: ["pendiente", "confirmada"] },
-      });
-
-      const horasReservadas = new Set(
-        reservas.map((r) =>
-          dayjs(r.fecha).tz("America/Santiago").format("HH:mm"),
-        ),
-      );
-
-      const esPrivilegiado =
-        req.usuario?.rol === "barbero" || req.usuario?.rol === "admin";
-
-      const horas = horasHabilitadas
-        .sort()
-        .filter((hora) => {
-          const inicio = dayjs.tz(
-            `${fecha} ${hora}`,
-            "YYYY-MM-DD HH:mm",
-            "America/Santiago",
-          );
-          if (!esPrivilegiado && inicio.isBefore(ahora)) return false;
-          return true;
-        })
-        .map((hora) => ({
-          hora,
-          estado: horasReservadas.has(hora) ? "reservada" : "disponible",
-        }));
-
-      return res.json({
-        fecha,
-        horas,
-        esFeriado: true,
-        nombreFeriado: feriado.nombre,
-        mensaje: `Feriado: ${feriado.nombre}. Horas habilitadas por el barbero.`,
-      });
+      trabajaFeriado = true;
     }
 
     /* ================= BARBERO ================= */
@@ -614,6 +565,8 @@ export const getHorasDisponibles = async (req, res) => {
       intervaloBase: horariosDelDia[0].duracionBloque,
       horas,
       diasPermitidos: suscripcionActiva ? 31 : diasPermitidos,
+      esFeriado: trabajaFeriado, // 👈
+      nombreFeriado: trabajaFeriado ? feriado.nombre : null, // 👈
     });
   } catch (error) {
     console.error("❌ Error getHorasDisponibles:", error);

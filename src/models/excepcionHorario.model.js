@@ -20,6 +20,7 @@ const ExcepcionHorarioSchema = new Schema(
         "bloqueo_dia",
         "vacaciones",
         "extra",
+        "trabajo_feriado",
       ],
       required: true,
       index: true,

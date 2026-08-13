@@ -6,18 +6,15 @@ import {
   cambiarComportamientoFeriado, // NUEVO
   verificarFeriado, // NUEVO
 } from "../controllers/feriadoController.js";
+import { validarToken } from "../middlewares/validarToken.js";
 
 const router = Router();
 
-// Ruta pública para verificar feriado (para frontend)
-router.get("/verificar", verificarFeriado);
+router.get("/verificar", verificarFeriado); // pública, se queda así
 
-// Rutas protegidas (solo barberos/admins)
-router.get("/", getFeriados);
-router.patch("/:id/toggle", toggleFeriado);
-router.patch("/:id/comportamiento", cambiarComportamientoFeriado); // NUEVO
-
-// ⚠ Ejecutar SOLO manualmente 1 vez al año
-router.post("/cargar-chile", cargarFeriadosChile);
+router.get("/", validarToken, getFeriados);
+router.patch("/:id/toggle", validarToken, toggleFeriado);
+router.patch("/:id/comportamiento", validarToken, cambiarComportamientoFeriado);
+router.post("/cargar-chile", validarToken, cargarFeriadosChile);
 
 export default router;
