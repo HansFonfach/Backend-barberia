@@ -496,6 +496,7 @@ export const getHorasDisponibles = async (req, res) => {
     const horasExtraHabilitadas = new Set(); // 👈 nuevo
 
     horasExtra.forEach((he) => {
+      if (!he.horaInicio || !he.horaFin) return;
       if (he.serviciosPermitidos?.length > 0) {
         const permitido = he.serviciosPermitidos
           .map((s) => s.toString())
