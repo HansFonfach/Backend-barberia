@@ -51,6 +51,12 @@ export const login = async (req, res) => {
 
     const validPassword = await bcrypt.compare(password, usuario.password);
 
+    if (!validPassword) {
+      return res
+        .status(400)
+        .json({ message: "Usuario y/o contraseña incorrecta" });
+    }
+
     /* =========================
        4️⃣ VALIDAR SUSCRIPCIÓN
     ========================= */
