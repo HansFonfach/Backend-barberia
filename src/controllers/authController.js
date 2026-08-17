@@ -2,7 +2,10 @@ import bcrypt from "bcryptjs";
 import Usuario from "../models/usuario.model.js";
 import { generarToken } from "../utils/generarToken.js";
 import crypto from "crypto";
-import { sendEmail, sendResetPasswordEmail } from "../controllers/mailController.js";
+import {
+  sendEmail,
+  sendResetPasswordEmail,
+} from "../controllers/mailController.js";
 import suscripcionModel from "../models/suscripcion.model.js";
 import empresaModel from "../models/empresa.model.js";
 import Empresa from "../models/empresa.model.js";
@@ -28,6 +31,7 @@ export const login = async (req, res) => {
     const usuario = await Usuario.findOne({
       email,
       empresa: empresa._id,
+      password: { $ne: null },
     });
 
     if (!usuario) {
@@ -39,12 +43,13 @@ export const login = async (req, res) => {
     /* =========================
        3️⃣ VALIDAR PASSWORD
     ========================= */
-    const validPassword = await bcrypt.compare(password, usuario.password);
-    if (!validPassword) {
+    if (!usuario.password) {
       return res
         .status(400)
         .json({ message: "Usuario y/o contraseña incorrecta" });
     }
+
+    const validPassword = await bcrypt.compare(password, usuario.password);
 
     /* =========================
        4️⃣ VALIDAR SUSCRIPCIÓN
