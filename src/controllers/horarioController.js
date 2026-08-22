@@ -209,12 +209,19 @@ export const getHorasDisponibles = async (req, res) => {
     /* ================= LÍMITE DE DÍAS ================= */
 
     const diasPermitidos = empresaDoc?.diasMostradosCalendario ?? 15;
+    // 🔥 Días de anticipación que le da la suscripción activa: si viene de
+    // un plan creado desde la app (Gestión de planes de suscripción) se usa
+    // lo que ese plan definió; si es una suscripción de las antiguas (sin
+    // plan asociado) se mantienen los 40 días de siempre, para no cambiarle
+    // el comportamiento a nadie que ya esté suscrito con el sistema viejo.
+    const diasVisibilidadSuscripcion =
+      suscripcionActiva?.planSnapshot?.diasVisibilidadCalendario ?? 40;
     const limiteNormal = ahora.add(diasPermitidos, "day").endOf("day");
     let limiteDias = limiteNormal;
     if (suscripcionActiva) {
       const limiteSuscripcion = dayjs(suscripcionActiva.fechaInicio)
         .tz("America/Santiago")
-        .add(40, "day")
+        .add(diasVisibilidadSuscripcion, "day")
         .endOf("day");
       limiteDias = limiteSuscripcion.isAfter(limiteNormal)
         ? limiteSuscripcion
@@ -224,7 +231,7 @@ export const getHorasDisponibles = async (req, res) => {
     if (rolUsuario !== "barbero" && fechaConsulta.isAfter(limiteDias, "day")) {
       return res.status(400).json({
         message: suscripcionActiva
-          ? "No puedes reservar más allá de los 40 días de tu suscripción"
+          ? `No puedes reservar más allá de los ${diasVisibilidadSuscripcion} días de tu suscripción`
           : `No puedes reservar con más de ${diasPermitidos} días de anticipación`,
       });
     }
@@ -565,7 +572,7 @@ export const getHorasDisponibles = async (req, res) => {
       duracionServicio,
       intervaloBase: horariosDelDia[0].duracionBloque,
       horas,
-      diasPermitidos: suscripcionActiva ? 31 : diasPermitidos,
+      diasPermitidos: suscripcionActiva ? diasVisibilidadSuscripcion : diasPermitidos,
       esFeriado: trabajaFeriado, // 👈
       nombreFeriado: trabajaFeriado ? feriado.nombre : null, // 👈
     });

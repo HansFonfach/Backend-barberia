@@ -24,6 +24,12 @@ import fichasRoutes from "./routes/fichasRoutes.js";
 import productosRoutes from "./routes/productosRoutes.js";
 import ventaDirectaRoutes from "./routes/ventaDirectaRoutes.js";
 import categoriaRoutes from "./routes/cateogoriaRoutes.js";
+import claseRoutes from "./routes/claseRoutes.js";
+import membresiaClaseRoutes from "./routes/membresiaClaseRoutes.js";
+import planMembresiaClaseRoutes from "./routes/planMembresiaClaseRoutes.js";
+import planSuscripcionRoutes from "./routes/planSuscripcionRoutes.js";
+import pagoMembresiaClaseRoutes from "./routes/pagoMembresiaClaseRoutes.js";
+import solicitudMembresiaClaseRoutes from "./routes/solicitudMembresiaClaseRoutes.js";
 
 const app = express();
 app.use(cookieParser());
@@ -83,5 +89,11 @@ app.use("/fichas", fichasRoutes);
 app.use("/productos", productosRoutes);
 app.use("/ventasProductos", ventaDirectaRoutes);
 app.use("/categoria", categoriaRoutes);
+app.use("/clases", claseRoutes);
+app.use("/membresiasClases", membresiaClaseRoutes);
+app.use("/planesMembresia", planMembresiaClaseRoutes);
+app.use("/planesSuscripcion", planSuscripcionRoutes);
+app.use("/pagosMembresiaClase", pagoMembresiaClaseRoutes);
+app.use("/solicitudesMembresia", solicitudMembresiaClaseRoutes);
 
 export default app;

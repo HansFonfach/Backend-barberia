@@ -29,13 +29,12 @@ export const registroPublicoEmpresa = async (req, res) => {
       return res.status(400).json({ message: "Faltan campos obligatorios" });
     }
 
-    // Verificar si el correo ya está registrado como usuario
-    const usuarioExistente = await Usuario.findOne({ email: correo });
-    if (usuarioExistente) {
-      return res
-        .status(400)
-        .json({ message: "Este correo ya tiene una cuenta registrada" });
-    }
+    // Nota: antes se bloqueaba aquí si el correo ya existía como Usuario en
+    // CUALQUIER empresa. Esa validación era global y no correspondía: una
+    // misma persona puede perfectamente ser cliente en un negocio y admin en
+    // otro (son empresas distintas, cada una con su propio Usuario). El
+    // índice único real de Usuario es por empresa+email, así que crear este
+    // admin en la empresa nueva nunca choca con cuentas de otras empresas.
 
     // Generar slug único
     let slug = generarSlug(nombre);

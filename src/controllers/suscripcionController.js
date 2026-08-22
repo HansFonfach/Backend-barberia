@@ -2,7 +2,10 @@ import reservaModel from "../models/reserva.model.js";
 import suscripcionModel from "../models/suscripcion.model.js";
 import Suscripcion from "../models/suscripcion.model.js";
 import Usuario from "../models/usuario.model.js";
+import Empresa from "../models/empresa.model.js";
+import PlanSuscripcion from "../models/planSuscripcion.model.js";
 import { checkSuscripcion } from "../utils/checkSuscripcion.js";
+import { calcularEstadoPlanPersonalizado } from "../utils/calcularEstadoPlanPersonalizado.js";
 import { sendSuscriptionActiveEmail } from "./mailController.js";
 
 /* =======================================================
@@ -12,21 +15,7 @@ export const crearSuscripcion = async (req, res) => {
   try {
     const SERVICIO_CORTE_BARBA_ID = "69934ce087e49726a2cd3da1";
     const { id } = req.params;
-    const { tipoPlan } = req.body;
-
-    // 1️⃣ Validar plan
-    const planesPermitidos = [
-      "creditos",
-      "combo_visita_corte_barba",
-      "padre_e_hijo",
-      "barba",
-    ];
-    if (!planesPermitidos.includes(tipoPlan)) {
-      return res.status(400).json({
-        success: false,
-        message: "Tipo de plan inválido",
-      });
-    }
+    const { tipoPlan, planId } = req.body;
 
     // 2️⃣ Usuario
     const usuario = await Usuario.findById(id);
@@ -49,6 +38,100 @@ export const crearSuscripcion = async (req, res) => {
       return res.status(409).json({
         success: false,
         message: "El usuario ya tiene una suscripción activa",
+      });
+    }
+
+    // 🔥 NUEVO: suscribir usando un plan creado desde la app (Gestión de
+    // planes de suscripción), en vez de uno de los 4 tipos fijos de abajo.
+    // Si viene planId, este es el único camino que se toma; el switch de
+    // tipos viejos ni se evalúa.
+    if (planId) {
+      const empresaDoc = await Empresa.findById(usuario.empresa).select(
+        "permiteSuscripcion",
+      );
+      if (!empresaDoc?.permiteSuscripcion) {
+        return res.status(403).json({
+          success: false,
+          message: "Esta empresa no tiene habilitadas las suscripciones",
+        });
+      }
+
+      const plan = await PlanSuscripcion.findOne({
+        _id: planId,
+        empresa: usuario.empresa,
+        activo: true,
+      });
+
+      if (!plan) {
+        return res.status(404).json({
+          success: false,
+          message: "El plan seleccionado no existe o ya no está disponible",
+        });
+      }
+
+      const fechaInicioPlan = new Date();
+      const fechaFinPlan = new Date();
+      fechaFinPlan.setDate(fechaFinPlan.getDate() + plan.duracionDias);
+
+      const nuevaConPlan = await Suscripcion.create({
+        usuario: usuario._id,
+        empresa: usuario.empresa,
+
+        activa: true,
+
+        fechaInicio: fechaInicioPlan,
+        fechaFin: fechaFinPlan,
+
+        historial: false,
+
+        tipoPlan: "plan_personalizado",
+        plan: plan._id,
+        planSnapshot: {
+          nombre: plan.nombre,
+          precio: plan.precio,
+          duracionDias: plan.duracionDias,
+          cicloDias: plan.cicloDias,
+          cantidadPorCiclo: plan.cantidadPorCiclo,
+          serviciosPermitidos: plan.serviciosPermitidos,
+          diasVisibilidadCalendario: plan.diasVisibilidadCalendario,
+        },
+
+        serviciosTotales: plan.cantidadPorCiclo,
+        serviciosUsados: 0,
+      });
+
+      await Usuario.findByIdAndUpdate(usuario._id, {
+        $inc: { puntos: 50 },
+        $set: { suscrito: true },
+      });
+
+      sendSuscriptionActiveEmail(usuario.email, {
+        nombreCliente: usuario.nombre,
+        fechaInicio: fechaInicioPlan.toLocaleDateString("es-CL"),
+        fechaFin: fechaFinPlan.toLocaleDateString("es-CL"),
+        tipoPlan: plan.nombre,
+      }).catch(console.error);
+
+      return res.status(201).json({
+        success: true,
+        message: "Suscripción creada correctamente",
+        data: nuevaConPlan,
+      });
+    }
+
+    // ---- A partir de aquí, flujo viejo intacto (tipos fijos hardcodeados) ----
+
+    // 1️⃣ Validar plan
+    const planesPermitidos = [
+      "creditos",
+      "combo_visita_corte_barba",
+      "padre_e_hijo",
+      "barba",
+    ];
+    if (!planesPermitidos.includes(tipoPlan)) {
+      return res.status(400).json({
+        success: false,
+        message: "Tipo de plan inválido",
       });
     }
 
@@ -196,6 +279,40 @@ export const estadoSuscripcionCliente = async (req, res) => {
       return res.json({ activa: false, msg: "Suscripción vencida" });
     }
 
+    // 🔥 NUEVO: suscripciones creadas a partir de un plan de la app (en vez
+    // de uno de los 4 tipos fijos de siempre) usan su propio cálculo, que
+    // soporta ciclos que se resetean (ej. "1 al mes, por 12 meses") sin
+    // cortar la suscripción completa al agotar el mes.
+    if (suscripcion.tipoPlan === "plan_personalizado") {
+      const estado = await calcularEstadoPlanPersonalizado(suscripcion);
+
+      if (!estado.activa) {
+        suscripcion.activa = false;
+        suscripcion.historial = true;
+        await suscripcion.save();
+        await Usuario.findByIdAndUpdate(userId, { suscrito: false });
+        return res.json({
+          activa: false,
+          msg: estado.vencePorTiempo
+            ? "Suscripción vencida"
+            : "Suscripción agotada",
+        });
+      }
+
+      return res.json({
+        activa: true,
+        tipoPlan: suscripcion.tipoPlan,
+        nombrePlan: suscripcion.planSnapshot?.nombre,
+        serviciosTotales: estado.cantidadPorCiclo,
+        serviciosUsados: estado.serviciosUsadosCiclo,
+        restantes: estado.restantes,
+        cobrar: estado.restantes <= 0,
+        cicloFin: estado.cicloFin,
+      });
+    }
+
+    // ---- A partir de aquí, flujo viejo intacto (tipos fijos hardcodeados) ----
+
     // 🔥 Calcular servicios usados en tiempo real
     const esCombo = suscripcion.tipoPlan === "combo_visita_corte_barba";
     const esBarba = suscripcion.tipoPlan === "barba";
@@ -331,6 +448,23 @@ export const getSuscripcionActiva = async (req, res) => {
     const sus = await checkSuscripcion(userId);
     if (!sus) return res.json(null);
 
+    // 🔥 NUEVO: mismo caso que en estadoSuscripcionCliente, para planes
+    // creados desde la app en vez de los 4 tipos fijos de siempre.
+    if (sus.tipoPlan === "plan_personalizado") {
+      const estado = await calcularEstadoPlanPersonalizado(sus);
+      return res.json({
+        tipoPlan: sus.tipoPlan,
+        nombrePlan: sus.planSnapshot?.nombre,
+        fechaInicio: sus.fechaInicio,
+        fechaFin: sus.fechaFin,
+        serviciosTotales: estado.cantidadPorCiclo,
+        serviciosUsados: estado.serviciosUsadosCiclo,
+        cicloFin: estado.cicloFin,
+      });
+    }
+
+    // ---- A partir de aquí, flujo viejo intacto (tipos fijos hardcodeados) ----
+
     const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
     const esCombo = sus.tipoPlan === "combo_visita_corte_barba";
     const esBarba = sus.tipoPlan === "barba";
@@ -404,6 +538,17 @@ export const listarSuscripciones = async (req, res) => {
 
     const suscripcionesConUso = await Promise.all(
       suscripciones.map(async (sus) => {
+        // 🔥 NUEVO: planes creados desde la app usan su propio cálculo
+        // (soporta ciclos, ej. el plan anual con reseteo mensual).
+        if (sus.tipoPlan === "plan_personalizado") {
+          const estado = await calcularEstadoPlanPersonalizado(sus);
+          return {
+            ...sus.toObject(),
+            serviciosUsados: estado.serviciosUsadosCiclo,
+            serviciosTotales: estado.cantidadPorCiclo,
+          };
+        }
+
         const esCombo = sus.tipoPlan === "combo_visita_corte_barba";
         const esBarba = sus.tipoPlan === "barba";
 

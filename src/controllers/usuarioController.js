@@ -148,6 +148,7 @@ export const updatePerfil = async (req, res) => {
 
     const emailExiste = await Usuario.findOne({
       email,
+      empresa: req.usuario.empresaId, // ✅ el duplicado solo cuenta dentro de la misma empresa
       _id: { $ne: id },
     });
 
@@ -174,7 +175,10 @@ export const updatePerfil = async (req, res) => {
 
 export const updateUsuarioDesdeAdmin = async (req, res) => {
   try {
-    const { nombre, apellido, correo, telefono } = req.body;
+    const { nombre, apellido, telefono } = req.body;
+    // El front de "Gestión de Clientes" manda el campo como "email"; se
+    // acepta también "correo" por si algún otro caller lo sigue mandando así.
+    const correo = req.body.correo ?? req.body.email;
     const { id } = req.params;
     const empresaId = req.usuario.empresaId;
 
@@ -311,7 +315,11 @@ export const updateUsuario = async (req, res) => {
 
     // Validar email duplicado solo si se está cambiando
     if (email) {
-      const emailExiste = await Usuario.findOne({ email, _id: { $ne: id } });
+      const emailExiste = await Usuario.findOne({
+        email,
+        empresa: req.usuario.empresaId, // ✅ el duplicado solo cuenta dentro de la misma empresa
+        _id: { $ne: id },
+      });
       if (emailExiste)
         return res.status(400).json({
           message: `El email ${email} ya se encuentra registrado.`,
@@ -439,7 +447,10 @@ export const crearBarbero = async (req, res) => {
     if (password !== confirmaPassword)
       return res.status(400).json({ message: "Las contraseñas no coinciden" });
 
-    const existe = await Usuario.findOne({ $or: [{ rut }, { email }] });
+    const existe = await Usuario.findOne({
+      empresa: empresaId, // ✅ el duplicado solo cuenta dentro de la misma empresa
+      $or: [{ rut }, { email }],
+    });
     if (existe)
       return res
         .status(409)

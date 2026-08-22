@@ -32,6 +32,8 @@ const EmpresaSchema = new mongoose.Schema({
       "kinesiologia",
       "psicologia",
       "medicina_general",
+      // Deporte (nuevo)
+      "gimnasio",
       // Genérico
       "otros",
     ],
@@ -44,6 +46,7 @@ const EmpresaSchema = new mongoose.Schema({
       "salon_belleza",
       "spa",
       "centro_estetica",
+      "gimnasio",
       "otros",
     ],
   },
@@ -54,6 +57,7 @@ const EmpresaSchema = new mongoose.Schema({
     historialControles: { type: Boolean, default: false },
     planAlimentario: { type: Boolean, default: false }, // específico nutrición
     examenesLab: { type: Boolean, default: false },
+    clasesGrupales: { type: Boolean, default: false }, // gimnasios/boxes: clases con cupo
     // En el futuro puedes agregar: recetas, derivaciones, etc.
   },
 

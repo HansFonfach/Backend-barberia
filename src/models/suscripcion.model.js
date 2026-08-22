@@ -49,8 +49,43 @@ const suscripcionSchema = new mongoose.Schema(
     },
     tipoPlan: {
       type: String,
-      enum: ["creditos", "combo_visita_corte_barba", "padre_e_hijo", "barba"],
+      // "plan_personalizado" 🔥 NUEVO: se agrega sin tocar los valores viejos,
+      // que siguen funcionando exactamente igual para las suscripciones ya
+      // creadas. De ahora en adelante toda suscripción nueva se crea con
+      // este tipo, a partir de un PlanSuscripcion elegido por el negocio
+      // (ver planId/plan más abajo), en vez de un tipo fijo escrito en el código.
+      enum: [
+        "creditos",
+        "combo_visita_corte_barba",
+        "padre_e_hijo",
+        "barba",
+        "plan_personalizado",
+      ],
       default: "creditos",
+    },
+
+    // 🔥 NUEVO — solo se llena cuando tipoPlan === "plan_personalizado".
+    // Referencia informativa al plan usado (puede haber sido editado o
+    // borrado después, por eso también se guarda un "snapshot" abajo).
+    plan: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PlanSuscripcion",
+      default: null,
+    },
+
+    // 🔥 NUEVO — foto de los datos del plan al momento de suscribir al
+    // cliente, para que editar o borrar el plan después no afecte a las
+    // suscripciones que ya se activaron con él.
+    planSnapshot: {
+      nombre: String,
+      precio: Number,
+      duracionDias: Number,
+      cicloDias: Number,
+      cantidadPorCiclo: Number,
+      serviciosPermitidos: [
+        { type: mongoose.Schema.Types.ObjectId, ref: "Servicio" },
+      ],
+      diasVisibilidadCalendario: Number,
     },
   },
   {
