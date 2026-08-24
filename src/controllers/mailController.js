@@ -948,3 +948,180 @@ Este correo fue generado automáticamente según tu historial de visitas.
     `.trim(),
   });
 };
+
+/* =======================================================
+   🏋️ Membresías de clases (gimnasios) — ciclo de vida
+======================================================= */
+
+const formatCLPGenerico = (n) => `$${Number(n || 0).toLocaleString("es-CL")}`;
+
+const formatFechaCL = (fecha) =>
+  new Date(fecha).toLocaleDateString("es-CL", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+
+// 🟢 Bienvenida: se envía cuando se crea/aprueba una MembresiaClase
+export const sendMembresiaActivaEmail = async (to, data) => {
+  const {
+    nombreCliente,
+    nombreEmpresa,
+    nombrePlan,
+    clasesIncluidas,
+    precio,
+    fechaInicio,
+    fechaFin,
+    linkMiPlan,
+  } = data;
+
+  return await sendBaseEmail({
+    to,
+    subject: `🎉 ¡Bienvenido/a a ${nombreEmpresa}! Tu membresía ya está activa`,
+    html: layout(`
+      <h2 style="margin-top:0;">¡Bienvenido/a, ${nombreCliente}! 🎉</h2>
+      <p style="color:#555;">
+        Tu membresía <strong>${nombrePlan}</strong> en <strong>${nombreEmpresa}</strong> ya está activa. ¡Nos alegra tenerte con nosotros!
+      </p>
+
+      <table cellpadding="8" cellspacing="0" border="0" width="100%"
+            style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
+        <tr><td style="font-size:14px;color:#555;width:50%;">Plan</td><td style="font-weight:bold;">${nombrePlan}</td></tr>
+        <tr><td style="font-size:14px;color:#555;">Clases incluidas</td><td style="font-weight:bold;">${clasesIncluidas} clases</td></tr>
+        ${precio ? `<tr><td style="font-size:14px;color:#555;">Valor</td><td style="font-weight:bold;">${formatCLPGenerico(precio)}</td></tr>` : ""}
+        <tr><td style="font-size:14px;color:#555;">Activación</td><td style="font-weight:bold;">${formatFechaCL(fechaInicio)}</td></tr>
+        <tr><td style="font-size:14px;color:#555;">Válida hasta</td><td style="font-weight:bold;">${formatFechaCL(fechaFin)}</td></tr>
+      </table>
+
+      <div style="background:#f0f7ff;border-left:4px solid #1a73e8;padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
+          📅 Ya puedes reservar tus clases desde la app con tu cupo de <strong>${clasesIncluidas} clases</strong>.
+          Te avisaremos antes de que tu membresía venza para que puedas renovarla sin perder continuidad.
+        </p>
+      </div>
+
+      <p style="color:#555;font-size:14px;">
+        ¡Nos vemos pronto en clases! 💪
+      </p>
+
+      <p style="color:#555;font-size:14px;">
+        Atentamente,<br/><strong>Equipo ${nombreEmpresa}</strong>
+      </p>
+
+      ${linkMiPlan ? ctaButton(linkMiPlan, "Ver mi membresía") : ""}
+    `),
+    text: `¡Bienvenido/a a ${nombreEmpresa}!
+
+Hola ${nombreCliente}, tu membresía ${nombrePlan} ya está activa.
+
+Clases incluidas: ${clasesIncluidas}
+${precio ? `Valor: ${formatCLPGenerico(precio)}\n` : ""}Activación: ${formatFechaCL(fechaInicio)}
+Válida hasta: ${formatFechaCL(fechaFin)}
+
+Ya puedes reservar tus clases desde la app. ¡Nos vemos pronto!
+
+Equipo ${nombreEmpresa}`,
+  });
+};
+
+// 🟡 Recordatorio de vencimiento: 5 días antes y el día del vencimiento
+export const sendRecordatorioVencimientoMembresiaEmail = async (to, data) => {
+  const {
+    nombreCliente,
+    nombreEmpresa,
+    nombrePlan,
+    fechaFin,
+    diasRestantes, // 5 = aviso anticipado, 0 = vence hoy
+    linkRenovar,
+  } = data;
+
+  const esUrgente = diasRestantes <= 0;
+
+  const subject = esUrgente
+    ? `⏰ Tu membresía en ${nombreEmpresa} vence hoy`
+    : `📅 Tu membresía en ${nombreEmpresa} vence en ${diasRestantes} días`;
+
+  const mensajePrincipal = esUrgente
+    ? `Tu membresía <strong>${nombrePlan}</strong> vence <strong>hoy</strong>. Renuévala ahora para no perder tu cupo de clases.`
+    : `Tu membresía <strong>${nombrePlan}</strong> vence el <strong>${formatFechaCL(fechaFin)}</strong> (en ${diasRestantes} días). Renuévala para seguir entrenando sin interrupciones.`;
+
+  return await sendBaseEmail({
+    to,
+    subject,
+    html: layout(`
+      <h2 style="margin-top:0;">Hola ${nombreCliente} 👋</h2>
+      <p style="color:#555;">${mensajePrincipal}</p>
+
+      <div style="background:${esUrgente ? "#fff4f0" : "#fffbeb"};border-left:4px solid ${esUrgente ? "#e8541a" : "#f59e0b"};padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
+          ${
+            esUrgente
+              ? "⚠️ Si no renuevas hoy, tu membresía quedará inactiva y no podrás seguir reservando clases."
+              : "💡 Renueva ahora y asegura tu cupo antes de que se acabe el mes."
+          }
+        </p>
+      </div>
+
+      <table cellpadding="8" cellspacing="0" border="0" width="100%"
+            style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
+        <tr><td style="font-size:14px;color:#555;width:50%;">Plan actual</td><td style="font-weight:bold;">${nombrePlan}</td></tr>
+        <tr><td style="font-size:14px;color:#555;">Vence</td><td style="font-weight:bold;">${formatFechaCL(fechaFin)}</td></tr>
+      </table>
+
+      <p style="color:#555;font-size:14px;">
+        Atentamente,<br/><strong>Equipo ${nombreEmpresa}</strong>
+      </p>
+
+      ${linkRenovar ? ctaButton(linkRenovar, "Renovar mi membresía", esUrgente ? "#e8541a" : "#1a73e8") : ""}
+    `),
+    text: `${esUrgente ? "Tu membresía vence hoy" : `Tu membresía vence en ${diasRestantes} días`}
+
+Hola ${nombreCliente}, tu membresía ${nombrePlan} en ${nombreEmpresa} vence el ${formatFechaCL(fechaFin)}.
+
+${esUrgente ? "Renueva hoy para no perder tu cupo." : "Renueva pronto para seguir entrenando sin interrupciones."}
+${linkRenovar ? `\nRenovar: ${linkRenovar}` : ""}
+
+Equipo ${nombreEmpresa}`,
+  });
+};
+
+// 🔴 Win-back: membresía vencida hace tiempo y no ha renovado
+export const sendMembresiaVencidaWinbackEmail = async (to, data) => {
+  const { nombreCliente, nombreEmpresa, nombrePlan, fechaFin, linkRenovar } = data;
+
+  return await sendBaseEmail({
+    to,
+    subject: `Te extrañamos en ${nombreEmpresa} 💪`,
+    html: layout(`
+      <h2 style="margin-top:0;">¡Hola ${nombreCliente}! 👋</h2>
+      <p style="color:#555;">
+        Notamos que tu membresía <strong>${nombrePlan}</strong> venció el <strong>${formatFechaCL(fechaFin)}</strong> y no la has renovado.
+        En ${nombreEmpresa} te seguimos esperando.
+      </p>
+
+      <div style="background:#f0f7ff;border-left:4px solid #1a73e8;padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
+          🔥 Volver a entrenar es más fácil de lo que crees. Renueva tu membresía y retoma tu rutina donde la dejaste.
+        </p>
+      </div>
+
+      <p style="color:#555;font-size:14px;">
+        Si necesitas ayuda para elegir el plan que más te acomoda, responde este correo y te orientamos.
+      </p>
+
+      <p style="color:#555;font-size:14px;">
+        Atentamente,<br/><strong>Equipo ${nombreEmpresa}</strong>
+      </p>
+
+      ${linkRenovar ? ctaButton(linkRenovar, "Quiero volver") : ""}
+    `),
+    text: `Te extrañamos en ${nombreEmpresa}
+
+Hola ${nombreCliente}, tu membresía ${nombrePlan} venció el ${formatFechaCL(fechaFin)} y aún no la renuevas.
+
+Vuelve cuando quieras, aquí te esperamos.
+${linkRenovar ? `\nRenovar: ${linkRenovar}` : ""}
+
+Equipo ${nombreEmpresa}`,
+  });
+};

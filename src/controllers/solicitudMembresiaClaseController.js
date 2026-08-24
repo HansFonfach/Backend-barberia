@@ -2,6 +2,8 @@ import cloudinary from "../config/cloudinary.js";
 import SolicitudMembresiaClase from "../models/solicitudMembresiaClase.model.js";
 import MembresiaClase from "../models/membresiaClase.model.js";
 import PlanMembresiaClase from "../models/planMembresiaClase.model.js";
+import Empresa from "../models/empresa.model.js";
+import { sendMembresiaActivaEmail } from "./mailController.js";
 
 const METODOS_VALIDOS = ["transferencia", "efectivo"];
 
@@ -170,7 +172,7 @@ export const aprobarSolicitud = async (req, res) => {
       _id: id,
       empresa: empresaId,
       estado: "pendiente",
-    });
+    }).populate("cliente", "nombre email");
     if (!solicitud) {
       return res
         .status(404)
@@ -195,7 +197,7 @@ export const aprobarSolicitud = async (req, res) => {
 
     const membresia = await MembresiaClase.create({
       empresa: empresaId,
-      cliente: solicitud.cliente,
+      cliente: solicitud.cliente._id,
       plan: solicitud.plan,
       nombrePlan: solicitud.nombrePlan,
       clasesIncluidas: solicitud.clasesIncluidas,
@@ -210,6 +212,25 @@ export const aprobarSolicitud = async (req, res) => {
     solicitud.resueltoPor = req.usuario.id;
     solicitud.fechaResolucion = new Date();
     await solicitud.save();
+
+    // 📧 Correo de bienvenida (no bloquea la respuesta si falla)
+    try {
+      const empresa = await Empresa.findById(empresaId).select("nombre slug");
+      if (solicitud.cliente?.email && empresa) {
+        await sendMembresiaActivaEmail(solicitud.cliente.email, {
+          nombreCliente: solicitud.cliente.nombre,
+          nombreEmpresa: empresa.nombre,
+          nombrePlan: membresia.nombrePlan,
+          clasesIncluidas: membresia.clasesIncluidas,
+          precio: membresia.precio,
+          fechaInicio: membresia.fechaInicio,
+          fechaFin: membresia.fechaFin,
+          linkMiPlan: `https://www.agendafonfach.cl/${empresa.slug}/admin/mi-plan`,
+        });
+      }
+    } catch (mailError) {
+      console.error("Error al enviar correo de bienvenida de membresía:", mailError);
+    }
 
     return res.json({
       message: "Solicitud aprobada, la mensualidad quedó activa",

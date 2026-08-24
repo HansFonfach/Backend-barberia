@@ -10,6 +10,7 @@ import recordatoriosJob from "./jobs/recordatoriosJob.js";
 import recordatoriosVolver from "./cron/recordatoriosVolver.js";
 import recordatorioPagoCron from "./cron/recordatoriosPagoCron.js";
 import { iniciarCronSuscripcionesMensual } from "./cron/recomendacionesSuscripcionesCron.js";
+import { iniciarCronMembresiaClase } from "./cron/membresiaClaseCron.js";
 
 // Obtener el directorio actual
 const __filename = fileURLToPath(import.meta.url);
@@ -30,6 +31,7 @@ const startServer = async () => {
   iniciarJobReservas();
   iniciarCronpagoEmpresa();
   iniciarCronSuscripcionesMensual();
+  iniciarCronMembresiaClase();
   recordatorioPagoCron.iniciar();
 
   recordatoriosJob.init();

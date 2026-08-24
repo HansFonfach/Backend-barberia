@@ -42,6 +42,11 @@ const MembresiaClaseSchema = new Schema(
     fechaFin: { type: Date, required: true },
 
     historial: { type: Boolean, default: false },
+
+    // Control de envío de correos del ciclo de vida (evita duplicados)
+    recordatorio5dEnviado: { type: Boolean, default: false },
+    recordatorioDiaEnviado: { type: Boolean, default: false },
+    recordatorioWinbackEnviado: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

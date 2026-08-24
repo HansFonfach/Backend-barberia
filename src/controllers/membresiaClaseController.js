@@ -1,7 +1,9 @@
 import MembresiaClase from "../models/membresiaClase.model.js";
 import PlanMembresiaClase from "../models/planMembresiaClase.model.js";
 import Usuario from "../models/usuario.model.js";
+import Empresa from "../models/empresa.model.js";
 import { contarClasesUsadasMembresia } from "../helpers/contarClasesUsadasMembresia.js";
+import { sendMembresiaActivaEmail } from "./mailController.js";
 
 /* =======================================================
    🟢 Crear mensualidad a partir de un plan (mismo flujo manual que usan
@@ -58,6 +60,25 @@ export const crearMembresia = async (req, res) => {
       fechaInicio,
       fechaFin,
     });
+
+    // 📧 Correo de bienvenida (no bloquea la respuesta si falla)
+    try {
+      const empresa = await Empresa.findById(empresaId).select("nombre slug");
+      if (cliente.email && empresa) {
+        await sendMembresiaActivaEmail(cliente.email, {
+          nombreCliente: cliente.nombre,
+          nombreEmpresa: empresa.nombre,
+          nombrePlan: membresia.nombrePlan,
+          clasesIncluidas: membresia.clasesIncluidas,
+          precio: membresia.precio,
+          fechaInicio: membresia.fechaInicio,
+          fechaFin: membresia.fechaFin,
+          linkMiPlan: `https://www.agendafonfach.cl/${empresa.slug}/admin/mi-plan`,
+        });
+      }
+    } catch (mailError) {
+      console.error("Error al enviar correo de bienvenida de membresía:", mailError);
+    }
 
     return res
       .status(201)
