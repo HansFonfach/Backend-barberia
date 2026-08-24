@@ -10,6 +10,7 @@ import UsuarioModel from "../models/usuario.model.js";
 import EmpresaModel from "../models/empresa.model.js";
 import { contarClasesUsadasMembresia } from "../helpers/contarClasesUsadasMembresia.js";
 import { esRutValido, formatearRut, limpiarRut } from "../helpers/validarRut.js";
+import { reservarCupoAtomico, liberarCupoAtomico } from "../helpers/cupoSesionHelper.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -502,7 +503,223 @@ export const getSesionesPublicas = async (req, res) => {
 
 /* =======================================================
    🟡 Inscripciones
+
+   Núcleo común reutilizado por los TRES puntos de entrada (cliente logueado,
+   invitado con clase de prueba gratis, invitado con RUT+membresía): resolver
+   la sesión → validar el acceso (membresía/prueba gratis/pase día) → reservar
+   cupo de forma atómica → crear la inscripción. Así ningún camino puede
+   terminar con reglas distintas ni con una condición de carrera que el otro
+   no tenga — exactamente lo que antes pasaba con
+   inscribirPruebaGratisInvitado, que duplicaba a mano toda esta lógica.
 ======================================================= */
+
+// Encuentra la clase, valida que la fecha corresponda a un bloque real de su
+// horario semanal, revisa excepciones puntuales (cancelada / cupo modificado)
+// y devuelve el cupo efectivo para esa sesión. Usado por los tres flujos.
+const resolverSesionValida = async ({ empresaId, claseId, fecha }) => {
+  const clase = await ClaseModel.findOne({
+    _id: claseId,
+    empresa: empresaId,
+    activa: true,
+  });
+  if (!clase) return { error: { status: 404, message: "Clase no encontrada" } };
+
+  const fechaSesion = new Date(fecha);
+  if (Number.isNaN(fechaSesion.getTime())) {
+    return { error: { status: 400, message: "Fecha de sesión inválida" } };
+  }
+
+  const diaSemana = dayjs(fechaSesion).tz(TZ).day();
+  const horaSesion = dayjs(fechaSesion).tz(TZ).format("HH:mm");
+  const existeBloque = clase.horarioSemanal.some(
+    (h) => h.diaSemana === diaSemana && h.horaInicio === horaSesion,
+  );
+  if (!existeBloque) {
+    return {
+      error: {
+        status: 400,
+        message: "Esa fecha/hora no corresponde a una sesión válida de esta clase",
+      },
+    };
+  }
+
+  const inicioDia = dayjs(fechaSesion).tz(TZ).startOf("day").toDate();
+  const finDia = dayjs(fechaSesion).tz(TZ).endOf("day").toDate();
+  const excepcion = await ExcepcionClaseModel.findOne({
+    clase: clase._id,
+    fecha: { $gte: inicioDia, $lte: finDia },
+  });
+  if (excepcion?.tipo === "cancelada") {
+    return { error: { status: 409, message: "Esta sesión fue cancelada" } };
+  }
+
+  const cupoEfectivo =
+    excepcion?.tipo === "cupo_modificado" && excepcion.cupoOverride != null
+      ? excepcion.cupoOverride
+      : clase.cupoMaximo;
+
+  return { clase, fechaSesion, cupoEfectivo };
+};
+
+// Valida el tipo de acceso, reserva el cupo de forma atómica y crea la
+// inscripción. Devuelve { inscripcion } o { error: { status, message } }.
+const procesarInscripcion = async ({
+  empresaId,
+  clase,
+  clienteId,
+  fechaSesion,
+  cupoEfectivo,
+  tipoAcceso,
+  monto,
+  metodo,
+}) => {
+  let pago = { estado: "no_aplica", monto: 0, metodo: null };
+
+  if (tipoAcceso === "membresia") {
+    const membresia = await MembresiaClaseModel.findOne({
+      empresa: empresaId,
+      cliente: clienteId,
+      activa: true,
+      fechaInicio: { $lte: fechaSesion },
+      fechaFin: { $gte: fechaSesion },
+    });
+    if (!membresia) {
+      return {
+        error: { status: 400, message: "No tienes una mensualidad activa para esa fecha" },
+      };
+    }
+
+    // La mensualidad NO es ilimitada: tiene un cupo fijo de clases al mes
+    const clasesUsadas = await contarClasesUsadasMembresia(membresia);
+    if (clasesUsadas >= membresia.clasesIncluidas) {
+      return {
+        error: {
+          status: 409,
+          message: "Ya usaste todas las clases incluidas en tu plan este mes",
+        },
+      };
+    }
+  } else if (tipoAcceso === "prueba_gratis") {
+    const yaUsoPrueba = await InscripcionClaseModel.findOne({
+      empresa: empresaId,
+      cliente: clienteId,
+      tipoAcceso: "prueba_gratis",
+      estado: { $ne: "cancelada" },
+    });
+    if (yaUsoPrueba) {
+      return { error: { status: 409, message: "Ya usaste tu clase de prueba gratis" } };
+    }
+  } else if (tipoAcceso === "pase_dia") {
+    // Si no mandan un monto puntual, se usa el precio de pase diario
+    // configurado en la clase (si el admin lo definió)
+    const montoFinal =
+      monto !== undefined && monto !== null ? monto : clase.precioPaseDiario || 0;
+    pago = { estado: "pendiente", monto: montoFinal, metodo: metodo || null };
+  } else {
+    return { error: { status: 400, message: "Tipo de acceso inválido" } };
+  }
+
+  // Duplicado: mismo cliente, misma sesión (defensa en profundidad además del
+  // índice único de InscripcionClase — ver el catch más abajo)
+  const inscripcionExistente = await InscripcionClaseModel.findOne({
+    clase: clase._id,
+    fecha: fechaSesion,
+    cliente: clienteId,
+    estado: { $ne: "cancelada" },
+  });
+  if (inscripcionExistente) {
+    return { error: { status: 409, message: "Ya estás inscrito en esta sesión" } };
+  }
+
+  // Cupo: reserva ATÓMICA antes de crear la inscripción. Antes esto se hacía
+  // con un countDocuments seguido de un create — dos solicitudes simultáneas
+  // por el último cupo podían pasar ambas la validación y sobrevender el
+  // cupo. reservarCupoAtomico usa un $inc condicionado de Mongo, así que solo
+  // una de las dos puede ganar.
+  const cupoReservado = await reservarCupoAtomico(clase._id, fechaSesion, cupoEfectivo);
+  if (!cupoReservado) {
+    return { error: { status: 409, message: "No hay cupos disponibles para esta sesión" } };
+  }
+
+  try {
+    const inscripcion = await InscripcionClaseModel.create({
+      empresa: empresaId,
+      clase: clase._id,
+      cliente: clienteId,
+      fecha: fechaSesion,
+      estado: "confirmada",
+      tipoAcceso,
+      pago,
+    });
+    return { inscripcion };
+  } catch (error) {
+    // Si la creación falló (p.ej. carrera con el índice único de
+    // clase+fecha+cliente), liberamos el cupo que habíamos reservado para no
+    // dejar un cupo "fantasma" ocupado por una inscripción que no existe.
+    await liberarCupoAtomico(clase._id, fechaSesion);
+    if (error?.code === 11000) {
+      return { error: { status: 409, message: "Ya estás inscrito en esta sesión" } };
+    }
+    throw error;
+  }
+};
+
+// Encuentra o crea un cliente "invitado" (sin contraseña) por RUT, para los
+// flujos públicos que no requieren cuenta. Si el RUT ya pertenece a una
+// cuenta real (cliente/admin/barbero), NO se deja pasar como invitado — debe
+// iniciar sesión. Evita que cualquiera use el RUT de otra persona para
+// crearle actividad en el sistema sin loguearse.
+const resolverClienteInvitadoPorRut = async ({
+  empresaId,
+  rut,
+  nombre,
+  apellido,
+  email,
+  telefono,
+}) => {
+  let cliente = await UsuarioModel.findOne({ empresa: empresaId, rut });
+  if (!cliente) {
+    const rutLimpioBuscado = limpiarRut(rut);
+    const usuariosEmpresa = await UsuarioModel.find({ empresa: empresaId });
+    cliente = usuariosEmpresa.find(
+      (u) => u.rut && limpiarRut(u.rut) === rutLimpioBuscado,
+    );
+  }
+
+  if (cliente && cliente.rol !== "invitado") {
+    return {
+      error: {
+        status: 409,
+        body: {
+          code: "CUENTA_EXISTENTE",
+          message: "Ya tienes una cuenta con nosotros. Inicia sesión para continuar.",
+        },
+      },
+    };
+  }
+
+  if (!cliente) {
+    cliente = await UsuarioModel.create({
+      nombre: nombre.trim(),
+      apellido: apellido.trim(),
+      rut,
+      email,
+      telefono: telefono.trim(),
+      rol: "invitado",
+      empresa: empresaId,
+    });
+  } else {
+    cliente.nombre = nombre.trim();
+    cliente.apellido = apellido.trim();
+    cliente.email = email;
+    cliente.telefono = telefono.trim();
+    await cliente.save();
+  }
+
+  return { cliente };
+};
+
+const soloDigitos = (valor) => String(valor || "").replace(/\D/g, "");
 
 export const inscribirCliente = async (req, res) => {
   try {
@@ -520,47 +737,6 @@ export const inscribirCliente = async (req, res) => {
     // Un admin puede inscribir a cualquier cliente de su empresa; un cliente solo se inscribe a sí mismo
     const clienteObjetivoId = esAdmin && clienteId ? clienteId : req.usuario.id;
 
-    const clase = await ClaseModel.findOne({
-      _id: id,
-      empresa: empresaId,
-      activa: true,
-    });
-    if (!clase) {
-      return res.status(404).json({ message: "Clase no encontrada" });
-    }
-
-    const fechaSesion = new Date(fecha);
-    if (Number.isNaN(fechaSesion.getTime())) {
-      return res.status(400).json({ message: "Fecha de sesión inválida" });
-    }
-
-    const diaSemana = dayjs(fechaSesion).tz(TZ).day();
-    const horaSesion = dayjs(fechaSesion).tz(TZ).format("HH:mm");
-    const existeBloque = clase.horarioSemanal.some(
-      (h) => h.diaSemana === diaSemana && h.horaInicio === horaSesion,
-    );
-    if (!existeBloque) {
-      return res.status(400).json({
-        message: "Esa fecha/hora no corresponde a una sesión válida de esta clase",
-      });
-    }
-
-    const inicioDia = dayjs(fechaSesion).tz(TZ).startOf("day").toDate();
-    const finDia = dayjs(fechaSesion).tz(TZ).endOf("day").toDate();
-    const excepcion = await ExcepcionClaseModel.findOne({
-      clase: clase._id,
-      fecha: { $gte: inicioDia, $lte: finDia },
-    });
-
-    if (excepcion?.tipo === "cancelada") {
-      return res.status(409).json({ message: "Esta sesión fue cancelada" });
-    }
-
-    const cupoEfectivo =
-      excepcion?.tipo === "cupo_modificado" && excepcion.cupoOverride != null
-        ? excepcion.cupoOverride
-        : clase.cupoMaximo;
-
     const cliente = await UsuarioModel.findOne({
       _id: clienteObjetivoId,
       empresa: empresaId,
@@ -569,99 +745,37 @@ export const inscribirCliente = async (req, res) => {
       return res.status(404).json({ message: "Cliente no encontrado en esta empresa" });
     }
 
-    let pago = { estado: "no_aplica", monto: 0, metodo: null };
-
-    if (tipoAcceso === "membresia") {
-      const membresia = await MembresiaClaseModel.findOne({
-        empresa: empresaId,
-        cliente: clienteObjetivoId,
-        activa: true,
-        fechaInicio: { $lte: fechaSesion },
-        fechaFin: { $gte: fechaSesion },
-      });
-      if (!membresia) {
-        return res.status(400).json({
-          message: "El cliente no tiene una mensualidad activa para esa fecha",
-        });
-      }
-
-      // La mensualidad NO es ilimitada: tiene un cupo fijo de clases al mes
-      const clasesUsadas = await contarClasesUsadasMembresia(membresia);
-      if (clasesUsadas >= membresia.clasesIncluidas) {
-        return res.status(409).json({
-          message:
-            "El cliente ya usó todas las clases incluidas en su plan este mes",
-        });
-      }
-    } else if (tipoAcceso === "prueba_gratis") {
-      const yaUsoPrueba = await InscripcionClaseModel.findOne({
-        empresa: empresaId,
-        cliente: clienteObjetivoId,
-        tipoAcceso: "prueba_gratis",
-        estado: { $ne: "cancelada" },
-      });
-      if (yaUsoPrueba) {
-        return res
-          .status(409)
-          .json({ message: "El cliente ya usó su día de prueba gratis" });
-      }
-    } else if (tipoAcceso === "pase_dia") {
-      // Si no mandan un monto puntual, se usa el precio de pase diario
-      // configurado en la clase (si el admin lo definió)
-      const montoFinal =
-        monto !== undefined && monto !== null ? monto : clase.precioPaseDiario || 0;
-      pago = {
-        estado: "pendiente",
-        monto: montoFinal,
-        metodo: metodo || null,
-      };
-    } else {
-      return res.status(400).json({ message: "Tipo de acceso inválido" });
+    const sesion = await resolverSesionValida({ empresaId, claseId: id, fecha });
+    if (sesion.error) {
+      return res.status(sesion.error.status).json({ message: sesion.error.message });
     }
 
-    const inscritosActuales = await InscripcionClaseModel.countDocuments({
-      clase: clase._id,
-      fecha: fechaSesion,
-      estado: "confirmada",
-    });
-
-    if (inscritosActuales >= cupoEfectivo) {
-      return res
-        .status(409)
-        .json({ message: "No hay cupos disponibles para esta sesión" });
-    }
-
-    const inscripcionExistente = await InscripcionClaseModel.findOne({
-      clase: clase._id,
-      fecha: fechaSesion,
-      cliente: clienteObjetivoId,
-      estado: { $ne: "cancelada" },
-    });
-    if (inscripcionExistente) {
-      return res
-        .status(409)
-        .json({ message: "El cliente ya está inscrito en esta sesión" });
-    }
-
-    const inscripcion = await InscripcionClaseModel.create({
-      empresa: empresaId,
-      clase: clase._id,
-      cliente: clienteObjetivoId,
-      fecha: fechaSesion,
-      estado: "confirmada",
+    const resultado = await procesarInscripcion({
+      empresaId,
+      clase: sesion.clase,
+      clienteId: clienteObjetivoId,
+      fechaSesion: sesion.fechaSesion,
+      cupoEfectivo: sesion.cupoEfectivo,
       tipoAcceso,
-      pago,
+      // El monto/método de un "pase_dia" solo puede venir del body cuando
+      // quien llama es admin (ej. registrando un pago en efectivo con algún
+      // ajuste puntual). Antes se aceptaba tal cual de cualquier cliente
+      // logueado: como este endpoint no tiene verificarRol("esAdmin"), un
+      // cliente podía mandar monto:1 y quedarse con un pase_dia casi gratis.
+      // Para un cliente normal, procesarInscripcion cae siempre al
+      // clase.precioPaseDiario configurado por el admin.
+      monto: esAdmin ? monto : undefined,
+      metodo: esAdmin ? metodo : undefined,
     });
-
-    return res
-      .status(201)
-      .json({ message: "Inscripción registrada correctamente", inscripcion });
-  } catch (error) {
-    if (error?.code === 11000) {
-      return res
-        .status(409)
-        .json({ message: "El cliente ya está inscrito en esta sesión" });
+    if (resultado.error) {
+      return res.status(resultado.error.status).json({ message: resultado.error.message });
     }
+
+    return res.status(201).json({
+      message: "Inscripción registrada correctamente",
+      inscripcion: resultado.inscripcion,
+    });
+  } catch (error) {
     console.error("Error al inscribir en clase:", error);
     return res
       .status(500)
@@ -683,12 +797,11 @@ export const inscribirCliente = async (req, res) => {
      sesión. Así nadie puede usar el RUT de otra persona para sacarle su
      prueba gratis (o peor, intentar tocar su mensualidad) sin loguearse.
    - Si el RUT no existe o es de un invitado anterior, se crea/reutiliza
-     ese usuario invitado (igual que ya hace la barbería) y se valida todo
-     lo mismo que en inscribirCliente (sesión válida, cupo, no repetir la
-     prueba gratis, no inscribirse 2 veces a la misma sesión).
+     ese usuario invitado (igual que ya hace la barbería).
 
-   No se reutiliza el código de inscribirCliente para no arriesgar ese flujo
-   ya probado; se duplica la validación de sesión/cupo a propósito.
+   Delega la validación de sesión/cupo/duplicados a resolverSesionValida y
+   procesarInscripcion — el mismo núcleo que usa inscribirCliente — para que
+   este flujo nunca pueda terminar con reglas distintas al logueado.
 ======================================================= */
 export const inscribirPruebaGratisInvitado = async (req, res) => {
   try {
@@ -727,131 +840,38 @@ export const inscribirPruebaGratisInvitado = async (req, res) => {
       return res.status(404).json({ message: "Empresa no encontrada" });
     }
 
-    const clase = await ClaseModel.findOne({
-      _id: claseId,
-      empresa: empresa._id,
-      activa: true,
+    const { cliente, error: identidadError } = await resolverClienteInvitadoPorRut({
+      empresaId: empresa._id,
+      rut,
+      nombre,
+      apellido,
+      email,
+      telefono,
     });
-    if (!clase) {
-      return res.status(404).json({ message: "Clase no encontrada" });
+    if (identidadError) {
+      return res.status(identidadError.status).json(identidadError.body);
     }
 
-    const fechaSesion = new Date(fecha);
-    if (Number.isNaN(fechaSesion.getTime())) {
-      return res.status(400).json({ message: "Fecha de sesión inválida" });
+    const sesion = await resolverSesionValida({ empresaId: empresa._id, claseId, fecha });
+    if (sesion.error) {
+      return res.status(sesion.error.status).json({ message: sesion.error.message });
     }
 
-    const diaSemana = dayjs(fechaSesion).tz(TZ).day();
-    const horaSesion = dayjs(fechaSesion).tz(TZ).format("HH:mm");
-    const existeBloque = clase.horarioSemanal.some(
-      (h) => h.diaSemana === diaSemana && h.horaInicio === horaSesion,
-    );
-    if (!existeBloque) {
-      return res.status(400).json({
-        message: "Esa fecha/hora no corresponde a una sesión válida de esta clase",
-      });
-    }
-
-    const inicioDia = dayjs(fechaSesion).tz(TZ).startOf("day").toDate();
-    const finDia = dayjs(fechaSesion).tz(TZ).endOf("day").toDate();
-    const excepcion = await ExcepcionClaseModel.findOne({
-      clase: clase._id,
-      fecha: { $gte: inicioDia, $lte: finDia },
-    });
-    if (excepcion?.tipo === "cancelada") {
-      return res.status(409).json({ message: "Esta sesión fue cancelada" });
-    }
-    const cupoEfectivo =
-      excepcion?.tipo === "cupo_modificado" && excepcion.cupoOverride != null
-        ? excepcion.cupoOverride
-        : clase.cupoMaximo;
-
-    // 🔍 ¿El RUT ya existe en esta empresa? (mismo fallback que
-    // getUsuarioByRutPublico, por si quedó guardado con puntos/guión distinto)
-    let cliente = await UsuarioModel.findOne({ empresa: empresa._id, rut });
-    if (!cliente) {
-      const rutLimpioBuscado = limpiarRut(rut);
-      const usuariosEmpresa = await UsuarioModel.find({ empresa: empresa._id });
-      cliente = usuariosEmpresa.find(
-        (u) => u.rut && limpiarRut(u.rut) === rutLimpioBuscado,
-      );
-    }
-
-    if (cliente && cliente.rol !== "invitado") {
-      // 🔒 Ya tiene una cuenta real: no seguimos sin que inicie sesión.
-      return res.status(409).json({
-        code: "CUENTA_EXISTENTE",
-        message:
-          "Ya tienes una cuenta con nosotros. Inicia sesión para agendar tu clase.",
-      });
-    }
-
-    if (!cliente) {
-      cliente = await UsuarioModel.create({
-        nombre: nombre.trim(),
-        apellido: apellido.trim(),
-        rut,
-        email,
-        telefono: telefono.trim(),
-        rol: "invitado",
-        empresa: empresa._id,
-      });
-    } else {
-      // Invitado que ya había agendado antes: solo actualizamos su contacto
-      cliente.nombre = nombre.trim();
-      cliente.apellido = apellido.trim();
-      cliente.email = email;
-      cliente.telefono = telefono.trim();
-      await cliente.save();
-    }
-
-    // La prueba gratis es una sola vez por persona, para siempre
-    const yaUsoPrueba = await InscripcionClaseModel.findOne({
-      empresa: empresa._id,
-      cliente: cliente._id,
+    const resultado = await procesarInscripcion({
+      empresaId: empresa._id,
+      clase: sesion.clase,
+      clienteId: cliente._id,
+      fechaSesion: sesion.fechaSesion,
+      cupoEfectivo: sesion.cupoEfectivo,
       tipoAcceso: "prueba_gratis",
-      estado: { $ne: "cancelada" },
     });
-    if (yaUsoPrueba) {
-      return res
-        .status(409)
-        .json({ message: "Ya usaste tu clase de prueba gratis" });
+    if (resultado.error) {
+      return res.status(resultado.error.status).json({ message: resultado.error.message });
     }
-
-    const inscritosActuales = await InscripcionClaseModel.countDocuments({
-      clase: clase._id,
-      fecha: fechaSesion,
-      estado: "confirmada",
-    });
-    if (inscritosActuales >= cupoEfectivo) {
-      return res
-        .status(409)
-        .json({ message: "No hay cupos disponibles para esta sesión" });
-    }
-
-    const inscripcionExistente = await InscripcionClaseModel.findOne({
-      clase: clase._id,
-      fecha: fechaSesion,
-      cliente: cliente._id,
-      estado: { $ne: "cancelada" },
-    });
-    if (inscripcionExistente) {
-      return res.status(409).json({ message: "Ya estás inscrito en esta sesión" });
-    }
-
-    const inscripcion = await InscripcionClaseModel.create({
-      empresa: empresa._id,
-      clase: clase._id,
-      cliente: cliente._id,
-      fecha: fechaSesion,
-      estado: "confirmada",
-      tipoAcceso: "prueba_gratis",
-      pago: { estado: "no_aplica", monto: 0, metodo: null },
-    });
 
     return res
       .status(201)
-      .json({ message: "¡Tu clase de prueba quedó agendada!", inscripcion });
+      .json({ message: "¡Tu clase de prueba quedó agendada!", inscripcion: resultado.inscripcion });
   } catch (error) {
     if (error?.code === 11000) {
       return res.status(409).json({
@@ -862,6 +882,163 @@ export const inscribirPruebaGratisInvitado = async (req, res) => {
     return res
       .status(500)
       .json({ message: "Error interno al agendar tu clase de prueba" });
+  }
+};
+
+/* =======================================================
+   🌐 Reservar una clase SIN login, con o sin membresía (RUT como identidad):
+
+     Clase → Horario → RUT (+ verificación) → Reservar
+
+   - Si el RUT pertenece a un cliente con una MEMBRESÍA ACTIVA para esa
+     fecha, se le pide ADEMÁS su teléfono o correo registrado (segundo
+     factor). Sin eso, cualquiera que supiera el RUT de un socio podría
+     reservarle una clase y gastarle un cupo sin su consentimiento — el
+     mismo riesgo no existe hoy en las reservas de invitado de la barbería
+     porque ahí no hay "cupos pagados" de por medio, pero acá sí.
+   - Si no hay membresía activa (o el RUT no existe todavía), cae al mismo
+     camino que la clase de prueba gratis con invitado: mismas reglas, mismo
+     bloqueo si el RUT ya es de una cuenta real (debe iniciar sesión).
+   - En ambos casos, la reserva en sí (validar cupo, duplicados, descontar
+     la clase) pasa por el MISMO núcleo (resolverSesionValida +
+     procesarInscripcion) que usa el cliente logueado — cero lógica
+     duplicada entre logueado y sin login.
+======================================================= */
+export const inscribirClasePublica = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { claseId, fecha, telefono, email, nombre, apellido } = req.body;
+    const rutIngresado = req.body.rut;
+
+    if (!rutIngresado || !claseId || !fecha) {
+      return res
+        .status(400)
+        .json({ message: "Debes indicar tu RUT, la clase y el horario" });
+    }
+    if (!esRutValido(rutIngresado)) {
+      return res.status(400).json({ message: "El RUT ingresado no es válido" });
+    }
+    const rut = formatearRut(rutIngresado);
+
+    const empresa = await EmpresaModel.findOne({ slug });
+    if (!empresa || !empresa.modulos?.clasesGrupales) {
+      return res.status(404).json({ message: "Empresa no encontrada" });
+    }
+
+    const sesion = await resolverSesionValida({ empresaId: empresa._id, claseId, fecha });
+    if (sesion.error) {
+      return res.status(sesion.error.status).json({ message: sesion.error.message });
+    }
+
+    // ¿Existe un usuario con ese RUT en esta empresa? (mismo fallback que
+    // getUsuarioByRutPublico, por si quedó guardado con puntos/guión distinto)
+    let usuarioExistente = await UsuarioModel.findOne({ empresa: empresa._id, rut });
+    if (!usuarioExistente) {
+      const rutLimpioBuscado = limpiarRut(rut);
+      const usuariosEmpresa = await UsuarioModel.find({ empresa: empresa._id });
+      usuarioExistente = usuariosEmpresa.find(
+        (u) => u.rut && limpiarRut(u.rut) === rutLimpioBuscado,
+      );
+    }
+
+    const membresiaActiva = usuarioExistente
+      ? await MembresiaClaseModel.findOne({
+          empresa: empresa._id,
+          cliente: usuarioExistente._id,
+          activa: true,
+          fechaInicio: { $lte: sesion.fechaSesion },
+          fechaFin: { $gte: sesion.fechaSesion },
+        })
+      : null;
+
+    if (usuarioExistente && membresiaActiva) {
+      // 🔒 Segundo factor: reservar con el cupo de una membresía usando solo
+      // el RUT no es suficientemente seguro (cualquiera puede saber el RUT
+      // de otra persona), así que pedimos que además coincida el teléfono o
+      // el correo que esa persona tiene registrado.
+      const telefonoCoincide =
+        telefono && soloDigitos(telefono) === soloDigitos(usuarioExistente.telefono);
+      const emailCoincide =
+        email &&
+        String(email).toLowerCase().trim() ===
+          String(usuarioExistente.email || "").toLowerCase().trim();
+
+      if (!telefonoCoincide && !emailCoincide) {
+        return res.status(403).json({
+          code: "VERIFICACION_REQUERIDA",
+          message:
+            "No pudimos verificar tu identidad. Ingresa el teléfono o correo con el que estás registrado.",
+        });
+      }
+
+      const resultado = await procesarInscripcion({
+        empresaId: empresa._id,
+        clase: sesion.clase,
+        clienteId: usuarioExistente._id,
+        fechaSesion: sesion.fechaSesion,
+        cupoEfectivo: sesion.cupoEfectivo,
+        tipoAcceso: "membresia",
+      });
+      if (resultado.error) {
+        return res.status(resultado.error.status).json({ message: resultado.error.message });
+      }
+      return res.status(201).json({
+        message: "Inscripción registrada correctamente",
+        inscripcion: resultado.inscripcion,
+      });
+    }
+
+    // Sin membresía activa (o RUT nuevo): mismo camino que la clase de
+    // prueba gratis de invitado, con el mismo bloqueo si el RUT ya
+    // pertenece a una cuenta real sin membresía (debe iniciar sesión).
+    const emailLimpio = String(email || "").toLowerCase().trim();
+    if (!nombre?.trim() || !apellido?.trim() || !telefono?.trim() || !emailLimpio) {
+      return res.status(400).json({
+        code: "SIN_MEMBRESIA",
+        message:
+          "No encontramos una membresía activa con ese RUT. Completa tus datos para agendar tu clase de prueba gratis.",
+      });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLimpio)) {
+      return res.status(400).json({ message: "El correo ingresado no es válido" });
+    }
+
+    const { cliente, error: identidadError } = await resolverClienteInvitadoPorRut({
+      empresaId: empresa._id,
+      rut,
+      nombre,
+      apellido,
+      email: emailLimpio,
+      telefono,
+    });
+    if (identidadError) {
+      return res.status(identidadError.status).json(identidadError.body);
+    }
+
+    const resultado = await procesarInscripcion({
+      empresaId: empresa._id,
+      clase: sesion.clase,
+      clienteId: cliente._id,
+      fechaSesion: sesion.fechaSesion,
+      cupoEfectivo: sesion.cupoEfectivo,
+      tipoAcceso: "prueba_gratis",
+    });
+    if (resultado.error) {
+      return res.status(resultado.error.status).json({ message: resultado.error.message });
+    }
+
+    return res.status(201).json({
+      message: "¡Tu clase de prueba quedó agendada!",
+      inscripcion: resultado.inscripcion,
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ message: "Ya existe una inscripción con esos datos" });
+    }
+    console.error("Error al inscribir (flujo público):", error);
+    return res
+      .status(500)
+      .json({ message: "Error interno al procesar tu inscripción" });
   }
 };
 
@@ -890,10 +1067,18 @@ export const cancelarInscripcion = async (req, res) => {
       return res.status(400).json({ message: "Esta inscripción ya estaba cancelada" });
     }
 
+    // Estaba "confirmada" (ocupaba un cupo real) — al cancelarla liberamos
+    // ese cupo en el contador atómico para que quede disponible de nuevo.
+    const liberaCupo = inscripcion.estado === "confirmada";
+
     inscripcion.estado = "cancelada";
     inscripcion.canceladaEn = new Date();
     inscripcion.motivoCancelacion = motivo || "";
     await inscripcion.save();
+
+    if (liberaCupo) {
+      await liberarCupoAtomico(inscripcion.clase, inscripcion.fecha);
+    }
 
     return res.json({ message: "Inscripción cancelada correctamente", inscripcion });
   } catch (error) {

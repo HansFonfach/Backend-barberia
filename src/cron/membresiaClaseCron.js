@@ -1,8 +1,10 @@
 import cron from "node-cron";
 import MembresiaClase from "../models/membresiaClase.model.js";
+import SolicitudMembresiaClase from "../models/solicitudMembresiaClase.model.js";
 import {
   sendRecordatorioVencimientoMembresiaEmail,
   sendMembresiaVencidaWinbackEmail,
+  sendSolicitudMembresiaPendienteRecordatorioEmail,
 } from "../controllers/mailController.js";
 
 // Cron del ciclo de vida de las membresías de clases (gimnasios):
@@ -10,8 +12,10 @@ import {
 // - Recordatorio el mismo día que vence
 // - Desactivación de mensualidades vencidas (higiene, igual que suscripcionesCron)
 // - Correo de "te extrañamos" (win-back) a los 20 días de vencida sin renovar
+// - Recordatorio de solicitudes de pago que llevan demasiado tiempo pendientes
 
 const DIAS_WINBACK = 20;
+const HORAS_SOLICITUD_PENDIENTE = 48;
 const BASE_URL = "https://www.agendafonfach.cl";
 
 const inicioDelDia = (fecha) => {
@@ -147,6 +151,44 @@ const procesarWinback = async () => {
   }
 };
 
+// Solicitudes de pago (checkout público o del cliente logueado) que llevan
+// más de HORAS_SOLICITUD_PENDIENTE sin resolverse — se le recuerda al
+// cliente una sola vez (recordatorioPendienteEnviado evita repetirlo).
+const procesarSolicitudesPendientes = async () => {
+  const limite = new Date();
+  limite.setHours(limite.getHours() - HORAS_SOLICITUD_PENDIENTE);
+
+  const solicitudes = await SolicitudMembresiaClase.find({
+    estado: "pendiente",
+    recordatorioPendienteEnviado: false,
+    createdAt: { $lte: limite },
+  })
+    .populate("cliente", "nombre email")
+    .populate("empresa", "nombre");
+
+  for (const s of solicitudes) {
+    try {
+      const cliente = s.cliente;
+      const empresa = s.empresa;
+      if (!cliente?.email || !empresa) continue;
+
+      await sendSolicitudMembresiaPendienteRecordatorioEmail(cliente.email, {
+        nombreCliente: cliente.nombre,
+        nombreEmpresa: empresa.nombre,
+        nombrePlan: s.nombrePlan,
+      });
+
+      s.recordatorioPendienteEnviado = true;
+      await s.save();
+    } catch (error) {
+      console.error(
+        `❌ Error enviando recordatorio de solicitud pendiente a ${s.cliente?.email}:`,
+        error.message,
+      );
+    }
+  }
+};
+
 export const iniciarCronMembresiaClase = () => {
   cron.schedule(
     "0 9 * * *", // todos los días a las 9:00 AM (hora de Chile)
@@ -155,6 +197,7 @@ export const iniciarCronMembresiaClase = () => {
         await procesarRecordatoriosVencimiento();
         await procesarVencidas();
         await procesarWinback();
+        await procesarSolicitudesPendientes();
         console.log("✅ Cron de membresías de clases ejecutado correctamente");
       } catch (error) {
         console.error("❌ Error en cron de membresías de clases:", error);

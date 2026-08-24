@@ -1125,3 +1125,123 @@ ${linkRenovar ? `\nRenovar: ${linkRenovar}` : ""}
 Equipo ${nombreEmpresa}`,
   });
 };
+
+/* =======================================================
+   🧾 Solicitudes de membresía (checkout público / panel de pagos)
+======================================================= */
+
+// 🟡 Confirmación de que la solicitud fue recibida (checkout público, sin
+// login) — no activa nada, solo avisa que quedó registrada y a la espera.
+export const sendSolicitudMembresiaRecibidaEmail = async (to, data) => {
+  const { nombreCliente, nombreEmpresa, nombrePlan, metodo } = data;
+
+  const notaMetodo =
+    metodo === "efectivo"
+      ? "Paga en efectivo directamente en el local cuando corresponda."
+      : metodo === "whatsapp"
+        ? "Recuerda enviar tu comprobante por WhatsApp si aún no lo has hecho."
+        : "Ya recibimos tu comprobante de transferencia.";
+
+  return await sendBaseEmail({
+    to,
+    subject: `Recibimos tu solicitud — ${nombreEmpresa}`,
+    html: layout(`
+      <h2 style="margin-top:0;">¡Gracias, ${nombreCliente}!</h2>
+      <p style="color:#555;">
+        Recibimos tu solicitud del plan <strong>${nombrePlan}</strong> en <strong>${nombreEmpresa}</strong>.
+      </p>
+
+      <div style="background:#f0f7ff;border-left:4px solid #1a73e8;padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
+          ⏳ Tu solicitud está <strong>pendiente de revisión</strong>. ${notaMetodo}
+          Te avisaremos por correo apenas la confirmemos y tu membresía quede activa.
+        </p>
+      </div>
+
+      <p style="color:#555;font-size:14px;">
+        Atentamente,<br/><strong>Equipo ${nombreEmpresa}</strong>
+      </p>
+    `),
+    text: `Recibimos tu solicitud — ${nombreEmpresa}
+
+Hola ${nombreCliente}, recibimos tu solicitud del plan ${nombrePlan}.
+
+Está pendiente de revisión. ${notaMetodo}
+Te avisaremos apenas la confirmemos.
+
+Equipo ${nombreEmpresa}`,
+  });
+};
+
+// 🔴 Solicitud rechazada por el admin — incluye el motivo si lo indicó.
+export const sendSolicitudMembresiaRechazadaEmail = async (to, data) => {
+  const { nombreCliente, nombreEmpresa, nombrePlan, motivo } = data;
+
+  return await sendBaseEmail({
+    to,
+    subject: `Tu solicitud en ${nombreEmpresa} fue rechazada`,
+    html: layout(`
+      <h2 style="margin-top:0;">Hola ${nombreCliente}</h2>
+      <p style="color:#555;">
+        Tu solicitud del plan <strong>${nombrePlan}</strong> en <strong>${nombreEmpresa}</strong> fue rechazada.
+      </p>
+
+      <div style="background:#fff4f0;border-left:4px solid #e8541a;padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
+          ${motivo ? `<strong>Motivo:</strong> ${motivo}` : "No se recibió el pago o hubo un problema con el comprobante."}
+        </p>
+      </div>
+
+      <p style="color:#555;font-size:14px;">
+        Si crees que fue un error o quieres volver a intentarlo, puedes enviar una nueva solicitud cuando quieras.
+      </p>
+
+      <p style="color:#555;font-size:14px;">
+        Atentamente,<br/><strong>Equipo ${nombreEmpresa}</strong>
+      </p>
+    `),
+    text: `Tu solicitud en ${nombreEmpresa} fue rechazada
+
+Hola ${nombreCliente}, tu solicitud del plan ${nombrePlan} fue rechazada.
+${motivo ? `Motivo: ${motivo}` : ""}
+
+Puedes volver a intentarlo cuando quieras.
+
+Equipo ${nombreEmpresa}`,
+  });
+};
+
+// ⏰ Recordatorio automático: la solicitud lleva mucho tiempo pendiente sin
+// resolverse (ver cron/membresiaClaseCron.js) — le recuerda al cliente que
+// falta su comprobante o que la revisión sigue en curso.
+export const sendSolicitudMembresiaPendienteRecordatorioEmail = async (to, data) => {
+  const { nombreCliente, nombreEmpresa, nombrePlan } = data;
+
+  return await sendBaseEmail({
+    to,
+    subject: `Tu solicitud en ${nombreEmpresa} sigue pendiente`,
+    html: layout(`
+      <h2 style="margin-top:0;">Hola ${nombreCliente}</h2>
+      <p style="color:#555;">
+        Tu solicitud del plan <strong>${nombrePlan}</strong> en <strong>${nombreEmpresa}</strong> todavía está pendiente de revisión.
+      </p>
+
+      <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
+          Si ya hiciste el pago y aún no mandaste el comprobante (por el formulario o por WhatsApp), este es un buen momento para hacerlo y así agilizar la activación de tu membresía.
+        </p>
+      </div>
+
+      <p style="color:#555;font-size:14px;">
+        Atentamente,<br/><strong>Equipo ${nombreEmpresa}</strong>
+      </p>
+    `),
+    text: `Tu solicitud en ${nombreEmpresa} sigue pendiente
+
+Hola ${nombreCliente}, tu solicitud del plan ${nombrePlan} todavía está pendiente de revisión.
+
+Si ya pagaste y no has mandado el comprobante, este es buen momento para hacerlo.
+
+Equipo ${nombreEmpresa}`,
+  });
+};

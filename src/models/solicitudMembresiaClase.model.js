@@ -42,11 +42,12 @@ const SolicitudMembresiaClaseSchema = new Schema(
 
     metodo: {
       type: String,
-      enum: ["transferencia", "efectivo"],
+      enum: ["transferencia", "efectivo", "whatsapp"],
       required: true,
     },
 
-    // Solo se completa cuando metodo === "transferencia"
+    // Solo se completa cuando metodo === "transferencia" (o si mandaron el
+    // comprobante igual con metodo "whatsapp"); con "efectivo" queda vacío.
     comprobante: {
       url: { type: String, default: "" },
       publicId: { type: String, default: "" },
@@ -74,6 +75,10 @@ const SolicitudMembresiaClaseSchema = new Schema(
       default: null,
     },
     fechaResolucion: { type: Date, default: null },
+
+    // Recordatorio automático para solicitudes que llevan mucho tiempo
+    // pendientes de revisión (ver cron/membresiaClaseCron.js)
+    recordatorioPendienteEnviado: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

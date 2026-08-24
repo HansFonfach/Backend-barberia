@@ -10,6 +10,7 @@ import {
   getSesionesPublicas,
   inscribirCliente,
   inscribirPruebaGratisInvitado,
+  inscribirClasePublica,
   cancelarInscripcion,
   marcarPagoInscripcion,
   misInscripciones,
@@ -20,22 +21,31 @@ import {
 import { validarToken } from "../middlewares/validarToken.js";
 import { verificarRol } from "../middlewares/verificarRol.js";
 import { verificarModulo } from "../middlewares/verificarModulo.js";
+import {
+  limitarEscrituraPublica,
+  limitarLecturaPublica,
+} from "../middlewares/publicRateLimiter.js";
 
 const router = Router();
 
 // Catálogo público para el landing de la empresa (sin login) — va ANTES del
 // validarToken de abajo a propósito, para que quede sin autenticación.
-router.get("/:slug/publicas", getClasesPublicas);
+router.get("/:slug/publicas", limitarLecturaPublica, getClasesPublicas);
 
 // Horarios/cupos sin login, para que el invitado elija día y hora antes de
 // llenar sus datos (misma lógica que /sesiones, resuelta por slug).
-router.get("/:slug/sesiones-publicas", getSesionesPublicas);
+router.get("/:slug/sesiones-publicas", limitarLecturaPublica, getSesionesPublicas);
 
 // Agendar la clase de prueba gratis sin crear cuenta (también pública,
 // también antes del validarToken). Está deliberadamente restringida a
 // tipoAcceso "prueba_gratis" dentro del controlador — ver el comentario
 // en inscribirPruebaGratisInvitado.
-router.post("/:slug/prueba-gratis", inscribirPruebaGratisInvitado);
+router.post("/:slug/prueba-gratis", limitarEscrituraPublica, inscribirPruebaGratisInvitado);
+
+// Reservar una clase sin login por RUT: usa la membresía activa si el RUT
+// tiene una (pidiendo teléfono/correo como segundo factor), o cae al mismo
+// flujo de prueba gratis si no. Ver el comentario en inscribirClasePublica.
+router.post("/:slug/inscribir-publico", limitarEscrituraPublica, inscribirClasePublica);
 
 // Todo el resto de este módulo solo existe para empresas con
 // modulos.clasesGrupales = true (gimnasios, boxes, etc.). Para el resto de
