@@ -8,6 +8,7 @@ import {
   getAllUsersWithSuscripcion,
   verMisPuntos,
   crearBarbero,
+  crearCliente,
   cambiarEstadoUsuario,
   getBarberosPublicos,
   updatePerfil,
@@ -42,6 +43,7 @@ router.post(
   upload.single("fotoPerfil"),
   crearBarbero,
 );
+router.post("/cliente/crearCliente", validarToken, verificarRol(), crearCliente);
 
 // ✅ 4. ÚLTIMO: TODAS LAS RUTAS CON PARÁMETROS DINÁMICOS (/:id)
 router.get("/:id", validarToken, getUsuarioById);

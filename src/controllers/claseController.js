@@ -311,7 +311,7 @@ export const eliminarExcepcionClase = async (req, res) => {
    duplicar esto a mano y arriesgar que un endpoint muestre cupos distintos
    al otro.
 ======================================================= */
-const generarSesionesDisponibles = async ({
+export const generarSesionesDisponibles = async ({
   empresaId,
   desde,
   hasta,

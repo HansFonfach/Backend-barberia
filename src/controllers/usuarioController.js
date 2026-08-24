@@ -503,6 +503,69 @@ export const crearBarbero = async (req, res) => {
     res.status(500).json({ message: "Error al crear el barbero" });
   }
 };
+
+/* =======================================================
+   🟢 Admin registra un cliente a mano (mismo flujo manual que "Crear
+   Profesional", sin foto/perfil profesional porque un cliente no lo usa)
+======================================================= */
+export const crearCliente = async (req, res) => {
+  try {
+    const {
+      rut,
+      nombre,
+      apellido,
+      telefono,
+      email,
+      password,
+      confirmaPassword,
+    } = req.body;
+
+    const empresaId = req.usuario?.empresaId; // 👈 viene del token
+
+    if (!empresaId) {
+      return res
+        .status(400)
+        .json({ message: "No se pudo identificar la empresa" });
+    }
+
+    if (!rut || !nombre || !apellido || !telefono || !email || !password)
+      return res.status(400).json({ message: "Campos obligatorios faltantes" });
+
+    if (password !== confirmaPassword)
+      return res.status(400).json({ message: "Las contraseñas no coinciden" });
+
+    const existe = await Usuario.findOne({
+      empresa: empresaId, // ✅ el duplicado solo cuenta dentro de la misma empresa
+      $or: [{ rut }, { email }],
+    });
+    if (existe)
+      return res
+        .status(409)
+        .json({ message: "Ya existe un usuario con ese rut o email" });
+
+    const telefonoCompleto = telefono?.startsWith("569")
+      ? telefono
+      : `569${telefono}`;
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const nuevoCliente = await Usuario.create({
+      rut,
+      nombre,
+      apellido,
+      email,
+      telefono: telefonoCompleto,
+      rol: "cliente",
+      empresa: empresaId,
+      password: hashedPassword,
+    });
+
+    res.status(201).json(nuevoCliente);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al crear el cliente" });
+  }
+};
+
 export const getUsuarioByRutPublico = async (req, res) => {
   const { rut, slug } = req.params;
 
