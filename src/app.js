@@ -31,6 +31,7 @@ import planSuscripcionRoutes from "./routes/planSuscripcionRoutes.js";
 import pagoMembresiaClaseRoutes from "./routes/pagoMembresiaClaseRoutes.js";
 import solicitudMembresiaClaseRoutes from "./routes/solicitudMembresiaClaseRoutes.js";
 import estadisticasGimnasioRoutes from "./routes/estadisticasGimnasioRoutes.js";
+import progresoClienteRoutes from "./routes/progresoClienteRoutes.js";
 
 const app = express();
 app.use(cookieParser());
@@ -97,5 +98,6 @@ app.use("/planesSuscripcion", planSuscripcionRoutes);
 app.use("/pagosMembresiaClase", pagoMembresiaClaseRoutes);
 app.use("/solicitudesMembresia", solicitudMembresiaClaseRoutes);
 app.use("/estadisticasGimnasio", estadisticasGimnasioRoutes);
+app.use("/progreso-cliente", progresoClienteRoutes);
 
 export default app;
