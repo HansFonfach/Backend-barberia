@@ -19,13 +19,26 @@ const PlanMembresiaClaseSchema = new Schema(
 
     nombre: { type: String, required: true }, // ej. "Plan 8 clases"
 
-    // Cuántas clases al mes incluye este plan (no es ilimitado)
+    // Cuántas clases incluye el plan — su significado depende de tipoCiclo:
+    // "mensual" → clasesIncluidas se resetea cada 30 días (ej. 12/mes durante
+    // los duracionDias que dure el plan completo); "total" → clasesIncluidas
+    // es un cupo único que no se renueva, válido para todo duracionDias.
     clasesIncluidas: { type: Number, required: true, min: 1 },
 
     precio: { type: Number, required: true, min: 0 },
 
-    // Duración del ciclo, por defecto mensual (30 días)
+    // Duración TOTAL del plan (ej. 90 = trimestral, 180 = semestral). Con
+    // tipoCiclo "mensual" el cupo igual se renueva cada 30 días dentro de
+    // este total; con "total" es un solo cupo para todo este período.
     duracionDias: { type: Number, default: 30, min: 1 },
+
+    // "total" (por defecto, y el único comportamiento que existía antes de
+    // este campo — se deja así para no alterar planes ya creados) = un cupo
+    // fijo de clasesIncluidas para todo duracionDias, sin renovarse.
+    // "mensual" = clasesIncluidas se renueva cada 30 días mientras dure el
+    // plan (duracionDias en total). Ej. "12 clases/mes x 6 meses" = 180 días
+    // + clasesIncluidas:12 + tipoCiclo:"mensual".
+    tipoCiclo: { type: String, enum: ["total", "mensual"], default: "total" },
 
     activo: { type: Boolean, default: true },
   },

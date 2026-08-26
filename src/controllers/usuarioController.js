@@ -4,6 +4,7 @@ import usuarioModel from "../models/usuario.model.js";
 import Usuario from "../models/usuario.model.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../config/cloudinary.js";
+import { sendBienvenidaClienteEmail } from "./mailController.js";
 
 //obtener todos los usuarios
 export const getUsuarios = async (req, res) => {
@@ -459,6 +460,7 @@ export const crearBarbero = async (req, res) => {
     const telefonoCompleto = telefono?.startsWith("569")
       ? telefono
       : `569${telefono}`;
+    const passwordPlano = password; // solo para el correo de bienvenida, no se guarda
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // ✅ Subir foto a Cloudinary si viene en el request
@@ -497,6 +499,17 @@ export const crearBarbero = async (req, res) => {
       perfilProfesional: { fotoPerfil },
     });
 
+    const empresaBarbero = await empresaModel.findById(empresaId);
+    sendBienvenidaClienteEmail(email, {
+      nombreCliente: `${nombre} ${apellido}`.trim(),
+      nombreNegocio: empresaBarbero?.nombre,
+      slug: empresaBarbero?.slug,
+      email,
+      password: passwordPlano,
+    }).catch((err) =>
+      console.error("Error enviando correo de bienvenida al barbero:", err),
+    );
+
     res.status(201).json(nuevoBarbero);
   } catch (error) {
     console.error(error);
@@ -507,6 +520,11 @@ export const crearBarbero = async (req, res) => {
 /* =======================================================
    🟢 Admin registra un cliente a mano (mismo flujo manual que "Crear
    Profesional", sin foto/perfil profesional porque un cliente no lo usa)
+
+   RUT y teléfono son obligatorios para todos los rubros, EXCEPTO
+   "gimnasio": ahí un cliente puede registrarse solo con nombre/apellido/
+   email/clave (pedido explícito del negocio). El resto de las empresas no
+   se ve afectado por este cambio.
 ======================================================= */
 export const crearCliente = async (req, res) => {
   try {
@@ -528,28 +546,52 @@ export const crearCliente = async (req, res) => {
         .json({ message: "No se pudo identificar la empresa" });
     }
 
-    if (!rut || !nombre || !apellido || !telefono || !email || !password)
+    const empresa = await empresaModel.findById(empresaId);
+    if (!empresa) {
+      return res.status(404).json({ message: "Empresa no encontrada" });
+    }
+
+    const esGimnasio = empresa.rubro === "gimnasio";
+
+    if (
+      !nombre ||
+      !apellido ||
+      !email ||
+      !password ||
+      (!esGimnasio && (!rut || !telefono))
+    )
       return res.status(400).json({ message: "Campos obligatorios faltantes" });
 
     if (password !== confirmaPassword)
       return res.status(400).json({ message: "Las contraseñas no coinciden" });
 
+    // El $or solo incluye rut cuando viene informado: para gimnasios, donde
+    // el rut puede venir vacío, no queremos que Mongo intente matchear por
+    // un rut "" o undefined y bloquee la creación de otros clientes sin rut.
+    const condicionesDuplicado = [{ email }];
+    if (rut) condicionesDuplicado.push({ rut });
+
     const existe = await Usuario.findOne({
       empresa: empresaId, // ✅ el duplicado solo cuenta dentro de la misma empresa
-      $or: [{ rut }, { email }],
+      $or: condicionesDuplicado,
     });
     if (existe)
       return res
         .status(409)
         .json({ message: "Ya existe un usuario con ese rut o email" });
 
-    const telefonoCompleto = telefono?.startsWith("569")
-      ? telefono
-      : `569${telefono}`;
+    const telefonoCompleto = telefono
+      ? telefono.startsWith("569")
+        ? telefono
+        : `569${telefono}`
+      : undefined;
+    // Contraseña en texto plano solo para el correo de bienvenida de abajo:
+    // nunca se guarda así, solo se usa en memoria antes de hashear.
+    const passwordPlano = password;
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const nuevoCliente = await Usuario.create({
-      rut,
+      rut: rut || undefined,
       nombre,
       apellido,
       email,
@@ -558,6 +600,19 @@ export const crearCliente = async (req, res) => {
       empresa: empresaId,
       password: hashedPassword,
     });
+
+    // Correo de bienvenida con las credenciales de acceso. No bloquea la
+    // respuesta si el envío falla (mismo criterio que el resto de los
+    // correos transaccionales del sistema).
+    sendBienvenidaClienteEmail(email, {
+      nombreCliente: `${nombre} ${apellido}`.trim(),
+      nombreNegocio: empresa.nombre,
+      slug: empresa.slug,
+      email,
+      password: passwordPlano,
+    }).catch((err) =>
+      console.error("Error enviando correo de bienvenida al cliente:", err),
+    );
 
     res.status(201).json(nuevoCliente);
   } catch (error) {

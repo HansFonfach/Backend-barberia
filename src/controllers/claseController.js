@@ -4,6 +4,8 @@ import timezone from "dayjs/plugin/timezone.js";
 
 import ClaseModel from "../models/clase.model.js";
 import ExcepcionClaseModel from "../models/excepcionClase.model.js";
+import FeriadoClaseBloqueoModel from "../models/feriadoClaseBloqueo.model.js";
+import FeriadoModel from "../models/feriados.js";
 import InscripcionClaseModel from "../models/inscripcionClase.model.js";
 import MembresiaClaseModel from "../models/membresiaClase.model.js";
 import UsuarioModel from "../models/usuario.model.js";
@@ -238,7 +240,7 @@ export const crearExcepcionClase = async (req, res) => {
         .json({ message: "Debes indicar la fecha y el tipo de excepción" });
     }
 
-    if (!["cancelada", "cupo_modificado"].includes(tipo)) {
+    if (!["cancelada", "cupo_modificado", "forzar_habilitada"].includes(tipo)) {
       return res.status(400).json({ message: "Tipo de excepción inválido" });
     }
 
@@ -300,6 +302,119 @@ export const eliminarExcepcionClase = async (req, res) => {
 };
 
 /* =======================================================
+   🟠 Feriados aplicados al módulo de clases (por empresa)
+
+   El listado de feriados en sí (fecha/nombre) es GLOBAL y se sigue
+   administrando igual que siempre (feriadoController.js / feriadoRoutes.js,
+   usado por el flujo de barbería) — acá solo se lee para mostrarlo en el
+   calendario de clases. Lo que es propio de cada empresa es si ese feriado
+   está BLOQUEADO para las clases o no (FeriadoClaseBloqueo); por defecto
+   ningún feriado bloquea nada, tal como pide el negocio.
+======================================================= */
+export const listarFeriadosClases = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+    const { desde, hasta } = req.query;
+
+    const inicio = desde
+      ? dayjs.tz(desde, TZ).startOf("day")
+      : dayjs().tz(TZ).startOf("day");
+    const fin = hasta
+      ? dayjs.tz(hasta, TZ).endOf("day")
+      : inicio.add(60, "day").endOf("day");
+
+    const [feriados, bloqueos] = await Promise.all([
+      FeriadoModel.find({
+        fecha: { $gte: inicio.toDate(), $lte: fin.toDate() },
+      })
+        .sort({ fecha: 1 })
+        .lean(),
+      FeriadoClaseBloqueoModel.find({
+        empresa: empresaId,
+        fecha: { $gte: inicio.toDate(), $lte: fin.toDate() },
+      }).lean(),
+    ]);
+
+    const bloqueoPorFecha = new Map(
+      bloqueos.map((b) => [dayjs(b.fecha).tz(TZ).format("YYYY-MM-DD"), b]),
+    );
+
+    const resultado = feriados.map((f) => {
+      const key = dayjs(f.fecha).tz(TZ).format("YYYY-MM-DD");
+      const bloqueo = bloqueoPorFecha.get(key);
+      return {
+        _id: f._id,
+        fecha: f.fecha,
+        nombre: f.nombre,
+        bloqueado: !!bloqueo,
+        motivoBloqueo: bloqueo?.motivo || "",
+      };
+    });
+
+    return res.json({ feriados: resultado });
+  } catch (error) {
+    console.error("Error al listar feriados de clases:", error);
+    return res
+      .status(500)
+      .json({ message: "Error interno al listar los feriados" });
+  }
+};
+
+export const bloquearFeriadoClase = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+    const { fecha } = req.params;
+    const { motivo } = req.body;
+
+    if (!fecha || Number.isNaN(new Date(fecha).getTime())) {
+      return res.status(400).json({ message: "Fecha inválida" });
+    }
+
+    const fechaDia = dayjs.tz(fecha, TZ).startOf("day").toDate();
+
+    const bloqueo = await FeriadoClaseBloqueoModel.findOneAndUpdate(
+      { empresa: empresaId, fecha: fechaDia },
+      { empresa: empresaId, fecha: fechaDia, motivo: motivo || "" },
+      { upsert: true, new: true, runValidators: true },
+    );
+
+    return res
+      .status(201)
+      .json({ message: "Día bloqueado correctamente", bloqueo });
+  } catch (error) {
+    console.error("Error al bloquear feriado de clases:", error);
+    return res
+      .status(500)
+      .json({ message: "Error interno al bloquear el día" });
+  }
+};
+
+export const desbloquearFeriadoClase = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId;
+    const { fecha } = req.params;
+
+    if (!fecha || Number.isNaN(new Date(fecha).getTime())) {
+      return res.status(400).json({ message: "Fecha inválida" });
+    }
+
+    const fechaDia = dayjs.tz(fecha, TZ).startOf("day").toDate();
+
+    await FeriadoClaseBloqueoModel.deleteOne({
+      empresa: empresaId,
+      fecha: fechaDia,
+    });
+
+    return res.json({ message: "Día desbloqueado correctamente" });
+  } catch (error) {
+    console.error("Error al desbloquear feriado de clases:", error);
+    return res
+      .status(500)
+      .json({ message: "Error interno al desbloquear el día" });
+  }
+};
+
+/* =======================================================
    🔵 Sesiones disponibles (se generan a partir del horario semanal)
 ======================================================= */
 
@@ -343,7 +458,7 @@ export const generarSesionesDisponibles = async ({
 
   const claseIds = clases.map((c) => c._id);
 
-  const [excepciones, inscripciones] = await Promise.all([
+  const [excepciones, inscripciones, bloqueosFeriado] = await Promise.all([
     ExcepcionClaseModel.find({
       clase: { $in: claseIds },
       fecha: { $gte: inicio.toDate(), $lte: fin.toDate() },
@@ -353,6 +468,10 @@ export const generarSesionesDisponibles = async ({
       fecha: { $gte: inicio.toDate(), $lte: fin.toDate() },
       estado: "confirmada",
     }).lean(),
+    FeriadoClaseBloqueoModel.find({
+      empresa: empresaId,
+      fecha: { $gte: inicio.toDate(), $lte: fin.toDate() },
+    }).lean(),
   ]);
 
   const excepcionPorClaseFecha = new Map();
@@ -360,6 +479,11 @@ export const generarSesionesDisponibles = async ({
     const key = `${ex.clase}_${dayjs(ex.fecha).tz(TZ).format("YYYY-MM-DD")}`;
     excepcionPorClaseFecha.set(key, ex);
   }
+
+  // Fechas bloqueadas por feriado a nivel de empresa (ver FeriadoClaseBloqueo)
+  const fechasBloqueadas = new Set(
+    bloqueosFeriado.map((b) => dayjs(b.fecha).tz(TZ).format("YYYY-MM-DD")),
+  );
 
   const inscritosPorSesion = new Map();
   for (const ins of inscripciones) {
@@ -403,6 +527,15 @@ export const generarSesionesDisponibles = async ({
         );
 
         if (excepcion?.tipo === "cancelada") continue;
+
+        // Día bloqueado por feriado (a nivel de empresa): se omite la sesión
+        // salvo que esta clase puntual tenga una excepción "forzar_habilitada"
+        // para esa fecha.
+        if (
+          fechasBloqueadas.has(fechaSesion.format("YYYY-MM-DD")) &&
+          excepcion?.tipo !== "forzar_habilitada"
+        )
+          continue;
 
         const cupoEfectivo =
           excepcion?.tipo === "cupo_modificado" && excepcion.cupoOverride != null
@@ -553,6 +686,20 @@ const resolverSesionValida = async ({ empresaId, claseId, fecha }) => {
     return { error: { status: 409, message: "Esta sesión fue cancelada" } };
   }
 
+  // Día bloqueado por feriado para el módulo de clases de esta empresa,
+  // salvo que esta clase puntual esté forzada a mantenerse habilitada.
+  if (excepcion?.tipo !== "forzar_habilitada") {
+    const bloqueo = await FeriadoClaseBloqueoModel.findOne({
+      empresa: empresaId,
+      fecha: { $gte: inicioDia, $lte: finDia },
+    });
+    if (bloqueo) {
+      return {
+        error: { status: 409, message: "Este día está bloqueado por feriado" },
+      };
+    }
+  }
+
   const cupoEfectivo =
     excepcion?.tipo === "cupo_modificado" && excepcion.cupoOverride != null
       ? excepcion.cupoOverride
@@ -589,13 +736,17 @@ const procesarInscripcion = async ({
       };
     }
 
-    // La mensualidad NO es ilimitada: tiene un cupo fijo de clases al mes
+    // La mensualidad NO es ilimitada: tiene un cupo fijo (mensual o total
+    // según el plan — ver contarClasesUsadasMembresia)
     const clasesUsadas = await contarClasesUsadasMembresia(membresia);
     if (clasesUsadas >= membresia.clasesIncluidas) {
       return {
         error: {
           status: 409,
-          message: "Ya usaste todas las clases incluidas en tu plan este mes",
+          message:
+            membresia.tipoCiclo === "mensual"
+              ? "Ya usaste todas las clases incluidas en tu plan este mes"
+              : "Ya usaste todas las clases incluidas en tu plan",
         },
       };
     }

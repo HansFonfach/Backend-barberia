@@ -55,6 +55,7 @@ export const crearMembresia = async (req, res) => {
       // snapshot: si después el admin edita o borra el plan, esta mensualidad no cambia
       nombrePlan: plan.nombre,
       clasesIncluidas: plan.clasesIncluidas,
+      tipoCiclo: plan.tipoCiclo,
       precio: plan.precio,
       activa: true,
       fechaInicio,
@@ -159,6 +160,7 @@ export const estadoMembresiaCliente = async (req, res) => {
       fechaInicio: membresia.fechaInicio,
       fechaFin: membresia.fechaFin,
       clasesIncluidas: membresia.clasesIncluidas,
+      tipoCiclo: membresia.tipoCiclo,
       clasesUsadas,
       clasesRestantes: Math.max(membresia.clasesIncluidas - clasesUsadas, 0),
     });

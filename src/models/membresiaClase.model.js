@@ -34,6 +34,11 @@ const MembresiaClaseSchema = new Schema(
     // después edita o borra el plan original)
     nombrePlan: { type: String, required: true },
     clasesIncluidas: { type: Number, required: true, min: 1 },
+    // Snapshot de PlanMembresiaClase.tipoCiclo — default "total" a propósito:
+    // así las mensualidades ya vendidas antes de este campo (que en la
+    // práctica siempre funcionaron como cupo total, nunca mensual) se siguen
+    // contando exactamente igual que antes, sin cambiar nada retroactivo.
+    tipoCiclo: { type: String, enum: ["total", "mensual"], default: "total" },
     precio: { type: Number, default: 0 },
 
     activa: { type: Boolean, default: true, index: true },

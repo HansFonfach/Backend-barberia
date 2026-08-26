@@ -38,6 +38,7 @@ const SolicitudMembresiaClaseSchema = new Schema(
     nombrePlan: { type: String, required: true },
     clasesIncluidas: { type: Number, required: true, min: 1 },
     duracionDias: { type: Number, required: true, min: 1 },
+    tipoCiclo: { type: String, enum: ["total", "mensual"], default: "total" },
     precio: { type: Number, required: true, min: 0 },
 
     metodo: {

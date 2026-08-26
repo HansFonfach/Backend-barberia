@@ -12,7 +12,11 @@ const UsuarioSchema = new Schema(
     nombre: { type: String, required: true },
     apellido: { type: String },
     email: { type: String, required: true, lowercase: true, trim: true },
-    telefono: { type: String, required: true },
+    // required: true se sacó de acá porque para empresas de rubro "gimnasio"
+    // el teléfono es opcional (ver usuarioController.crearCliente, que sigue
+    // exigiéndolo en el resto de los rubros). RUT ya era opcional a nivel de
+    // schema (se valida también en el controlador según el rubro).
+    telefono: { type: String },
     suscrito: { type: Boolean, default: false },
     password: { type: String, default: null },
     estado: {

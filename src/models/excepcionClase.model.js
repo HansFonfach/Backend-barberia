@@ -18,7 +18,10 @@ const ExcepcionClaseSchema = new Schema(
 
     tipo: {
       type: String,
-      enum: ["cancelada", "cupo_modificado"],
+      // "forzar_habilitada": mantiene esta clase/fecha funcionando aunque el
+      // día completo esté bloqueado por feriado a nivel de empresa (ver
+      // FeriadoClaseBloqueo) — no tiene efecto si el día no está bloqueado.
+      enum: ["cancelada", "cupo_modificado", "forzar_habilitada"],
       required: true,
     },
 

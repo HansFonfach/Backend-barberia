@@ -5,6 +5,10 @@ import {
   getClasesHoyGimnasio,
   getClientesGimnasio,
   getPorCobrarGimnasio,
+  getResumenPeriodoGimnasio,
+  getClientesAnalisisGimnasio,
+  getDemandaGimnasio,
+  getEvolucionGimnasio,
 } from "../controllers/estadisticasGimnasioController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 import { verificarRol } from "../middlewares/verificarRol.js";
@@ -21,5 +25,11 @@ router.get("/membresias", getMembresiasGimnasio);
 router.get("/clases-hoy", getClasesHoyGimnasio);
 router.get("/clientes", getClientesGimnasio);
 router.get("/por-cobrar", getPorCobrarGimnasio);
+
+// Panel de estadísticas completo (selector de período + comparación)
+router.get("/resumen", getResumenPeriodoGimnasio);
+router.get("/clientes-analisis", getClientesAnalisisGimnasio);
+router.get("/demanda", getDemandaGimnasio);
+router.get("/evolucion", getEvolucionGimnasio);
 
 export default router;

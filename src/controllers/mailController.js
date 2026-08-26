@@ -1,9 +1,21 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// El cliente se crea recién en el primer envío (no al importar este archivo).
+// index.js llama a dotenv.config() DESPUÉS de sus imports estáticos (así
+// funciona ESM: los imports se resuelven antes que el resto del código del
+// archivo), así que si algo en la cadena de imports llega a este módulo
+// antes de que index.js corra, `new Resend(process.env.RESEND_API_KEY)` se
+// ejecutaba con la variable todavía sin cargar y tiraba "Missing API key".
+let resendClient = null;
+const getResendClient = () => {
+  if (!resendClient) {
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendClient;
+};
 
 export const sendBaseEmail = async ({ to, subject, html, text }) => {
-  const result = await resend.emails.send({
+  const result = await getResendClient().emails.send({
     from: "Agenda Fonfach <contacto@agendafonfach.cl>",
     to,
     subject,
@@ -545,6 +557,55 @@ export const sendBienvenidaEmpresaEmail = async (to, data) => {
         </p>
       `),
     text: `¡Bienvenido a Agenda Fonfach!\n\nTu negocio "${nombreNegocio}" fue creado exitosamente. Tienes 7 días gratis para probarlo.\n\nTu agenda pública: ${agendaUrl}\nCorreo: ${email}\nContraseña temporal: ${password}\n\nInicia sesión en: ${panelUrl}\n\nTe recomendamos cambiar tu contraseña después del primer ingreso.\n\nEquipo 🗓️ Agenda Fonfach`,
+  });
+};
+
+// ─────────────────────────────────────────────
+// EMAIL: Bienvenida a un usuario (cliente o profesional) creado a mano por
+// el administrador desde su panel — mismo patrón que sendBienvenidaEmpresaEmail
+// (le manda la contraseña en texto plano por correo, que es la única forma de
+// que la conozca ya que el backend solo guarda el hash). No se toca el
+// hasheo de contraseñas en ningún momento: `password` acá es un valor que ya
+// veníamos manejando en memoria antes de hashear, nunca se persiste así.
+// ─────────────────────────────────────────────
+export const sendBienvenidaClienteEmail = async (to, data) => {
+  const { nombreCliente, nombreNegocio, slug, email, password } = data;
+  const loginUrl = slug
+    ? `https://www.agendafonfach.cl/${slug}/login`
+    : `https://www.agendafonfach.cl/login`;
+
+  return await sendBaseEmail({
+    to,
+    subject: `¡Bienvenido${nombreNegocio ? ` a ${nombreNegocio}` : ""}! – Agenda Fonfach`,
+    html: layout(`
+        <h2 style="margin-top:0;">¡Bienvenido${nombreNegocio ? ` a ${nombreNegocio}` : ""}! 🎉</h2>
+        <p>Hola <strong>${nombreCliente}</strong>, tu cuenta fue creada exitosamente. Ya puedes ingresar con estos datos:</p>
+
+        <table cellpadding="8" cellspacing="0" border="0" width="100%"
+              style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
+          <tr>
+            <td style="font-size:14px;color:#555;width:40%;">Correo</td>
+            <td style="font-weight:bold;">${email}</td>
+          </tr>
+          <tr>
+            <td style="font-size:14px;color:#555;">Contraseña</td>
+            <td style="font-weight:bold;letter-spacing:2px;">${password}</td>
+          </tr>
+        </table>
+
+        <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
+          <p style="margin:0;font-size:14px;color:#555;">
+            🔒 Por seguridad, te recomendamos cambiar tu contraseña después de iniciar sesión por primera vez.
+          </p>
+        </div>
+
+        ${ctaButton(loginUrl, "Iniciar sesión", "#4361ee")}
+
+        <p style="color:#555;font-size:14px;">
+          Si tienes alguna duda, contáctanos y con gusto te ayudamos.
+        </p>
+      `),
+    text: `¡Bienvenido${nombreNegocio ? ` a ${nombreNegocio}` : ""}!\n\nHola ${nombreCliente}, tu cuenta fue creada exitosamente.\n\nCorreo: ${email}\nContraseña: ${password}\n\nInicia sesión en: ${loginUrl}\n\nTe recomendamos cambiar tu contraseña después del primer ingreso.`,
   });
 };
 

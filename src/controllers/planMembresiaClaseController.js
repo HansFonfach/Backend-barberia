@@ -2,6 +2,22 @@ import PlanMembresiaClase from "../models/planMembresiaClase.model.js";
 import MembresiaClase from "../models/membresiaClase.model.js";
 import EmpresaModel from "../models/empresa.model.js";
 
+const TIPOS_CICLO_VALIDOS = ["total", "mensual"];
+
+// Validación numérica compartida entre crearPlan/actualizarPlan — antes un
+// número negativo/NaN llegaba directo a Mongoose y volvía como un 500
+// genérico ("Error interno al crear el plan"); acá se corta antes con un 400
+// claro. `campo` ya viene con el valor a validar (puede ser undefined en
+// actualizarPlan, donde solo se valida lo que el admin mandó a cambiar).
+const validarNumeroPositivo = (valor, { minimo = 0, entero = false } = {}) => {
+  if (valor === undefined) return { ok: true };
+  const num = Number(valor);
+  if (!Number.isFinite(num) || num < minimo || (entero && !Number.isInteger(num))) {
+    return { ok: false };
+  }
+  return { ok: true, num };
+};
+
 /* =======================================================
    🌐 Catálogo público de planes (landing de la empresa, sin login) — mismo
    patrón que getServiciosPublicos/getClasesPublicas
@@ -19,7 +35,7 @@ export const getPlanesPublicos = async (req, res) => {
       empresa: empresa._id,
       activo: true,
     })
-      .select("nombre clasesIncluidas precio duracionDias")
+      .select("nombre clasesIncluidas precio duracionDias tipoCiclo")
       .sort({ precio: 1 });
 
     return res.json({ planes });
@@ -37,7 +53,7 @@ export const getPlanesPublicos = async (req, res) => {
 export const crearPlan = async (req, res) => {
   try {
     const empresaId = req.usuario.empresaId;
-    const { nombre, clasesIncluidas, precio, duracionDias } = req.body;
+    const { nombre, clasesIncluidas, precio, duracionDias, tipoCiclo } = req.body;
 
     if (!nombre || !clasesIncluidas || precio === undefined) {
       return res.status(400).json({
@@ -45,12 +61,26 @@ export const crearPlan = async (req, res) => {
       });
     }
 
+    if (tipoCiclo !== undefined && !TIPOS_CICLO_VALIDOS.includes(tipoCiclo)) {
+      return res.status(400).json({ message: "Tipo de ciclo inválido" });
+    }
+
+    const clases = validarNumeroPositivo(clasesIncluidas, { minimo: 1, entero: true });
+    const precioValido = validarNumeroPositivo(precio, { minimo: 0 });
+    const duracion = validarNumeroPositivo(duracionDias, { minimo: 1, entero: true });
+    if (!clases.ok || !precioValido.ok || !duracion.ok) {
+      return res.status(400).json({
+        message: "Revisa los números: clases incluidas y duración deben ser mayores a 0, y el precio no puede ser negativo",
+      });
+    }
+
     const plan = await PlanMembresiaClase.create({
       empresa: empresaId,
       nombre,
-      clasesIncluidas,
-      precio,
-      duracionDias: duracionDias || 30,
+      clasesIncluidas: clases.num,
+      precio: precioValido.num,
+      duracionDias: duracion.num ?? 30,
+      tipoCiclo: tipoCiclo || "total",
     });
 
     return res.status(201).json({ message: "Plan creado correctamente", plan });
@@ -95,9 +125,29 @@ export const actualizarPlan = async (req, res) => {
       return res.status(404).json({ message: "Plan no encontrado" });
     }
 
-    const campos = ["nombre", "clasesIncluidas", "precio", "duracionDias"];
+    if (
+      req.body.tipoCiclo !== undefined &&
+      !TIPOS_CICLO_VALIDOS.includes(req.body.tipoCiclo)
+    ) {
+      return res.status(400).json({ message: "Tipo de ciclo inválido" });
+    }
+
+    const clases = validarNumeroPositivo(req.body.clasesIncluidas, { minimo: 1, entero: true });
+    const precioValido = validarNumeroPositivo(req.body.precio, { minimo: 0 });
+    const duracion = validarNumeroPositivo(req.body.duracionDias, { minimo: 1, entero: true });
+    if (!clases.ok || !precioValido.ok || !duracion.ok) {
+      return res.status(400).json({
+        message: "Revisa los números: clases incluidas y duración deben ser mayores a 0, y el precio no puede ser negativo",
+      });
+    }
+
+    const campos = ["nombre", "clasesIncluidas", "precio", "duracionDias", "tipoCiclo"];
     for (const campo of campos) {
-      if (req.body[campo] !== undefined) plan[campo] = req.body[campo];
+      if (req.body[campo] === undefined) continue;
+      if (campo === "clasesIncluidas") plan.clasesIncluidas = clases.num;
+      else if (campo === "precio") plan.precio = precioValido.num;
+      else if (campo === "duracionDias") plan.duracionDias = duracion.num;
+      else plan[campo] = req.body[campo];
     }
 
     await plan.save();

@@ -17,6 +17,9 @@ import {
   listarInscritosPorSesion,
   crearExcepcionClase,
   eliminarExcepcionClase,
+  listarFeriadosClases,
+  bloquearFeriadoClase,
+  desbloquearFeriadoClase,
 } from "../controllers/claseController.js";
 import { validarToken } from "../middlewares/validarToken.js";
 import { verificarRol } from "../middlewares/verificarRol.js";
@@ -74,12 +77,27 @@ router.patch(
   marcarPagoInscripcion,
 );
 
-// Excepciones puntuales (cancelar una fecha o cambiar su cupo)
+// Excepciones puntuales (cancelar una fecha o cambiar su cupo, o forzar que
+// una clase se mantenga habilitada pese a un feriado bloqueado)
 router.post("/:id/excepciones", verificarRol("esAdmin"), crearExcepcionClase);
 router.delete(
   "/excepciones/:excepcionId",
   verificarRol("esAdmin"),
   eliminarExcepcionClase,
+);
+
+// Feriados del módulo de clases (por empresa) — ver comentario en
+// listarFeriadosClases del controlador
+router.get("/feriados", listarFeriadosClases);
+router.post(
+  "/feriados/:fecha/bloquear",
+  verificarRol("esAdmin"),
+  bloquearFeriadoClase,
+);
+router.delete(
+  "/feriados/:fecha/bloquear",
+  verificarRol("esAdmin"),
+  desbloquearFeriadoClase,
 );
 
 export default router;

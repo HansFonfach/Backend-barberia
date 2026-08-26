@@ -42,6 +42,7 @@ const TransaccionMembresiaClaseSchema = new Schema(
     nombrePlanSnapshot: { type: String, required: true },
     clasesIncluidasSnapshot: { type: Number, required: true },
     duracionDiasSnapshot: { type: Number, required: true },
+    tipoCicloSnapshot: { type: String, enum: ["total", "mensual"], default: "total" },
 
     buyOrder: { type: String, required: true, unique: true, index: true },
     sessionId: { type: String, required: true },
