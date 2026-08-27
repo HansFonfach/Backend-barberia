@@ -11,6 +11,7 @@ import {
   getRutinaSugerida,
   listarMiembrosEmpresa,
   buscarMiembroPorRut,
+  getHistorialPorGrupo,
 } from "../controllers/entrenamientoPersonalController.js";
 import {
   crearRutina,
@@ -35,6 +36,7 @@ router.get("/mis-registros", listarMisRegistrosEntrenamiento);
 router.get("/catalogo-ejercicios", listarCatalogoEjercicios);
 router.delete("/registro/:id", eliminarRegistroEntrenamiento);
 router.get("/mi-progreso", getMiProgresoEntrenamiento);
+router.get("/historial/:grupo", getHistorialPorGrupo);
 
 router.get("/perfil", getMiPerfilEntrenamiento);
 router.put("/perfil", actualizarPerfilEntrenamiento);

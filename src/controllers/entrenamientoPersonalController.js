@@ -878,3 +878,87 @@ export const buscarMiembroPorRut = async (req, res) => {
     return err(res, "Error interno al buscar");
   }
 };
+
+/* =======================================================
+   📜 Historial por grupo (ej: "Pecho") — a diferencia del historial
+   mezclado de "Mi entrenamiento" (todo junto, agrupado por semana), acá
+   se filtra por un solo tipoActividad y además se arma la progresión de
+   cada ejercicio ("Prensa de piernas: 30kg → 32.5kg → 35kg") para poder
+   ver cuánto se ha ido subiendo de peso máquina por máquina. Mismo
+   agrupamiento por nombre de ejercicio que calcularSugerenciasPeso, pero
+   acá se devuelve el historial completo, no solo una sugerencia puntual.
+   GET /entrenamiento-personal/historial/:grupo?dias=365
+======================================================= */
+const DIAS_HISTORIAL_DEFAULT = 365;
+// Tope generoso (no solo los 60-90 días de "Mi entrenamiento") porque acá
+// el punto es justamente ver progresión de largo plazo, pero sigue
+// habiendo un tope para no dejar la consulta sin límite.
+const DIAS_HISTORIAL_MAX = 730;
+
+export const getHistorialPorGrupo = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId || req.empresaId;
+    const clienteId = req.usuario.id;
+    const { grupo } = req.params;
+
+    if (!grupo || !NOMBRES_GRUPO[grupo]) {
+      return err(res, "Grupo no válido", 400);
+    }
+
+    const dias = Math.min(Number(req.query.dias) || DIAS_HISTORIAL_DEFAULT, DIAS_HISTORIAL_MAX);
+    const desde = dayjs().tz(TZ).subtract(dias, "day").startOf("day").toDate();
+
+    const registros = await RegistroEntrenamientoModel.find({
+      empresa: empresaId,
+      cliente: clienteId,
+      tipoActividad: grupo,
+      fecha: { $gte: desde },
+    })
+      .sort({ fecha: -1 })
+      .lean();
+
+    // Progresión por ejercicio, en orden ascendente (más antiguo primero)
+    // para que se lea como una línea de tiempo.
+    const porEjercicio = new Map();
+    for (const r of [...registros].reverse()) {
+      for (const e of r.ejercicios || []) {
+        if (e.pesoKg == null) continue;
+        const clave = e.nombre.trim().toLowerCase();
+        if (!porEjercicio.has(clave)) {
+          porEjercicio.set(clave, { nombre: e.nombre.trim(), historial: [] });
+        }
+        const entrada = porEjercicio.get(clave);
+        entrada.nombre = e.nombre.trim(); // se queda con el casing más reciente
+        entrada.historial.push({
+          fecha: r.fecha,
+          pesoKg: e.pesoKg,
+          series: e.series ?? null,
+          repeticiones: e.repeticiones ?? null,
+        });
+      }
+    }
+
+    // deltaKg es un dato puro (último - primero), sin calificarlo de
+    // "bueno" o "malo" — mismo criterio que la comparativa de bitácora.
+    const progresionPorEjercicio = [...porEjercicio.values()]
+      .map((ej) => {
+        const primero = ej.historial[0]?.pesoKg ?? null;
+        const ultimo = ej.historial[ej.historial.length - 1]?.pesoKg ?? null;
+        return {
+          ...ej,
+          deltaKg: primero != null && ultimo != null ? Math.round((ultimo - primero) * 100) / 100 : null,
+        };
+      })
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+    return ok(res, {
+      grupo,
+      nombreGrupo: NOMBRES_GRUPO[grupo],
+      registros,
+      progresionPorEjercicio,
+    });
+  } catch (error) {
+    console.error("Error al obtener historial por grupo:", error);
+    return err(res, "Error interno al obtener el historial");
+  }
+};
