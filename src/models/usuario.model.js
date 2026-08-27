@@ -48,6 +48,25 @@ const UsuarioSchema = new Schema(
         publicId: { type: String, default: null },
       },
     },
+
+    // Perfil de entrenamiento personal (modulos.entrenamientoPersonal):
+    // 100% opcional, lo completa el propio cliente si quiere. Se usa para
+    // calcular calorías/macros (fórmula Mifflin-St Jeor) y para elegir la
+    // rutina sugerida — ver entrenamientoPersonalController.js. Nunca se
+    // usa para etiquetar a la persona (nada de IMC ni "estado corporal").
+    perfilEntrenamiento: {
+      objetivo: {
+        type: String,
+        enum: ["bajar_grasa", "subir_masa", "mantenimiento", "resistencia"],
+        default: null,
+      },
+      sexoBiologico: {
+        type: String,
+        enum: ["masculino", "femenino"],
+        default: null,
+      },
+      fechaNacimiento: { type: Date, default: null },
+    },
     maxReservas: { type: Number, default: 2 },
     puntos: { type: Number, default: 0 },
     descripcion: { type: String },

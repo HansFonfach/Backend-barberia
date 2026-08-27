@@ -8,8 +8,12 @@ const { Schema } = mongoose;
 // registro diario (RegistroEntrenamiento), es la "receta" que uno sigue.
 //
 // compartida=true la hace visible para el resto de la empresa (dueño +
-// amigos invitados) en "Rutinas compartidas", con su nombre de autor —
-// todo o nada, sin permisos por persona, para no complicarlo.
+// amigos invitados) en "Rutinas compartidas", con su nombre de autor.
+// compartidaConUsuarios es aparte: compartir con 1+ personas puntuales de
+// la empresa (sin hacerla pública para todos). Ambas son independientes y
+// se pueden combinar. En los dos casos es SOLO LECTURA para quien la ve —
+// si le sirve, la usa como base para crear su propia rutina editable (no
+// hay edición conjunta, para no pisarse cambios ni tener dueños ambiguos).
 const RutinaSchema = new Schema(
   {
     empresa: {
@@ -58,11 +62,16 @@ const RutinaSchema = new Schema(
     notas: { type: String, default: "", maxlength: 300 },
 
     compartida: { type: Boolean, default: false },
+
+    compartidaConUsuarios: [
+      { type: Schema.Types.ObjectId, ref: "Usuario" },
+    ],
   },
   { timestamps: true },
 );
 
 RutinaSchema.index({ empresa: 1, cliente: 1 });
 RutinaSchema.index({ empresa: 1, compartida: 1 });
+RutinaSchema.index({ empresa: 1, compartidaConUsuarios: 1 });
 
 export default mongoose.model("Rutina", RutinaSchema);

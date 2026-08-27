@@ -1,9 +1,12 @@
+import mongoose from "mongoose";
 import RutinaModel from "../models/rutina.model.js";
+import UsuarioModel from "../models/usuario.model.js";
 
 // Rutinas de entrenamiento (modulos.entrenamientoPersonal): cada cliente
 // arma sus propias rutinas y decide, rutina por rutina, si la comparte
-// con el resto de la empresa (dueño + amigos invitados) o la deja
-// privada. Ver comentario en models/rutina.model.js.
+// con el resto de la empresa (dueño + amigos invitados), con 1+ personas
+// puntuales de la empresa, o la deja privada. Ver comentario en
+// models/rutina.model.js.
 
 const ok = (res, data) => res.json({ ok: true, data });
 const err = (res, msg, status = 500) =>
@@ -19,6 +22,30 @@ const GRUPOS_VALIDOS = [
   "cardio",
   "otro",
 ];
+
+// A partir de una lista de ids (mandada por el front, ya resueltos vía
+// GET /buscar-miembro/:rut), se queda solo con los que son de verdad
+// usuarios de la MISMA empresa y no son uno mismo — nunca se confía
+// ciegamente en lo que mande el cliente para decidir quién puede leer
+// una rutina ajena.
+const resolverCompartidaConUsuarios = async (empresaId, propioId, ids) => {
+  if (!Array.isArray(ids)) return undefined;
+  const idsLimpios = [
+    ...new Set(
+      ids.filter((id) => typeof id === "string" && id.trim() && mongoose.Types.ObjectId.isValid(id)),
+    ),
+  ].filter((id) => id !== String(propioId));
+  if (idsLimpios.length === 0) return [];
+
+  const usuariosValidos = await UsuarioModel.find({
+    _id: { $in: idsLimpios },
+    empresa: empresaId,
+  })
+    .select("_id")
+    .lean();
+
+  return usuariosValidos.map((u) => u._id);
+};
 
 const limpiarEjercicios = (ejercicios) =>
   Array.isArray(ejercicios)
@@ -39,7 +66,7 @@ const limpiarEjercicios = (ejercicios) =>
 export const crearRutina = async (req, res) => {
   try {
     const empresaId = req.usuario.empresaId || req.empresaId;
-    const { nombre, grupoMuscular, ejercicios, notas, compartida } = req.body;
+    const { nombre, grupoMuscular, ejercicios, notas, compartida, compartidaConUsuarios } = req.body;
 
     if (!nombre || !nombre.trim()) {
       return err(res, "Ponle un nombre a la rutina (ej: Rutina de pecho)", 400);
@@ -47,6 +74,8 @@ export const crearRutina = async (req, res) => {
     if (!grupoMuscular || !GRUPOS_VALIDOS.includes(grupoMuscular)) {
       return err(res, "Indica a qué grupo corresponde la rutina", 400);
     }
+
+    const compartidaCon = await resolverCompartidaConUsuarios(empresaId, req.usuario.id, compartidaConUsuarios);
 
     const rutina = await RutinaModel.create({
       empresa: empresaId,
@@ -56,6 +85,7 @@ export const crearRutina = async (req, res) => {
       ejercicios: limpiarEjercicios(ejercicios),
       notas: notas || "",
       compartida: !!compartida,
+      compartidaConUsuarios: compartidaCon || [],
     });
 
     return res.status(201).json({ ok: true, data: rutina });
@@ -76,7 +106,10 @@ export const listarMisRutinas = async (req, res) => {
     const rutinas = await RutinaModel.find({
       empresa: empresaId,
       cliente: req.usuario.id,
-    }).sort({ createdAt: -1 });
+    })
+      .sort({ createdAt: -1 })
+      .populate("compartidaConUsuarios", "nombre apellido")
+      .lean();
 
     return ok(res, { rutinas });
   } catch (error) {
@@ -86,7 +119,10 @@ export const listarMisRutinas = async (req, res) => {
 };
 
 /* =======================================================
-   🔵 Rutinas que otros de la misma empresa compartieron.
+   🔵 Rutinas que otros de la misma empresa compartieron: con toda la
+   empresa (compartida=true) o directamente contigo (tu id está en
+   compartidaConUsuarios de esa rutina). No se expone a quién más se la
+   compartió el autor — eso solo lo ve él en "Mis rutinas".
    GET /entrenamiento-personal/rutinas-compartidas
 ======================================================= */
 export const listarRutinasCompartidas = async (req, res) => {
@@ -95,7 +131,8 @@ export const listarRutinasCompartidas = async (req, res) => {
 
     const rutinas = await RutinaModel.find({
       empresa: empresaId,
-      compartida: true,
+      cliente: { $ne: req.usuario.id },
+      $or: [{ compartida: true }, { compartidaConUsuarios: req.usuario.id }],
     })
       .sort({ createdAt: -1 })
       .populate("cliente", "nombre")
@@ -105,6 +142,8 @@ export const listarRutinasCompartidas = async (req, res) => {
       ...r,
       autorNombre: r.cliente?.nombre || "Alguien de tu empresa",
       cliente: undefined,
+      origen: r.compartida ? "empresa" : "directa",
+      compartidaConUsuarios: undefined,
     }));
 
     return ok(res, { rutinas: conAutor });
@@ -122,7 +161,7 @@ export const actualizarRutina = async (req, res) => {
   try {
     const empresaId = req.usuario.empresaId || req.empresaId;
     const { id } = req.params;
-    const { nombre, grupoMuscular, ejercicios, notas, compartida } = req.body;
+    const { nombre, grupoMuscular, ejercicios, notas, compartida, compartidaConUsuarios } = req.body;
 
     const rutina = await RutinaModel.findOne({
       _id: id,
@@ -146,8 +185,16 @@ export const actualizarRutina = async (req, res) => {
     if (ejercicios !== undefined) rutina.ejercicios = limpiarEjercicios(ejercicios);
     if (notas !== undefined) rutina.notas = notas;
     if (compartida !== undefined) rutina.compartida = !!compartida;
+    if (compartidaConUsuarios !== undefined) {
+      rutina.compartidaConUsuarios = await resolverCompartidaConUsuarios(
+        empresaId,
+        req.usuario.id,
+        compartidaConUsuarios,
+      );
+    }
 
     await rutina.save();
+    await rutina.populate("compartidaConUsuarios", "nombre apellido");
     return ok(res, rutina);
   } catch (error) {
     console.error("Error al actualizar rutina:", error);

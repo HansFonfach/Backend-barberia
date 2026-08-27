@@ -4,6 +4,8 @@ import timezone from "dayjs/plugin/timezone.js";
 
 import RegistroEntrenamientoModel from "../models/registroEntrenamiento.model.js";
 import EjercicioCatalogoModel from "../models/ejercicioCatalogo.model.js";
+import UsuarioModel from "../models/usuario.model.js";
+import MedicionCorporalModel from "../models/medicionCorporal.model.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -54,6 +56,19 @@ const UMBRAL_DIAS_SIN_ACTIVIDAD_PARA_AVISO = 4;
 const UMBRAL_SESIONES_MISMO_PESO = 3;
 const INCREMENTO_SUGERIDO_KG = 2.5;
 const VENTANA_RELEVANCIA_DIAS = 30;
+
+// Perfil de entrenamiento (objetivo, sexo biológico, fecha de nacimiento):
+// 100% opcional, lo completa el cliente si quiere. Se usa solo para la
+// calculadora de calorías/macros y la rutina sugerida — nunca para
+// etiquetar a la persona.
+const OBJETIVOS_VALIDOS = ["bajar_grasa", "subir_masa", "mantenimiento", "resistencia"];
+const SEXOS_VALIDOS = ["masculino", "femenino"];
+const NOMBRES_OBJETIVO = {
+  bajar_grasa: "Bajar grasa",
+  subir_masa: "Subir masa muscular",
+  mantenimiento: "Mantenerme",
+  resistencia: "Mejorar resistencia",
+};
 
 const variacion = (actual, anterior) =>
   anterior > 0 ? Math.round(((actual - anterior) / anterior) * 100) : null;
@@ -395,5 +410,471 @@ export const getMiProgresoEntrenamiento = async (req, res) => {
   } catch (error) {
     console.error("Error al obtener el progreso de entrenamiento:", error);
     return err(res, "Error interno al obtener tu progreso");
+  }
+};
+
+/* =======================================================
+   👤 Perfil de entrenamiento (objetivo, sexo biológico, fecha de
+   nacimiento). Opcional — se usa solo para la calculadora de calorías y
+   la rutina sugerida (ver más abajo).
+   GET /entrenamiento-personal/perfil
+======================================================= */
+export const getMiPerfilEntrenamiento = async (req, res) => {
+  try {
+    const usuario = await UsuarioModel.findById(req.usuario.id)
+      .select("perfilEntrenamiento")
+      .lean();
+    const perfil = usuario?.perfilEntrenamiento || {};
+    return ok(res, {
+      objetivo: perfil.objetivo || null,
+      sexoBiologico: perfil.sexoBiologico || null,
+      fechaNacimiento: perfil.fechaNacimiento || null,
+    });
+  } catch (error) {
+    console.error("Error al obtener perfil de entrenamiento:", error);
+    return err(res, "Error interno al obtener tu perfil");
+  }
+};
+
+/* =======================================================
+   👤 Actualizar perfil de entrenamiento (parcial — cada campo es
+   independiente, mandar null/"" en uno lo borra sin tocar los demás).
+   PUT /entrenamiento-personal/perfil
+======================================================= */
+export const actualizarPerfilEntrenamiento = async (req, res) => {
+  try {
+    const { objetivo, sexoBiologico, fechaNacimiento } = req.body;
+
+    if (objetivo !== undefined && objetivo !== null && objetivo !== "" && !OBJETIVOS_VALIDOS.includes(objetivo)) {
+      return err(res, "Objetivo inválido", 400);
+    }
+    if (
+      sexoBiologico !== undefined &&
+      sexoBiologico !== null &&
+      sexoBiologico !== "" &&
+      !SEXOS_VALIDOS.includes(sexoBiologico)
+    ) {
+      return err(res, "Sexo biológico inválido", 400);
+    }
+
+    let fechaNacimientoParseada;
+    if (fechaNacimiento === undefined) {
+      fechaNacimientoParseada = undefined; // no se toca
+    } else if (fechaNacimiento === null || fechaNacimiento === "") {
+      fechaNacimientoParseada = null; // se borra
+    } else {
+      const f = new Date(fechaNacimiento);
+      if (Number.isNaN(f.getTime())) return err(res, "Fecha de nacimiento inválida", 400);
+      fechaNacimientoParseada = f;
+    }
+
+    const set = {};
+    if (objetivo !== undefined) set["perfilEntrenamiento.objetivo"] = objetivo || null;
+    if (sexoBiologico !== undefined) set["perfilEntrenamiento.sexoBiologico"] = sexoBiologico || null;
+    if (fechaNacimientoParseada !== undefined) {
+      set["perfilEntrenamiento.fechaNacimiento"] = fechaNacimientoParseada;
+    }
+
+    const usuario = await UsuarioModel.findByIdAndUpdate(req.usuario.id, { $set: set }, { new: true }).select(
+      "perfilEntrenamiento",
+    );
+
+    return ok(res, {
+      objetivo: usuario.perfilEntrenamiento?.objetivo || null,
+      sexoBiologico: usuario.perfilEntrenamiento?.sexoBiologico || null,
+      fechaNacimiento: usuario.perfilEntrenamiento?.fechaNacimiento || null,
+    });
+  } catch (error) {
+    console.error("Error al actualizar perfil de entrenamiento:", error);
+    return err(res, "Error interno al guardar tu perfil");
+  }
+};
+
+/* =======================================================
+   🥗 Recomendación nutricional: calorías y macros calculados con la
+   fórmula Mifflin-St Jeor (TMB) a partir de datos reales — peso/altura de
+   la bitácora, edad/sexo del perfil, y el nivel de actividad derivado de
+   los entrenamientos REALES registrados en los últimos 30 días (no una
+   autoevaluación tipo "sedentario/activo"). Si falta algún dato, se
+   devuelve disponible:false con la lista de lo que falta, para que el
+   frontend le pida exactamente eso al usuario — nunca se inventa un valor.
+   GET /entrenamiento-personal/recomendacion-nutricional
+======================================================= */
+const MULTIPLICADOR_ACTIVIDAD = [
+  { max: 3, valor: 1.2, etiqueta: "sedentario (0-3 entrenamientos/mes registrados)" },
+  { max: 8, valor: 1.375, etiqueta: "actividad ligera (4-8 entrenamientos/mes registrados)" },
+  { max: 16, valor: 1.55, etiqueta: "actividad moderada (9-16 entrenamientos/mes registrados)" },
+  { max: 24, valor: 1.725, etiqueta: "muy activo (17-24 entrenamientos/mes registrados)" },
+  { max: Infinity, valor: 1.9, etiqueta: "extremadamente activo (25+ entrenamientos/mes registrados)" },
+];
+
+const AJUSTE_POR_OBJETIVO = {
+  bajar_grasa: { factor: 0.8, proteinaGPorKg: 2.2, etiqueta: "déficit ~20% para bajar grasa" },
+  subir_masa: { factor: 1.1, proteinaGPorKg: 2.0, etiqueta: "superávit ~10% para subir masa" },
+  mantenimiento: { factor: 1.0, proteinaGPorKg: 1.8, etiqueta: "mantenimiento" },
+  resistencia: { factor: 1.0, proteinaGPorKg: 1.6, etiqueta: "mantenimiento, priorizando carbohidratos" },
+};
+
+const calcularEdad = (fechaNacimiento) => {
+  const hoy = dayjs().tz(TZ);
+  const nacimiento = dayjs(fechaNacimiento).tz(TZ);
+  let edad = hoy.year() - nacimiento.year();
+  const aunNoCumple =
+    hoy.month() < nacimiento.month() || (hoy.month() === nacimiento.month() && hoy.date() < nacimiento.date());
+  if (aunNoCumple) edad -= 1;
+  return edad;
+};
+
+export const getRecomendacionNutricional = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId || req.empresaId;
+    const clienteId = req.usuario.id;
+
+    const usuario = await UsuarioModel.findById(clienteId).select("perfilEntrenamiento").lean();
+    const perfil = usuario?.perfilEntrenamiento || {};
+
+    const mediciones = await MedicionCorporalModel.find({ empresa: empresaId, cliente: clienteId })
+      .sort({ fecha: -1 })
+      .lean();
+    const pesoKg = mediciones.find((m) => m.pesoKg != null)?.pesoKg ?? null;
+    const alturaCm = mediciones.find((m) => m.alturaCm != null)?.alturaCm ?? null;
+
+    const faltantes = [];
+    if (!perfil.objetivo) faltantes.push("objetivo");
+    if (!perfil.sexoBiologico) faltantes.push("sexoBiologico");
+    if (!perfil.fechaNacimiento) faltantes.push("fechaNacimiento");
+    if (pesoKg == null) faltantes.push("pesoKg");
+    if (alturaCm == null) faltantes.push("alturaCm");
+
+    if (faltantes.length > 0) {
+      return ok(res, { disponible: false, faltantes });
+    }
+
+    const edad = calcularEdad(perfil.fechaNacimiento);
+
+    const tmb =
+      perfil.sexoBiologico === "masculino"
+        ? 10 * pesoKg + 6.25 * alturaCm - 5 * edad + 5
+        : 10 * pesoKg + 6.25 * alturaCm - 5 * edad - 161;
+
+    const desde30 = dayjs().tz(TZ).subtract(30, "day").startOf("day").toDate();
+    const entrenamientosUltimos30Dias = await RegistroEntrenamientoModel.countDocuments({
+      empresa: empresaId,
+      cliente: clienteId,
+      fecha: { $gte: desde30 },
+    });
+    const nivel =
+      MULTIPLICADOR_ACTIVIDAD.find((n) => entrenamientosUltimos30Dias <= n.max) ||
+      MULTIPLICADOR_ACTIVIDAD[MULTIPLICADOR_ACTIVIDAD.length - 1];
+
+    const caloriasMantenimiento = Math.round(tmb * nivel.valor);
+    const ajuste = AJUSTE_POR_OBJETIVO[perfil.objetivo];
+    const caloriasObjetivo = Math.round(caloriasMantenimiento * ajuste.factor);
+
+    const proteinaG = Math.round(pesoKg * ajuste.proteinaGPorKg);
+    const grasaG = Math.round((caloriasObjetivo * 0.25) / 9);
+    const kcalRestantes = Math.max(caloriasObjetivo - proteinaG * 4 - grasaG * 9, 0);
+    const carbohidratosG = Math.round(kcalRestantes / 4);
+
+    return ok(res, {
+      disponible: true,
+      datosUsados: {
+        pesoKg,
+        alturaCm,
+        edad,
+        sexoBiologico: perfil.sexoBiologico,
+        objetivo: perfil.objetivo,
+        nombreObjetivo: NOMBRES_OBJETIVO[perfil.objetivo],
+        entrenamientosUltimos30Dias,
+        nivelActividad: nivel.etiqueta,
+      },
+      tmb: Math.round(tmb),
+      caloriasMantenimiento,
+      caloriasObjetivo,
+      ajusteObjetivo: ajuste.etiqueta,
+      macros: { proteinaG, grasaG, carbohidratosG },
+      disclaimer:
+        "Calculado con la fórmula Mifflin-St Jeor a partir de tus propios datos (peso, altura, edad, sexo y tu frecuencia real de entrenamiento) — es una estimación, no un plan médico. Para algo ajustado en detalle a tu caso, lo ideal es un nutricionista.",
+    });
+  } catch (error) {
+    console.error("Error al calcular recomendación nutricional:", error);
+    return err(res, "Error interno al calcular tu recomendación");
+  }
+};
+
+/* =======================================================
+   🏋️ Rutina sugerida por objetivo: plantillas fijas (splits reales, no
+   generadas por IA) que el cliente puede usar tal cual, editar y guardar
+   como su propia Rutina (POST /entrenamiento-personal/rutina) — esto NO
+   crea nada por sí solo, solo devuelve la sugerencia para que el frontend
+   prellene el formulario.
+   GET /entrenamiento-personal/rutina-sugerida
+======================================================= */
+const PLANTILLAS_RUTINA = {
+  bajar_grasa: {
+    notaGeneral:
+      "3 sesiones de fuerza full-body a la semana (ej: lunes/miércoles/viernes) + 2 sesiones de cardio de 20-30 min los días que no entrenas fuerza. El déficit calórico es lo que más pesa para bajar grasa — el entrenamiento ayuda a que ese peso que bajas sea principalmente grasa y no músculo.",
+    dias: [
+      {
+        nombre: "Full body A",
+        grupoMuscular: "piernas",
+        ejercicios: [
+          { nombre: "Sentadilla", series: 3, repeticiones: 12 },
+          { nombre: "Press banca o flexiones", series: 3, repeticiones: 12 },
+          { nombre: "Remo con barra o máquina", series: 3, repeticiones: 12 },
+          { nombre: "Plancha", series: 3, repeticiones: 30 },
+        ],
+      },
+      {
+        nombre: "Full body B",
+        grupoMuscular: "espalda",
+        ejercicios: [
+          { nombre: "Peso muerto o hip thrust", series: 3, repeticiones: 12 },
+          { nombre: "Press militar", series: 3, repeticiones: 12 },
+          { nombre: "Jalón al pecho o dominadas asistidas", series: 3, repeticiones: 12 },
+          { nombre: "Elevaciones de piernas", series: 3, repeticiones: 15 },
+        ],
+      },
+      {
+        nombre: "Full body C",
+        grupoMuscular: "otro",
+        ejercicios: [
+          { nombre: "Zancadas", series: 3, repeticiones: 12 },
+          { nombre: "Press inclinado con mancuernas", series: 3, repeticiones: 12 },
+          { nombre: "Remo con mancuerna a un brazo", series: 3, repeticiones: 12 },
+          { nombre: "Abdominales", series: 3, repeticiones: 15 },
+        ],
+      },
+    ],
+  },
+  subir_masa: {
+    notaGeneral:
+      "Split empuje/tirón/pierna, idealmente 4-6 sesiones a la semana (puedes repetir el ciclo 2 veces). Rango de 6-10 repeticiones, buen descanso entre series (60-90 seg). La progresión de peso (ver 'Momento de subir peso' en Mi entrenamiento) es clave acá.",
+    dias: [
+      {
+        nombre: "Empuje (pecho / hombro / tríceps)",
+        grupoMuscular: "pecho",
+        ejercicios: [
+          { nombre: "Press banca", series: 4, repeticiones: 8 },
+          { nombre: "Press militar", series: 4, repeticiones: 8 },
+          { nombre: "Press inclinado con mancuernas", series: 3, repeticiones: 10 },
+          { nombre: "Extensión de tríceps en polea", series: 3, repeticiones: 12 },
+        ],
+      },
+      {
+        nombre: "Tirón (espalda / bíceps)",
+        grupoMuscular: "espalda",
+        ejercicios: [
+          { nombre: "Peso muerto", series: 4, repeticiones: 6 },
+          { nombre: "Dominadas o jalón al pecho", series: 4, repeticiones: 8 },
+          { nombre: "Remo con barra", series: 3, repeticiones: 10 },
+          { nombre: "Curl de bíceps con barra", series: 3, repeticiones: 12 },
+        ],
+      },
+      {
+        nombre: "Pierna",
+        grupoMuscular: "piernas",
+        ejercicios: [
+          { nombre: "Sentadilla", series: 4, repeticiones: 8 },
+          { nombre: "Prensa de piernas", series: 3, repeticiones: 10 },
+          { nombre: "Curl femoral", series: 3, repeticiones: 12 },
+          { nombre: "Elevación de talones (gemelos)", series: 4, repeticiones: 15 },
+        ],
+      },
+    ],
+  },
+  mantenimiento: {
+    notaGeneral:
+      "3 sesiones full-body a la semana alcanza para mantener lo que ya tienes, con volumen moderado. Si sientes que quieres progresar más en algún sentido, considera cambiar tu objetivo a 'Bajar grasa' o 'Subir masa' según lo que busques.",
+    dias: [
+      {
+        nombre: "Full body A",
+        grupoMuscular: "piernas",
+        ejercicios: [
+          { nombre: "Sentadilla", series: 3, repeticiones: 10 },
+          { nombre: "Press banca", series: 3, repeticiones: 10 },
+          { nombre: "Remo con barra", series: 3, repeticiones: 10 },
+        ],
+      },
+      {
+        nombre: "Full body B",
+        grupoMuscular: "espalda",
+        ejercicios: [
+          { nombre: "Peso muerto rumano", series: 3, repeticiones: 10 },
+          { nombre: "Press militar", series: 3, repeticiones: 10 },
+          { nombre: "Jalón al pecho", series: 3, repeticiones: 10 },
+        ],
+      },
+      {
+        nombre: "Full body C",
+        grupoMuscular: "otro",
+        ejercicios: [
+          { nombre: "Zancadas", series: 3, repeticiones: 10 },
+          { nombre: "Press inclinado con mancuernas", series: 3, repeticiones: 10 },
+          { nombre: "Remo con mancuerna", series: 3, repeticiones: 10 },
+        ],
+      },
+    ],
+  },
+  resistencia: {
+    notaGeneral:
+      "Circuitos con más repeticiones y menos peso, poco descanso entre series, + 3 sesiones de cardio a la semana (30-40 min: trote, bici, natación). La idea es acostumbrar al cuerpo a sostener esfuerzo por más tiempo, no a mover el máximo peso posible.",
+    dias: [
+      {
+        nombre: "Circuito full body A",
+        grupoMuscular: "cardio",
+        ejercicios: [
+          { nombre: "Sentadilla", series: 3, repeticiones: 20 },
+          { nombre: "Flexiones", series: 3, repeticiones: 15 },
+          { nombre: "Remo con banda o máquina", series: 3, repeticiones: 20 },
+          { nombre: "Burpees", series: 3, repeticiones: 12 },
+        ],
+      },
+      {
+        nombre: "Circuito full body B",
+        grupoMuscular: "cardio",
+        ejercicios: [
+          { nombre: "Zancadas", series: 3, repeticiones: 20 },
+          { nombre: "Press militar con mancuernas", series: 3, repeticiones: 15 },
+          { nombre: "Jalón al pecho", series: 3, repeticiones: 20 },
+          { nombre: "Plancha", series: 3, repeticiones: 45 },
+        ],
+      },
+    ],
+  },
+};
+
+export const getRutinaSugerida = async (req, res) => {
+  try {
+    const usuario = await UsuarioModel.findById(req.usuario.id).select("perfilEntrenamiento").lean();
+    const objetivo = usuario?.perfilEntrenamiento?.objetivo || null;
+
+    if (!objetivo) {
+      return ok(res, {
+        disponible: false,
+        mensaje: "Define tu objetivo en tu perfil de entrenamiento para ver una rutina sugerida.",
+      });
+    }
+
+    const plantilla = PLANTILLAS_RUTINA[objetivo];
+    return ok(res, {
+      disponible: true,
+      objetivo,
+      nombreObjetivo: NOMBRES_OBJETIVO[objetivo],
+      notaGeneral: plantilla.notaGeneral,
+      dias: plantilla.dias,
+      disclaimer:
+        "Rutina de referencia general (splits y rangos de repeticiones estándar) — ajusta pesos, series o ejercicios según cómo te sientas. Úsala como base, no como receta fija: puedes editarla antes de guardarla como tuya.",
+    });
+  } catch (error) {
+    console.error("Error al obtener rutina sugerida:", error);
+    return err(res, "Error interno al obtener la rutina sugerida");
+  }
+};
+
+/* =======================================================
+   👥 Miembros de la empresa (dueño + amigos invitados) — SOLO ADMIN. Lista
+   simple con la actividad de cada uno (total de entrenamientos + fecha del
+   último), no el panel completo de gestión de clientes (ese trae de vuelta
+   reservas/suscripciones/membresías, que no aplican acá — ver comentario
+   en routes.js sobre por qué se sacó "Clientes" para este módulo).
+   GET /entrenamiento-personal/miembros
+   Mismo criterio de "quién cuenta" que el cron de correo motivacional
+   (entrenamientoPersonalCron.js): activo, no eliminado, no invitado sin
+   registrar todavía.
+======================================================= */
+export const listarMiembrosEmpresa = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId || req.empresaId;
+
+    const usuarios = await UsuarioModel.find({
+      empresa: empresaId,
+      estado: "activo",
+      deletedAt: null,
+      rol: { $ne: "invitado" },
+    })
+      .select("nombre apellido email createdAt esAdmin")
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const registros = await RegistroEntrenamientoModel.find({ empresa: empresaId })
+      .select("cliente fecha")
+      .lean();
+
+    const actividadPorCliente = new Map();
+    for (const r of registros) {
+      const clave = String(r.cliente);
+      const actual = actividadPorCliente.get(clave) || { total: 0, ultima: null };
+      actual.total += 1;
+      if (!actual.ultima || r.fecha > actual.ultima) actual.ultima = r.fecha;
+      actividadPorCliente.set(clave, actual);
+    }
+
+    const miembros = usuarios.map((u) => {
+      const actividad = actividadPorCliente.get(String(u._id)) || { total: 0, ultima: null };
+      return {
+        _id: u._id,
+        nombre: u.nombre,
+        apellido: u.apellido || "",
+        email: u.email,
+        esAdmin: !!u.esAdmin,
+        fechaRegistro: u.createdAt,
+        totalEntrenamientos: actividad.total,
+        ultimoEntrenamiento: actividad.ultima,
+      };
+    });
+
+    return ok(res, { miembros });
+  } catch (error) {
+    console.error("Error al listar miembros de la empresa:", error);
+    return err(res, "Error interno al obtener los miembros");
+  }
+};
+
+/* =======================================================
+   🔎 Buscar a alguien de tu misma empresa por RUT — para compartir una
+   rutina DIRECTAMENTE con esa persona (ver rutinaController.js /
+   compartidaConUsuarios). Cualquier cliente puede usarla (no es solo
+   admin), pero solo devuelve lo mínimo (nombre) — nada de email, teléfono
+   ni puntos, a diferencia de la búsqueda de "Agendar cliente" que ya
+   existe para otros rubros y sí expone ese detalle a profesionales/admin.
+   GET /entrenamiento-personal/buscar-miembro/:rut
+======================================================= */
+export const buscarMiembroPorRut = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId || req.empresaId;
+    const rutBuscado = String(req.params.rut || "").replace(/[.\-]/g, "").toUpperCase();
+
+    if (!rutBuscado || rutBuscado.length < 2) {
+      return err(res, "RUT no válido", 400);
+    }
+
+    const candidatos = await UsuarioModel.find({
+      empresa: empresaId,
+      estado: "activo",
+      deletedAt: null,
+      rol: { $ne: "invitado" },
+      _id: { $ne: req.usuario.id },
+      rut: { $exists: true, $ne: null },
+    })
+      .select("nombre apellido rut")
+      .lean();
+
+    const encontrado = candidatos.find(
+      (u) => String(u.rut || "").replace(/[.\-]/g, "").toUpperCase() === rutBuscado,
+    );
+
+    if (!encontrado) {
+      return err(res, "No se encontró a nadie con ese RUT en tu empresa", 404);
+    }
+
+    return ok(res, {
+      _id: encontrado._id,
+      nombre: encontrado.nombre,
+      apellido: encontrado.apellido || "",
+    });
+  } catch (error) {
+    console.error("Error al buscar miembro por RUT:", error);
+    return err(res, "Error interno al buscar");
   }
 };

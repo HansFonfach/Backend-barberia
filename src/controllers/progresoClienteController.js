@@ -5,14 +5,16 @@ import mongoose from "mongoose";
 
 import InscripcionClaseModel from "../models/inscripcionClase.model.js";
 import MedicionCorporalModel from "../models/medicionCorporal.model.js";
+import UsuarioModel from "../models/usuario.model.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const TZ = "America/Santiago";
 
-// Empresas con modulos.clasesGrupales = true: progreso personal del
-// cliente (racha, resumen mensual, hitos) + bitácora de peso/medidas.
+// Empresas con modulos.clasesGrupales y/o modulos.entrenamientoPersonal:
+// progreso personal del cliente (racha, resumen mensual, hitos) + bitácora
+// de peso/medidas.
 //
 // Todo lo de "progreso" se calcula desde datos que YA existen (las mismas
 // InscripcionClase que usa estadisticasGimnasioController.js para el panel
@@ -20,10 +22,12 @@ const TZ = "America/Santiago";
 // cuenta como asistencia real — no hay check-in aparte). Nada se inventa
 // ni se estima: si el cliente no ha ido a clases, no hay racha ni hitos.
 //
-// La bitácora de peso/medidas es 100% descriptiva: este archivo nunca
-// interpreta esos números (no hay IMC, no hay "vas bien/mal", no hay
-// consejos). Solo guarda lo que la persona anotó y lo devuelve tal cual
-// para que el frontend lo grafique.
+// La bitácora de peso/medidas sigue siendo 100% descriptiva: nunca se
+// calcula IMC ni se etiqueta un número como "bueno/malo". La única
+// excepción, acotada, es getComparativaBitacora: si el cliente definió un
+// objetivo (perfilEntrenamiento.objetivo, opt-in, ver
+// entrenamientoPersonalController.js) puede sumar una sugerencia hedged
+// tipo "considera más cardio" — nunca una interpretación del número en sí.
 
 const ok = (res, data) => res.json({ ok: true, data });
 const err = (res, msg, status = 500) =>
@@ -246,5 +250,104 @@ export const eliminarMedicionCorporal = async (req, res) => {
   } catch (error) {
     console.error("Error al eliminar medición corporal:", error);
     return err(res, "Error interno al eliminar el registro");
+  }
+};
+
+/* =======================================================
+   🔵 Comparativa mensual de bitácora: último registro vs. el registro
+   anterior más cercano a ~1 mes atrás (no exige que caigan en meses
+   calendario distintos, porque la gente no siempre anota el mismo día del
+   mes — busca el más reciente que tenga al menos DIAS_MIN_ENTRE_COMPARACION
+   días de diferencia con el último).
+   GET /progreso-cliente/comparativa-bitacora
+
+   Los deltas son 100% aritmética (actual - anterior), nunca una
+   interpretación. La única pieza "inteligente" es una sugerencia opcional,
+   hedged, que solo aparece si el cliente definió su objetivo — y ni así se
+   etiqueta el número (nunca dice "estás mal", solo "considera X").
+======================================================= */
+const DIAS_MIN_ENTRE_COMPARACION = 20;
+
+const SUGERENCIA_POR_OBJETIVO = {
+  bajar_grasa: (deltaPeso) =>
+    deltaPeso != null && deltaPeso >= 0
+      ? "Tu objetivo es bajar grasa y el peso no bajó en este período — quizás valga sumar más cardio o revisar la alimentación. Es solo una idea, no una regla: el peso también se mueve por retención de líquido, ciclo, masa muscular ganada, etc."
+      : null,
+  subir_masa: (deltaPeso) =>
+    deltaPeso != null && deltaPeso <= 0
+      ? "Tu objetivo es subir masa y el peso no subió en este período — quizás falten más calorías o volumen de entrenamiento. Es solo una idea, no una regla."
+      : null,
+};
+
+export const getComparativaBitacora = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId || req.empresaId;
+    const clienteId = req.usuario.id;
+
+    const mediciones = await MedicionCorporalModel.find({
+      empresa: empresaId,
+      cliente: clienteId,
+    })
+      .sort({ fecha: 1 })
+      .lean();
+
+    if (mediciones.length === 0) {
+      return ok(res, { disponible: false, motivo: "sin_registros" });
+    }
+
+    const actual = mediciones[mediciones.length - 1];
+    const fechaActual = dayjs(actual.fecha).tz(TZ);
+
+    let anterior = null;
+    for (let i = mediciones.length - 2; i >= 0; i--) {
+      const f = dayjs(mediciones[i].fecha).tz(TZ);
+      if (fechaActual.diff(f, "day") >= DIAS_MIN_ENTRE_COMPARACION) {
+        anterior = mediciones[i];
+        break;
+      }
+    }
+
+    const resumen = (m) => ({
+      fecha: m.fecha,
+      pesoKg: m.pesoKg,
+      grasaCorporalPorcentaje: m.grasaCorporalPorcentaje,
+      medidas: m.medidas,
+    });
+
+    if (!anterior) {
+      return ok(res, {
+        disponible: false,
+        motivo: "un_solo_periodo",
+        ultimo: resumen(actual),
+      });
+    }
+
+    const delta = (a, b) => (a != null && b != null ? Math.round((a - b) * 10) / 10 : null);
+    const deltas = {
+      pesoKg: delta(actual.pesoKg, anterior.pesoKg),
+      grasaCorporalPorcentaje: delta(actual.grasaCorporalPorcentaje, anterior.grasaCorporalPorcentaje),
+      cinturaCm: delta(actual.medidas?.cinturaCm, anterior.medidas?.cinturaCm),
+      caderaCm: delta(actual.medidas?.caderaCm, anterior.medidas?.caderaCm),
+      pechoCm: delta(actual.medidas?.pechoCm, anterior.medidas?.pechoCm),
+      brazoCm: delta(actual.medidas?.brazoCm, anterior.medidas?.brazoCm),
+      piernaCm: delta(actual.medidas?.piernaCm, anterior.medidas?.piernaCm),
+    };
+
+    const usuario = await UsuarioModel.findById(clienteId).select("perfilEntrenamiento").lean();
+    const objetivo = usuario?.perfilEntrenamiento?.objetivo || null;
+    const generarSugerencia = objetivo && SUGERENCIA_POR_OBJETIVO[objetivo];
+    const sugerencia = generarSugerencia ? generarSugerencia(deltas.pesoKg) : null;
+
+    return ok(res, {
+      disponible: true,
+      objetivo,
+      actual: resumen(actual),
+      anterior: resumen(anterior),
+      deltas,
+      sugerencia,
+    });
+  } catch (error) {
+    console.error("Error al calcular comparativa de bitácora:", error);
+    return err(res, "Error interno al calcular tu comparativa");
   }
 };
