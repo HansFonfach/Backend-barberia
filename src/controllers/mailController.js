@@ -1306,3 +1306,74 @@ Si ya pagaste y no has mandado el comprobante, este es buen momento para hacerlo
 Equipo ${nombreEmpresa}`,
   });
 };
+
+/* =======================================================
+   💪 Entrenamiento personal (modulos.entrenamientoPersonal): correo
+   diario con la sugerencia del día (o descanso) + racha + aviso de
+   constancia si corresponde. Lo dispara cron/entrenamientoPersonalCron.js.
+======================================================= */
+export const sendAvisoEntrenamientoPersonalEmail = async (to, data) => {
+  const {
+    nombreCliente,
+    nombreEmpresa,
+    sugerencia, // { tipo: "descanso" | "grupo", mensaje, nombreGrupo? }
+    rachaSemanas,
+    avisoConstancia,
+    diasSinActividad,
+    linkRegistrar,
+  } = data;
+
+  const esDescanso = sugerencia?.tipo === "descanso";
+  const emoji = esDescanso ? "🧘" : "💪";
+
+  const subject = avisoConstancia
+    ? `😅 ${nombreCliente}, ¿todo bien? Llevas ${diasSinActividad} días sin registrar`
+    : esDescanso
+      ? `🧘 Hoy toca descansar`
+      : `💪 Hoy te toca ${sugerencia?.nombreGrupo || "entrenar"}`;
+
+  return await sendBaseEmail({
+    to,
+    subject,
+    html: layout(`
+      <h2 style="margin-top:0;">${emoji} Hola ${nombreCliente}</h2>
+
+      ${
+        avisoConstancia
+          ? `<div style="background:#fff4f0;border-left:4px solid #e8541a;padding:16px;border-radius:4px;margin:16px 0;">
+              <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">
+                Llevas <strong>${diasSinActividad} días</strong> sin registrar actividad. No pasa nada, hoy es un buen día para retomarla — aunque sea algo corto.
+              </p>
+            </div>`
+          : ""
+      }
+
+      <div style="background:${esDescanso ? "#f0fdf7" : "#f0f7ff"};border-left:4px solid ${esDescanso ? "#2dce89" : "#1a73e8"};padding:16px;border-radius:4px;margin:16px 0;">
+        <p style="margin:0;color:#333;font-size:16px;line-height:1.6;font-weight:bold;">
+          ${sugerencia?.mensaje || "Registra tu actividad de hoy cuando puedas."}
+        </p>
+      </div>
+
+      ${
+        rachaSemanas > 0
+          ? `<p style="color:#555;font-size:14px;">🔥 Llevas <strong>${rachaSemanas} semana${rachaSemanas !== 1 ? "s" : ""} seguida${rachaSemanas !== 1 ? "s" : ""}</strong> con actividad. ¡No la cortes hoy!</p>`
+          : ""
+      }
+
+      <p style="color:#555;font-size:14px;">
+        Atentamente,<br/><strong>${nombreEmpresa}</strong>
+      </p>
+
+      ${linkRegistrar ? ctaButton(linkRegistrar, "Ver mi entrenamiento", esDescanso ? "#2dce89" : "#1a73e8") : ""}
+    `),
+    text: `${subject}
+
+Hola ${nombreCliente}.
+${avisoConstancia ? `Llevas ${diasSinActividad} días sin registrar actividad.\n` : ""}
+${sugerencia?.mensaje || "Registra tu actividad de hoy cuando puedas."}
+${rachaSemanas > 0 ? `\nLlevas ${rachaSemanas} semana(s) seguida(s) con actividad.` : ""}
+${linkRegistrar ? `\nVer mi entrenamiento: ${linkRegistrar}` : ""}
+
+${nombreEmpresa}`,
+  });
+};

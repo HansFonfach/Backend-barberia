@@ -58,6 +58,7 @@ const EmpresaSchema = new mongoose.Schema({
     planAlimentario: { type: Boolean, default: false }, // específico nutrición
     examenesLab: { type: Boolean, default: false },
     clasesGrupales: { type: Boolean, default: false }, // gimnasios/boxes: clases con cupo
+    entrenamientoPersonal: { type: Boolean, default: false }, // bitácora de entrenamiento libre + sugerencia del día (uso personal, no depende de clasesGrupales)
     // En el futuro puedes agregar: recetas, derivaciones, etc.
   },
 
