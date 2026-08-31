@@ -10,9 +10,12 @@ import InscripcionClaseModel from "../models/inscripcionClase.model.js";
 import MembresiaClaseModel from "../models/membresiaClase.model.js";
 import UsuarioModel from "../models/usuario.model.js";
 import EmpresaModel from "../models/empresa.model.js";
-import { contarClasesUsadasMembresia } from "../helpers/contarClasesUsadasMembresia.js";
 import { esRutValido, formatearRut, limpiarRut } from "../helpers/validarRut.js";
 import { reservarCupoAtomico, liberarCupoAtomico } from "../helpers/cupoSesionHelper.js";
+import {
+  reservarClaseMembresiaAtomico,
+  liberarClaseMembresiaAtomico,
+} from "../helpers/cupoMembresiaClaseHelper.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -286,11 +289,24 @@ export const crearExcepcionClase = async (req, res) => {
 export const eliminarExcepcionClase = async (req, res) => {
   try {
     const { excepcionId } = req.params;
+    const empresaId = req.usuario.empresaId;
 
-    const excepcion = await ExcepcionClaseModel.findByIdAndDelete(excepcionId);
+    // ExcepcionClase no guarda "empresa" directamente (se relaciona a través
+    // de "clase"), así que hay que buscarla primero y validar que su clase
+    // pertenezca a la empresa del usuario autenticado — si no, cualquier
+    // admin autenticado de OTRA empresa podía borrar excepciones ajenas
+    // solo adivinando/enumerando el excepcionId.
+    const excepcion = await ExcepcionClaseModel.findById(excepcionId);
     if (!excepcion) {
       return res.status(404).json({ message: "Excepción no encontrada" });
     }
+
+    const clase = await ClaseModel.findOne({ _id: excepcion.clase, empresa: empresaId });
+    if (!clase) {
+      return res.status(404).json({ message: "Excepción no encontrada" });
+    }
+
+    await ExcepcionClaseModel.deleteOne({ _id: excepcionId });
 
     return res.json({ message: "Excepción eliminada correctamente" });
   } catch (error) {
@@ -674,10 +690,19 @@ const resolverSesionValida = async ({ empresaId, claseId, fecha }) => {
   }
 
   const diaSemana = dayjs(fechaSesion).tz(TZ).day();
-  const horaSesion = dayjs(fechaSesion).tz(TZ).format("HH:mm");
-  const existeBloque = clase.horarioSemanal.some(
-    (h) => h.diaSemana === diaSemana && h.horaInicio === horaSesion,
-  );
+  // Comparar por minutos-desde-medianoche en vez de por string exacto: si el
+  // admin guardó la hora del bloque sin cero a la izquierda (p.ej. "9:00" en
+  // vez de "09:00"), la comparación de strings nunca calzaba con el
+  // "HH:mm" que arma dayjs — esa sesión quedaba imposible de reservar para
+  // siempre aunque generarSesionesDisponibles (que sí compara numéricamente)
+  // la mostrara como disponible.
+  const minutosSesion = dayjs(fechaSesion).tz(TZ).hour() * 60 + dayjs(fechaSesion).tz(TZ).minute();
+  const existeBloque = clase.horarioSemanal.some((h) => {
+    if (h.diaSemana !== diaSemana) return false;
+    const [hh, mm] = String(h.horaInicio || "").split(":").map(Number);
+    if (Number.isNaN(hh) || Number.isNaN(mm)) return false;
+    return hh * 60 + mm === minutosSesion;
+  });
   if (!existeBloque) {
     return {
       error: {
@@ -753,6 +778,11 @@ const procesarInscripcion = async ({
   metodo,
 }) => {
   let pago = { estado: "no_aplica", monto: 0, metodo: null };
+  // Si reservamos un cupo de mensualidad más abajo, se guarda aquí para
+  // poder liberarlo si algún paso posterior falla (no dejar una clase
+  // "fantasma" descontada del plan sin que exista la inscripción).
+  let membresiaParaLiberar = null;
+  let membresiaId = null;
 
   if (tipoAcceso === "membresia") {
     const membresia = await MembresiaClaseModel.findOne({
@@ -769,9 +799,15 @@ const procesarInscripcion = async ({
     }
 
     // La mensualidad NO es ilimitada: tiene un cupo fijo (mensual o total
-    // según el plan — ver contarClasesUsadasMembresia)
-    const clasesUsadas = await contarClasesUsadasMembresia(membresia);
-    if (clasesUsadas >= membresia.clasesIncluidas) {
+    // según el plan). Reserva ATÓMICA del cupo antes de seguir — antes esto
+    // se hacía con un countDocuments (contarClasesUsadasMembresia) seguido de
+    // una comparación, lo que es una condición de carrera: dos solicitudes
+    // simultáneas del mismo cliente podían pasar ambas la validación y
+    // dejarlo con más clases usadas que las incluidas en su plan. Además,
+    // ahora se evalúa el ciclo de la SESIÓN que se reserva (fechaSesion), no
+    // el de "ahora" — ver helpers/cupoMembresiaClaseHelper.js.
+    const cupoMembresiaReservado = await reservarClaseMembresiaAtomico(membresia, fechaSesion);
+    if (!cupoMembresiaReservado) {
       return {
         error: {
           status: 409,
@@ -782,6 +818,8 @@ const procesarInscripcion = async ({
         },
       };
     }
+    membresiaParaLiberar = membresia;
+    membresiaId = membresia._id;
   } else if (tipoAcceso === "prueba_gratis") {
     const yaUsoPrueba = await InscripcionClaseModel.findOne({
       empresa: empresaId,
@@ -811,6 +849,9 @@ const procesarInscripcion = async ({
     estado: { $ne: "cancelada" },
   });
   if (inscripcionExistente) {
+    if (membresiaParaLiberar) {
+      await liberarClaseMembresiaAtomico(membresiaParaLiberar, fechaSesion);
+    }
     return { error: { status: 409, message: "Ya estás inscrito en esta sesión" } };
   }
 
@@ -821,6 +862,9 @@ const procesarInscripcion = async ({
   // una de las dos puede ganar.
   const cupoReservado = await reservarCupoAtomico(clase._id, fechaSesion, cupoEfectivo);
   if (!cupoReservado) {
+    if (membresiaParaLiberar) {
+      await liberarClaseMembresiaAtomico(membresiaParaLiberar, fechaSesion);
+    }
     return { error: { status: 409, message: "No hay cupos disponibles para esta sesión" } };
   }
 
@@ -832,14 +876,19 @@ const procesarInscripcion = async ({
       fecha: fechaSesion,
       estado: "confirmada",
       tipoAcceso,
+      membresia: membresiaId,
       pago,
     });
     return { inscripcion };
   } catch (error) {
     // Si la creación falló (p.ej. carrera con el índice único de
-    // clase+fecha+cliente), liberamos el cupo que habíamos reservado para no
-    // dejar un cupo "fantasma" ocupado por una inscripción que no existe.
+    // clase+fecha+cliente), liberamos el cupo (de sesión y, si aplica, de
+    // mensualidad) que habíamos reservado para no dejar un cupo "fantasma"
+    // ocupado por una inscripción que no existe.
     await liberarCupoAtomico(clase._id, fechaSesion);
+    if (membresiaParaLiberar) {
+      await liberarClaseMembresiaAtomico(membresiaParaLiberar, fechaSesion);
+    }
     if (error?.code === 11000) {
       return { error: { status: 409, message: "Ya estás inscrito en esta sesión" } };
     }
@@ -1261,6 +1310,18 @@ export const cancelarInscripcion = async (req, res) => {
 
     if (liberaCupo) {
       await liberarCupoAtomico(inscripcion.clase, inscripcion.fecha);
+
+      // Si la inscripción usaba el cupo de una mensualidad, liberamos
+      // también esa clase para que vuelva a estar disponible en el plan
+      // (simétrico a la reserva atómica hecha en procesarInscripcion). Las
+      // inscripciones creadas antes de este cambio no tienen "membresia"
+      // guardado — no se intenta adivinar cuál era, se deja como estaba.
+      if (inscripcion.tipoAcceso === "membresia" && inscripcion.membresia) {
+        const membresia = await MembresiaClaseModel.findById(inscripcion.membresia);
+        if (membresia) {
+          await liberarClaseMembresiaAtomico(membresia, inscripcion.fecha);
+        }
+      }
     }
 
     return res.json({ message: "Inscripción cancelada correctamente", inscripcion });
@@ -1284,6 +1345,23 @@ export const marcarPagoInscripcion = async (req, res) => {
     });
     if (!inscripcion) {
       return res.status(404).json({ message: "Inscripción no encontrada" });
+    }
+
+    // Validar contra los mismos enums del schema (pago.estado/pago.metodo en
+    // inscripcionClase.model.js) ANTES de asignar: antes se dejaba que
+    // .save() reventara con un ValidationError, lo que devolvía un 500 en
+    // vez de un 400 claro ante un valor mal tipeado desde el panel admin.
+    const ESTADOS_PAGO_VALIDOS = ["no_aplica", "pendiente", "pagado"];
+    const METODOS_PAGO_VALIDOS = ["transferencia", "efectivo", "webpay", "mercadopago"];
+
+    if (estado !== undefined && !ESTADOS_PAGO_VALIDOS.includes(estado)) {
+      return res.status(400).json({ message: "Estado de pago inválido" });
+    }
+    if (metodo !== undefined && metodo !== null && !METODOS_PAGO_VALIDOS.includes(metodo)) {
+      return res.status(400).json({ message: "Método de pago inválido" });
+    }
+    if (monto !== undefined && (typeof monto !== "number" || Number.isNaN(monto) || monto < 0)) {
+      return res.status(400).json({ message: "Monto de pago inválido" });
     }
 
     if (estado) inscripcion.pago.estado = estado;

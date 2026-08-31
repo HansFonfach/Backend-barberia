@@ -42,6 +42,17 @@ const InscripcionClaseSchema = new Schema(
       required: true,
     },
 
+    // Si tipoAcceso es "membresia", referencia a la mensualidad usada. Se
+    // guarda para poder liberar el cupo correcto (helpers/cupoMembresiaClaseHelper.js)
+    // al cancelar, sin tener que volver a buscar la mensualidad por rango de
+    // fechas (que podría dar un resultado distinto si el cliente ya tiene
+    // otra mensualidad activa para cuando cancela).
+    membresia: {
+      type: Schema.Types.ObjectId,
+      ref: "MembresiaClase",
+      default: null,
+    },
+
     pago: {
       estado: {
         type: String,
