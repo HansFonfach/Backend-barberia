@@ -1,7 +1,9 @@
 import cron from "node-cron";
 import reservaModel from "../models/reserva.model.js";
 import usuarioModel from "../models/usuario.model.js";
+import servicioModel from "../models/servicio.model.js";
 import { sendRecomendacionSuscripcionEmail } from "../controllers/mailController.js";
+import { PLANES, IDS_SERVICIOS_SUSCRIPCION } from "../config/planes.js";
 
 
 export const iniciarCronSuscripcionesMensual = () => {
@@ -25,6 +27,28 @@ export const iniciarCronSuscripcionesMensual = () => {
     const reservasValidas = reservas.filter((r) =>
       estadosValidos.includes((r.estado || "").toLowerCase())
     );
+
+    // 💰 Precios reales de los 3 servicios que aplican a suscripción (los
+    // mismos IDs fijos que usa clienteAnalyticsController.js), para no
+    // volver a inventar un número — se busca una sola vez, no por cliente.
+    const serviciosDB = await servicioModel.find(
+      { _id: { $in: Object.values(IDS_SERVICIOS_SUSCRIPCION) } },
+      "precio",
+    );
+    const PRECIOS = {
+      corte:
+        serviciosDB.find(
+          (s) => s._id.toString() === IDS_SERVICIOS_SUSCRIPCION.corte,
+        )?.precio || 0,
+      barba:
+        serviciosDB.find(
+          (s) => s._id.toString() === IDS_SERVICIOS_SUSCRIPCION.barba,
+        )?.precio || 0,
+      combo:
+        serviciosDB.find(
+          (s) => s._id.toString() === IDS_SERVICIOS_SUSCRIPCION.combo,
+        )?.precio || 0,
+    };
 
     const clientesMap = new Map();
 
@@ -102,7 +126,38 @@ export const iniciarCronSuscripcionesMensual = () => {
         suscripcionSugerida = "barba";
       }
 
-      const ahorroMensual = 5000;
+      // 💰 AHORRO REAL (antes era un $5.000 fijo, igual para cualquier
+      // cliente y cualquier plan — ahora se calcula de verdad):
+      // 1) cuántas visitas al mes hace este cliente en la práctica
+      //    (30 / promedio de días entre visitas),
+      // 2) tope a lo que el plan realmente incluye (un plan de "2 al mes"
+      //    no cubre 6 visitas, así que no se puede prometer ahorro por
+      //    visitas que el plan no cubriría),
+      // 3) el precio "normal" se toma del MISMO servicio que corresponde
+      //    al plan sugerido arriba (antes eran dos lógicas separadas que
+      //    a veces no coincidían: se recomendaba un plan y se cobraba el
+      //    ahorro con el precio de otro servicio).
+      const plan = PLANES[suscripcionSugerida];
+      const precioServicio =
+        suscripcionSugerida === "combo_visita_corte_barba"
+          ? PRECIOS.combo
+          : suscripcionSugerida === "barba"
+            ? PRECIOS.barba
+            : PRECIOS.corte;
+
+      const visitasMensuales = Math.round(30 / promedioDias);
+      const visitasCubiertas = Math.min(visitasMensuales, plan.serviciosIncluidos);
+
+      const valorSinPlan = visitasCubiertas * precioServicio;
+      const ahorroMensual = Math.max(valorSinPlan - plan.precio, 0);
+      const ahorroAnual = ahorroMensual * 12;
+      const equivalenteCortes =
+        PRECIOS.corte > 0 ? Math.round(ahorroAnual / PRECIOS.corte) : 0;
+
+      // Si con el plan sugerido no hay ahorro real (o no hay precio
+      // cargado para ese servicio), no tiene sentido mandar un correo
+      // ofreciendo "ahorra $0" — se salta este cliente.
+      if (ahorroMensual <= 0) continue;
 
       // ENVIAR EMAIL
       await sendRecomendacionSuscripcionEmail(cliente.email, {
@@ -112,11 +167,12 @@ export const iniciarCronSuscripcionesMensual = () => {
         telefonoBarbero: cliente.telefono,
 
         suscripcionSugerida,
+        precioPlan: plan.precio,
 
         motivo: `Vienes cada ${Math.round(promedioDias)} días aproximadamente`,
         ahorroMensual,
-        ahorroAnual: ahorroMensual * 12,
-        equivalenteCortes: Math.round(ahorroMensual / 15000),
+        ahorroAnual,
+        equivalenteCortes,
       });
 
       // 🛑 MARCAR COMO ENVIADO
