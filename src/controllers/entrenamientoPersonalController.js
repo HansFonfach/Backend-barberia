@@ -122,8 +122,50 @@ const calcularSugerenciasPeso = (registros, ahora) => {
   return sugerencias;
 };
 
+const limpiarEjerciciosRegistro = (ejercicios) =>
+  Array.isArray(ejercicios)
+    ? ejercicios
+        .filter((e) => e && typeof e.nombre === "string" && e.nombre.trim())
+        .map((e) => ({
+          nombre: e.nombre.trim().slice(0, 80),
+          pesoKg: e.pesoKg === "" || e.pesoKg == null ? null : Number(e.pesoKg),
+          series: e.series === "" || e.series == null ? null : Number(e.series),
+          repeticiones: e.repeticiones === "" || e.repeticiones == null ? null : Number(e.repeticiones),
+        }))
+    : [];
+
+// Suma cada ejercicio nuevo al catálogo de la empresa, para que se sugiera
+// por autocompletado la próxima vez (a este mismo usuario y a sus amigos
+// de la misma empresa). No es una API externa de "máquinas de gimnasio" —
+// no existe una confiable y genérica para eso, cada gimnasio tiene
+// equipos distintos — así que este catálogo se arma solo con lo que la
+// propia gente va registrando. Se usa tanto al crear un registro como al
+// agregarle ejercicios después (registro "ejercicio por ejercicio").
+const actualizarCatalogoEjercicios = async (empresaId, ejerciciosLimpios) => {
+  for (const e of ejerciciosLimpios) {
+    try {
+      await EjercicioCatalogoModel.updateOne(
+        { empresa: empresaId, nombreNormalizado: e.nombre.toLowerCase() },
+        {
+          $setOnInsert: {
+            empresa: empresaId,
+            nombre: e.nombre,
+            nombreNormalizado: e.nombre.toLowerCase(),
+          },
+        },
+        { upsert: true },
+      );
+    } catch (errCatalogo) {
+      console.error("Aviso: no se pudo actualizar el catálogo de ejercicios:", errCatalogo.message);
+    }
+  }
+};
+
 /* =======================================================
-   🟢 Crear un registro de entrenamiento (siempre para uno mismo).
+   🟢 Crear un registro de entrenamiento (siempre para uno mismo). Puede
+   crearse con el detalle completo de una vez, o solo con el primer
+   ejercicio — ver actualizarRegistroEntrenamiento más abajo para el caso
+   de ir agregando ejercicios a medida que se entrena.
    POST /entrenamiento-personal/registro
 ======================================================= */
 export const crearRegistroEntrenamiento = async (req, res) => {
@@ -136,16 +178,7 @@ export const crearRegistroEntrenamiento = async (req, res) => {
     }
 
     // Detalle opcional por máquina/ejercicio — nada de esto es obligatorio.
-    const ejerciciosLimpios = Array.isArray(ejercicios)
-      ? ejercicios
-          .filter((e) => e && typeof e.nombre === "string" && e.nombre.trim())
-          .map((e) => ({
-            nombre: e.nombre.trim().slice(0, 80),
-            pesoKg: e.pesoKg === "" || e.pesoKg == null ? null : Number(e.pesoKg),
-            series: e.series === "" || e.series == null ? null : Number(e.series),
-            repeticiones: e.repeticiones === "" || e.repeticiones == null ? null : Number(e.repeticiones),
-          }))
-      : [];
+    const ejerciciosLimpios = limpiarEjerciciosRegistro(ejercicios);
 
     const registro = await RegistroEntrenamientoModel.create({
       empresa: empresaId,
@@ -157,34 +190,58 @@ export const crearRegistroEntrenamiento = async (req, res) => {
       ejercicios: ejerciciosLimpios,
     });
 
-    // Suma cada ejercicio nuevo al catálogo de la empresa, para que se
-    // sugiera por autocompletado la próxima vez (a este mismo usuario y a
-    // sus amigos de la misma empresa). No es una API externa de "máquinas
-    // de gimnasio" — no existe una confiable y genérica para eso, cada
-    // gimnasio tiene equipos distintos — así que este catálogo se arma
-    // solo con lo que la propia gente va registrando.
-    for (const e of ejerciciosLimpios) {
-      try {
-        await EjercicioCatalogoModel.updateOne(
-          { empresa: empresaId, nombreNormalizado: e.nombre.toLowerCase() },
-          {
-            $setOnInsert: {
-              empresa: empresaId,
-              nombre: e.nombre,
-              nombreNormalizado: e.nombre.toLowerCase(),
-            },
-          },
-          { upsert: true },
-        );
-      } catch (errCatalogo) {
-        console.error("Aviso: no se pudo actualizar el catálogo de ejercicios:", errCatalogo.message);
-      }
-    }
+    await actualizarCatalogoEjercicios(empresaId, ejerciciosLimpios);
 
     return res.status(201).json({ ok: true, data: registro });
   } catch (error) {
     console.error("Error al crear registro de entrenamiento:", error);
     return err(res, "Error interno al guardar el registro");
+  }
+};
+
+/* =======================================================
+   🟠 Editar un registro propio — pensado sobre todo para "registrar
+   ejercicio por ejercicio": el front crea el registro con el primer
+   ejercicio (crearRegistroEntrenamiento) y va agregando los siguientes
+   con PUTs sucesivos acá (mandando el arreglo de ejercicios completo,
+   no un solo ejercicio nuevo, para que el front tenga el control total
+   de la lista — ej: también sirve para borrar uno). duracionMinutos y
+   notas normalmente se completan recién al final, cuando se termina la
+   actividad. Cada campo es independiente: solo se toca lo que venga
+   definido en el body.
+   PUT /entrenamiento-personal/registro/:id
+======================================================= */
+export const actualizarRegistroEntrenamiento = async (req, res) => {
+  try {
+    const empresaId = req.usuario.empresaId || req.empresaId;
+    const { id } = req.params;
+    const { duracionMinutos, notas, ejercicios } = req.body;
+
+    const registro = await RegistroEntrenamientoModel.findOne({
+      _id: id,
+      empresa: empresaId,
+      cliente: req.usuario.id,
+    });
+    if (!registro) {
+      return err(res, "No se encontró el registro", 404);
+    }
+
+    if (duracionMinutos !== undefined) {
+      registro.duracionMinutos = duracionMinutos === "" ? null : duracionMinutos;
+    }
+    if (notas !== undefined) registro.notas = notas;
+
+    if (ejercicios !== undefined) {
+      const ejerciciosLimpios = limpiarEjerciciosRegistro(ejercicios);
+      registro.ejercicios = ejerciciosLimpios;
+      await actualizarCatalogoEjercicios(empresaId, ejerciciosLimpios);
+    }
+
+    await registro.save();
+    return ok(res, registro);
+  } catch (error) {
+    console.error("Error al actualizar registro de entrenamiento:", error);
+    return err(res, "Error interno al actualizar el registro");
   }
 };
 

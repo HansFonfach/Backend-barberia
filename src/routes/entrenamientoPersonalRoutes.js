@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   crearRegistroEntrenamiento,
+  actualizarRegistroEntrenamiento,
   listarMisRegistrosEntrenamiento,
   listarCatalogoEjercicios,
   eliminarRegistroEntrenamiento,
@@ -32,6 +33,7 @@ const router = Router();
 router.use(validarToken, verificarModulo("entrenamientoPersonal"));
 
 router.post("/registro", crearRegistroEntrenamiento);
+router.put("/registro/:id", actualizarRegistroEntrenamiento);
 router.get("/mis-registros", listarMisRegistrosEntrenamiento);
 router.get("/catalogo-ejercicios", listarCatalogoEjercicios);
 router.delete("/registro/:id", eliminarRegistroEntrenamiento);
