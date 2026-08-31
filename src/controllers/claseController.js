@@ -458,7 +458,7 @@ export const generarSesionesDisponibles = async ({
 
   const claseIds = clases.map((c) => c._id);
 
-  const [excepciones, inscripciones, bloqueosFeriado] = await Promise.all([
+  const [excepciones, inscripciones, bloqueosFeriado, empresaDoc] = await Promise.all([
     ExcepcionClaseModel.find({
       clase: { $in: claseIds },
       fecha: { $gte: inicio.toDate(), $lte: fin.toDate() },
@@ -472,7 +472,16 @@ export const generarSesionesDisponibles = async ({
       empresa: empresaId,
       fecha: { $gte: inicio.toDate(), $lte: fin.toDate() },
     }).lean(),
+    // Sin .lean(): así, si esta empresa nunca guardó el campo explícito,
+    // Mongoose igual aplica el default del schema (30) al hidratar.
+    EmpresaModel.findById(empresaId, "anticipacionMinima"),
   ]);
+
+  // 🕐 Igual que en resolverSesionValida (usado al inscribirse): una sesión
+  // que ya no se puede reservar por el margen mínimo de anticipación de la
+  // empresa tampoco debería aparecer como "disponible" en la lista.
+  const anticipacionMinutos = empresaDoc?.anticipacionMinima ?? 30;
+  const limiteMinimoReserva = dayjs().tz(TZ).add(anticipacionMinutos, "minute");
 
   const excepcionPorClaseFecha = new Map();
   for (const ex of excepciones) {
@@ -517,10 +526,12 @@ export const generarSesionesDisponibles = async ({
 
         if (vigenciaDesde && fechaSesion.isBefore(vigenciaDesde)) continue;
         if (vigenciaHasta && fechaSesion.isAfter(vigenciaHasta)) continue;
-        // Por defecto no se muestran sesiones ya pasadas (flujo de inscripción del
-        // cliente); con incluirPasadas=true (vista de admin tipo "clases del día")
-        // sí se listan, para poder revisar la asistencia de un día anterior.
-        if (!mostrarPasadas && fechaSesion.isBefore(dayjs().tz(TZ))) continue;
+        // Por defecto no se muestran sesiones ya pasadas NI las que están
+        // dentro del margen mínimo de anticipación de la empresa (flujo de
+        // inscripción del cliente); con incluirPasadas=true (vista de admin
+        // tipo "clases del día") sí se listan, para poder revisar la
+        // asistencia de un día anterior.
+        if (!mostrarPasadas && fechaSesion.isBefore(limiteMinimoReserva)) continue;
 
         const excepcion = excepcionPorClaseFecha.get(
           `${clase._id}_${fechaSesion.format("YYYY-MM-DD")}`,
@@ -672,6 +683,27 @@ const resolverSesionValida = async ({ empresaId, claseId, fecha }) => {
       error: {
         status: 400,
         message: "Esa fecha/hora no corresponde a una sesión válida de esta clase",
+      },
+    };
+  }
+
+  // 🕐 Margen mínimo de anticipación configurado por la empresa (en
+  // minutos — ver empresa.model.js). Antes esto no se revisaba en ningún
+  // lado para clases: se podía inscribir hasta el mismo minuto en que
+  // empezaba la sesión. Sin .lean() para que, si la empresa nunca guardó
+  // el campo explícito, Mongoose aplique igual el default del schema (30).
+  const empresaDoc = await EmpresaModel.findById(empresaId, "anticipacionMinima");
+  const anticipacionMinutos = empresaDoc?.anticipacionMinima ?? 30;
+  const limiteMinimoReserva = dayjs().tz(TZ).add(anticipacionMinutos, "minute");
+
+  if (dayjs(fechaSesion).tz(TZ).isBefore(limiteMinimoReserva)) {
+    return {
+      error: {
+        status: 400,
+        message:
+          anticipacionMinutos >= 60 && anticipacionMinutos % 60 === 0
+            ? `Esta clase ya no se puede reservar: hay que hacerlo con al menos ${anticipacionMinutos / 60} hora${anticipacionMinutos === 60 ? "" : "s"} de anticipación`
+            : `Esta clase ya no se puede reservar: hay que hacerlo con al menos ${anticipacionMinutos} minutos de anticipación`,
       },
     };
   }
