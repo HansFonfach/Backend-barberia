@@ -17,8 +17,14 @@ dayjs.extend(timezone);
 const PRECIO_SUSCRIPCION = 25000;
 const ZONA = "America/Santiago";
 
-// Estados que NO cuentan como ingreso ni como atención realizada
-const ESTADOS_VALIDOS = { $nin: ["cancelada", "no_asistio"] };
+// Filtro de "estado" para reservas que sí cuentan como ingreso/atención
+// realizada: se excluyen "cancelada" y "no_asistio" (obvio), pero también
+// "reagendada" — una reserva reagendada es la reserva VIEJA que quedó
+// reemplazada por una nueva (ver reagendamiento en reservaController.js):
+// el servicio nunca se prestó en esa fecha/hora original, se movió a otra.
+// Sin excluirla, se contaba como ingreso la cita vieja Y la nueva a la vez
+// (doble conteo) cada vez que un cliente reagendaba.
+const ESTADOS_VALIDOS = { $nin: ["cancelada", "no_asistio", "reagendada"] };
 
 /**
  * ⚠️ REVISAR: nombre del campo que guarda al profesional en

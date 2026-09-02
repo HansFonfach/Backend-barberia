@@ -18,8 +18,17 @@ export const iniciarJobReservas = () => {
     try {
       const ahora = new Date();
 
+      // Antes solo miraba "pendiente": si el cliente confirmaba asistencia
+      // por WhatsApp/correo antes de la cita, la reserva pasaba a
+      // "confirmada" (ver confirmarAsistenciaWhatsapp/confirmarAsistencia en
+      // reservaController.js) y este cron dejaba de verla para siempre —
+      // se quedaba "confirmada" eternamente y seguía sumando como ingreso
+      // en las estadísticas aunque ya hubiera pasado hace semanas. "reagendada"
+      // NO se incluye a propósito: esa reserva ya fue reemplazada por una
+      // nueva (ver reagendamiento en reservaController.js), no corresponde
+      // marcarla como completada.
       const reservas = await Reserva.find({
-        estado: "pendiente",
+        estado: { $in: ["pendiente", "confirmada"] },
         $expr: {
           $lte: [
             { $add: ["$fecha", { $multiply: ["$duracion", 60000] }] },
