@@ -25,6 +25,22 @@ export const login = async (req, res) => {
       });
     }
 
+    // 🔒 Igual que en validarToken.js: si el negocio está desactivado o
+    // suspendido por pago (panel de super-admin), no dejarlo ni siquiera
+    // entrar — antes esto no se revisaba en ningún lado del login.
+    if (empresa.estado === "inactivo") {
+      return res.status(403).json({
+        code: "EMPRESA_INACTIVA",
+        message: "Esta cuenta fue desactivada. Contacta con soporte.",
+      });
+    }
+    if (["suspendido", "cancelado"].includes(empresa.estadoSuscripcion)) {
+      return res.status(403).json({
+        code: "EMPRESA_SUSPENDIDA",
+        message: "Esta cuenta está suspendida por pago pendiente. Contacta con soporte.",
+      });
+    }
+
     /* =========================
        2️⃣ BUSCAR USUARIO EN ESA EMPRESA
     ========================= */

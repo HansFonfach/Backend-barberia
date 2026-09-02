@@ -214,6 +214,22 @@ const EmpresaSchema = new mongoose.Schema({
 
   motivoSuspension: String,
 
+  // Cuánto le cobra Hans (dueño del SaaS) a esta empresa por mes — para el
+  // panel de super-admin, no confundir con "pagos" de arriba (eso es
+  // abono/depósito que la empresa le cobra a SUS clientes).
+  cuotaMensual: { type: Number, default: 0 },
+
+  // Registro de cada pago que la empresa le hizo a Hans. Se usa para calcular
+  // ganancias reales por mes (no solo "cuotaMensual x empresas activas"), y
+  // como bitácora en vez de solo tener "ultimoPago" con el dato más reciente.
+  historialPagos: [
+    {
+      fecha: { type: Date, default: Date.now },
+      monto: { type: Number, required: true },
+      notas: { type: String, default: "" },
+    },
+  ],
+
   plan: {
     type: String,
     default: "trial", // trial | activo | vencido

@@ -186,9 +186,18 @@ export const actualizarEmpresa = async (req, res) => {
 
 export const getEmpresasPublicas = async (req, res) => {
   try {
+    // Solo empresas activas: las que Hans desactiva desde el panel de
+    // super-admin (estado: "inactivo") no deben aparecer en la landing
+    // principal ni en ninguna otra vitrina pública.
+    // OJO: "rubro" es el campo vigente (obligatorio) para clasificar el
+    // negocio; "tipo" es el campo antiguo que solo tienen las empresas
+    // creadas antes de que existiera "rubro". Se devuelven ambos para que
+    // el frontend pueda usar el que corresponda según la empresa.
     const empresas = await empresaModel
-      .find()
-      .select("nombre slug tipo descripcion direccion horarios logo colores");
+      .find({ estado: "activo" })
+      .select(
+        "nombre slug tipo rubro descripcion direccion horarios logo colores",
+      );
 
     res.json(empresas);
   } catch (error) {
