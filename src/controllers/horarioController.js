@@ -1091,7 +1091,12 @@ export const getHorasProfesionalPorDia = async (req, res) => {
     const todasLasHorasPosibles = new Set();
     // Generamos el universo de horas candidatas a partir de los horarios del
     // día (igual que hace el loop de más abajo), para evaluar solapamiento.
+    // 🔧 FIX: antes se usaba un paso fijo de 30 min sin importar el
+    // "duracionBloque" real configurado para ese horario (ej. negocios que
+    // atienden cada 45 o 60 min) — eso generaba horas candidatas que ni
+    // siquiera son slots reales para ese negocio.
     for (const horario of horariosDelDia) {
+      const intervaloOcupacion = Number(horario.duracionBloque) || 30;
       let cursor = dayjs.tz(
         `${fecha} ${horario.horaInicio}`,
         "YYYY-MM-DD HH:mm",
@@ -1104,7 +1109,13 @@ export const getHorasProfesionalPorDia = async (req, res) => {
       );
       while (cursor.isBefore(fin)) {
         todasLasHorasPosibles.add(cursor.format("HH:mm"));
-        cursor = cursor.add(30, "minute");
+        cursor = cursor.add(intervaloOcupacion, "minute");
+      }
+      // También las horas ancla explícitas, por si alguna no calza con el
+      // paso general (ej. un ancla a las 10:15 con duracionBloque de 30
+      // min) — así el chequeo de solapamiento no se la salta.
+      if (horario.horasAncla?.length) {
+        horario.horasAncla.forEach((a) => todasLasHorasPosibles.add(a.hora));
       }
     }
 
@@ -1169,7 +1180,14 @@ export const getHorasProfesionalPorDia = async (req, res) => {
         empresaDoc?.configuracion?.usaHorasAncla === true &&
         horario.horasAncla?.length > 0;
 
-      // Colación en slots de 30 min
+      // 🔧 FIX: la grilla de este panel usaba SIEMPRE pasos de 30 minutos,
+      // sin importar el "duracionBloque" real de cada negocio (ej. 45 o 60
+      // min) — por eso salían horas que el negocio no ofrece de verdad y no
+      // coincidían con lo que el cliente ve al reservar. Ahora se usa el
+      // mismo intervalo que ya usa getHorasDisponibles (el lado cliente).
+      const intervalo = Number(horario.duracionBloque) || 30;
+
+      // Colación en slots del mismo intervalo que el resto de la grilla
       const colacionHoras = new Set();
       if (horario.colacionInicio && horario.colacionFin) {
         let c = dayjs.tz(
@@ -1184,7 +1202,7 @@ export const getHorasProfesionalPorDia = async (req, res) => {
         );
         while (c.isBefore(cFin)) {
           colacionHoras.add(c.format("HH:mm"));
-          c = c.add(30, "minute");
+          c = c.add(intervalo, "minute");
         }
       }
 
@@ -1236,30 +1254,48 @@ export const getHorasProfesionalPorDia = async (req, res) => {
           }
         }
 
-        const hora = cursor.format("HH:mm");
+        // 🔧 FIX: cuando el horario usa "horas ancla", los ÚNICOS inicios
+        // reales que un cliente puede reservar son esas anclas — igual que
+        // getHorasDisponibles (el lado cliente), que en ese caso ni
+        // siquiera recorre el bloque completo cada `intervalo` minutos.
+        // Antes este paso genérico se ejecutaba SIEMPRE sin importar
+        // usaAncla, y agregaba una fila "disponible" cada `duracionBloque`
+        // minutos en todo el rango del horario — horas que el cliente
+        // nunca puede elegir porque no son ancla. Por eso en el panel de
+        // administrar horarios aparecían más horas "disponibles" que en la
+        // reserva real. Ahora, si usaAncla, se omite este paso: la grilla
+        // queda formada solo por las anclas de arriba, igual que el cliente.
+        if (!usaAncla) {
+          const hora = cursor.format("HH:mm");
 
-        if (!resultado.has(hora)) {
-          if (colacionHoras.has(hora)) {
-            resultado.set(hora, { hora, estado: "colacion" });
-          } else if (horasBloqueadas.includes(hora)) {
-            resultado.set(hora, { hora, estado: "bloqueada" });
-          } else if (mapaReservas[hora]) {
-            resultado.set(hora, {
-              hora,
-              estado: "reservada",
-              reserva: _miniReserva(mapaReservas[hora]),
-            });
-          } else if (horasOcupadasPorReserva.has(hora)) {
-            resultado.set(hora, { hora, estado: "ocupada", esDesborde: true });
-          } else {
-            // 🔧 Antes podía quedar "ocupada" indebidamente; ahora si no hay
-            // solapamiento real con ninguna reserva activa, queda disponible
-            // y por lo tanto bloqueable — igual que lo ve el cliente.
-            resultado.set(hora, { hora, estado: "disponible" });
+          if (!resultado.has(hora)) {
+            if (colacionHoras.has(hora)) {
+              resultado.set(hora, { hora, estado: "colacion" });
+            } else if (horasBloqueadas.includes(hora)) {
+              resultado.set(hora, { hora, estado: "bloqueada" });
+            } else if (mapaReservas[hora]) {
+              resultado.set(hora, {
+                hora,
+                estado: "reservada",
+                reserva: _miniReserva(mapaReservas[hora]),
+              });
+            } else if (horasOcupadasPorReserva.has(hora)) {
+              resultado.set(hora, {
+                hora,
+                estado: "ocupada",
+                esDesborde: true,
+              });
+            } else {
+              // 🔧 Antes podía quedar "ocupada" indebidamente; ahora si no
+              // hay solapamiento real con ninguna reserva activa, queda
+              // disponible y por lo tanto bloqueable — igual que lo ve el
+              // cliente.
+              resultado.set(hora, { hora, estado: "disponible" });
+            }
           }
         }
 
-        cursor = cursor.add(30, "minute");
+        cursor = cursor.add(intervalo, "minute");
       }
     }
 
