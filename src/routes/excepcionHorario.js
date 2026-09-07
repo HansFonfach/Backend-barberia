@@ -3,6 +3,7 @@ import { validarToken } from "../middlewares/validarToken.js";
 import {
   toggleHora, // ← Nueva función unificada
   agregarHoraExtra,
+  actualizarHoraExtra,
   eliminarHoraExtra, // ← Renombrada
   obtenerExcepcionesPorDia,
   toggleTrabajoFeriado, // 👈 nuevo
@@ -18,6 +19,9 @@ router.post("/toggle", validarToken, toggleHora);
 
 // Ruta para agregar hora extra (se mantiene igual)
 router.post("/agregar-hora-extra", validarToken, agregarHoraExtra);
+
+// Ruta para actualizar (corregir) la duración de una hora extra ya creada
+router.post("/actualizar-hora-extra", validarToken, actualizarHoraExtra);
 
 // Ruta para eliminar hora extra (renombrada de cancelar-hora-extra)
 router.post("/eliminar-hora-extra", validarToken, eliminarHoraExtra);

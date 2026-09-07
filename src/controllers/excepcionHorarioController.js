@@ -1,4 +1,5 @@
 import excepcionHorario from "../models/excepcionHorario.model.js";
+import Reserva from "../models/reserva.model.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
@@ -141,6 +142,108 @@ export const eliminarHoraExtra = async (req, res) => {
   } catch (error) {
     console.error("❌ Error en eliminarHoraExtra:", error);
     res.status(500).json({ message: "Error al eliminar la hora extra", error });
+  }
+};
+
+// Actualiza la horaFin (duración) de una hora extra ya creada.
+// No permite dejar afuera reservas que ya se hicieron dentro de ella:
+// si alguna reserva activa terminaría después del nuevo horaFin, se rechaza.
+export const actualizarHoraExtra = async (req, res) => {
+  const { barbero, fecha, horaInicio, horaFin, serviciosPermitidos } =
+    req.body;
+
+  if (!barbero || !fecha || !horaInicio || !horaFin) {
+    return res.status(400).json({
+      message: "barbero, fecha, horaInicio y horaFin son requeridos",
+    });
+  }
+
+  if (horaFin <= horaInicio) {
+    return res.status(400).json({
+      message: "horaFin debe ser posterior a horaInicio",
+    });
+  }
+
+  try {
+    const fechaUTC = fechaChileToUTC(fecha);
+
+    const horaExtra = await excepcionHorario.findOne({
+      barbero,
+      fecha: fechaUTC,
+      horaInicio,
+      tipo: "extra",
+    });
+
+    if (!horaExtra) {
+      return res.status(404).json({ message: "No se encontró la hora extra" });
+    }
+
+    // ── No permitir que el nuevo horaFin deje afuera una reserva que ya existe ──
+    const finNuevo = dayjs.tz(
+      `${fecha} ${horaFin}`,
+      "YYYY-MM-DD HH:mm",
+      "America/Santiago",
+    );
+
+    const inicioBusqueda = dayjs
+      .tz(fecha, "YYYY-MM-DD", "America/Santiago")
+      .startOf("day")
+      .subtract(4, "hour")
+      .utc()
+      .toDate();
+    const finBusqueda = dayjs
+      .tz(fecha, "YYYY-MM-DD", "America/Santiago")
+      .endOf("day")
+      .add(4, "hour")
+      .utc()
+      .toDate();
+
+    const reservasDelDia = await Reserva.find({
+      barbero,
+      fecha: { $gte: inicioBusqueda, $lt: finBusqueda },
+      estado: { $in: ["pendiente", "confirmada"] },
+    });
+
+    const reservasEnEstaHoraExtra = reservasDelDia.filter(
+      (r) =>
+        dayjs(r.fecha).tz("America/Santiago").format("HH:mm") === horaInicio,
+    );
+
+    const reservaQueNoCabe = reservasEnEstaHoraExtra.find((r) => {
+      const finReserva = dayjs(r.fecha)
+        .tz("America/Santiago")
+        .add(r.duracion || 30, "minute");
+      return finReserva.isAfter(finNuevo);
+    });
+
+    if (reservaQueNoCabe) {
+      const finReservaStr = dayjs(reservaQueNoCabe.fecha)
+        .tz("America/Santiago")
+        .add(reservaQueNoCabe.duracion || 30, "minute")
+        .format("HH:mm");
+
+      return res.status(409).json({
+        message: `No se puede acortar la hora extra hasta las ${horaFin}: ya hay una reserva que termina a las ${finReservaStr}`,
+      });
+    }
+
+    horaExtra.horaFin = horaFin;
+    if (Array.isArray(serviciosPermitidos)) {
+      horaExtra.serviciosPermitidos = serviciosPermitidos;
+    }
+    await horaExtra.save();
+
+    res.status(200).json({
+      message: "Hora extra actualizada correctamente",
+      horaExtra,
+      fechaOriginal: fecha,
+    });
+  } catch (error) {
+    console.error("❌ Error en actualizarHoraExtra:", error);
+    res.status(500).json({
+      message: "Error al actualizar la hora extra",
+      error: error.message,
+    });
   }
 };
 
