@@ -83,6 +83,9 @@ export const detectarRecordatorios = async () => {
       continue;
     }
 
+    // Negocio desactivado: no le mandamos más correos de retención a sus clientes.
+    if (s.empresa.estado === "inactivo") continue;
+
     if (!s.empresa.recordatoriosRetencionActivo) continue;
 
     const diasDesdeUltima =

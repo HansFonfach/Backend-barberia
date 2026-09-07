@@ -22,6 +22,15 @@ export const reservarComoInvitado = async (req, res) => {
     return res.status(404).json({ message: "Empresa no encontrada" });
   }
 
+  // Un negocio desactivado no debe seguir aceptando reservas de invitados
+  // (aunque alguien tenga guardado un link directo a /:slug/reservar).
+  if (empresa.estado === "inactivo") {
+    return res.status(403).json({
+      code: "EMPRESA_INACTIVA",
+      message: "Este negocio no está disponible por el momento.",
+    });
+  }
+
   // ✅ Buscar por RUT en TODA la empresa, sin importar el rol
   // (tu índice único de rut es global, así que la búsqueda debe serlo también)
   let usuario = await usuarioModel.findOne({

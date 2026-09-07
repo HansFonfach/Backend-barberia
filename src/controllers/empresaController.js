@@ -82,7 +82,11 @@ export const getEmpresaPorSlug = async (req, res) => {
     const { slug } = req.params;
     const empresa = await empresaModel.findOne({ slug });
 
-    if (!empresa) {
+    // Un negocio desactivado desde el panel de super-admin (estado:
+    // "inactivo") no debe seguir mostrando su página pública ni permitir
+    // reservas — se trata igual que si no existiera. Es reversible: en
+    // cuanto vuelva a quedar "activo" ahí, todo funciona de nuevo solo.
+    if (!empresa || empresa.estado === "inactivo") {
       return res.status(404).json({ message: "Empresa no encontrada" });
     }
 

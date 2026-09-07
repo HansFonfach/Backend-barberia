@@ -130,10 +130,13 @@ class RecordatoriosJob {
       .populate("barbero", "nombre apellido") // 👈 FALTABA
       .populate(
         "empresa",
-        "nombre direccion telefono politicaCancelacion slug",
+        "nombre direccion telefono politicaCancelacion slug estado",
       ); //
 
     for (const reserva of reservas) {
+      // Negocio desactivado: no le mandamos más correos/whatsapp a sus clientes.
+      if (reserva.empresa?.estado === "inactivo") continue;
+
       const resultado = await this.obtenerDatosReserva(reserva);
       if (!resultado) continue;
 
@@ -172,11 +175,14 @@ class RecordatoriosJob {
         .populate("barbero", "nombre apellido")
         .populate(
           "empresa",
-          "nombre direccion telefono politicaCancelacion slug",
+          "nombre direccion telefono politicaCancelacion slug estado",
         );
 
       for (const reserva of reservas) {
         try {
+          // Negocio desactivado: no le mandamos más correos/whatsapp a sus clientes.
+          if (reserva.empresa?.estado === "inactivo") continue;
+
           const resultado = await this.obtenerDatosReserva(reserva);
           if (!resultado) continue;
 
@@ -241,11 +247,14 @@ class RecordatoriosJob {
         .populate("barbero", "nombre apellido")
         .populate(
           "empresa",
-          "nombre direccion telefono politicaCancelacion slug",
+          "nombre direccion telefono politicaCancelacion slug estado",
         );
 
       for (const reserva of reservas) {
         try {
+          // Negocio desactivado: no le mandamos más correos/whatsapp a sus clientes.
+          if (reserva.empresa?.estado === "inactivo") continue;
+
           const resultado = await this.obtenerDatosReserva(reserva);
           if (!resultado) continue;
 
@@ -337,10 +346,13 @@ class RecordatoriosJob {
       })
         .populate("servicio", "nombre cuidados")
         .populate("barbero", "nombre apellido")
-        .populate("empresa", "nombre direccion telefono");
+        .populate("empresa", "nombre direccion telefono estado");
 
       for (const reserva of reservas) {
         try {
+          // Negocio desactivado: no le mandamos más correos a sus clientes.
+          if (reserva.empresa?.estado === "inactivo") continue;
+
           const resultado = await this.obtenerDatosReserva(reserva);
           if (!resultado) continue;
 
@@ -412,11 +424,14 @@ class RecordatoriosJob {
         .populate("barbero", "nombre apellido")
         .populate(
           "empresa",
-          "nombre direccion telefono politicaCancelacion slug",
+          "nombre direccion telefono politicaCancelacion slug estado",
         );
 
       for (const reserva of reservas) {
         try {
+          // Negocio desactivado: no le mandamos más correos/whatsapp a sus clientes.
+          if (reserva.empresa?.estado === "inactivo") continue;
+
           const resultado = await this.obtenerDatosReserva(reserva);
           if (!resultado) continue;
 
