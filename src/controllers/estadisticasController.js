@@ -1,5 +1,6 @@
 import reservaModel from "../models/reserva.model.js";
 import usuarioModel from "../models/usuario.model.js";
+import servicioModel from "../models/servicio.model.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
@@ -528,6 +529,536 @@ export const ingresoTotal = async (req, res) => {
   } catch (error) {
     console.error(error);
     return err(res, "Error al calcular el ingreso total");
+  }
+};
+
+/* =====================================================
+   PANEL EQUIPO (solo admin): ingreso y volumen de reservas DE CADA
+   profesional de la empresa, en un rango de fechas — para el panel
+   "Equipo" donde un admin/secretaria compara a todo el equipo.
+   Se apoya en los mismos criterios que ingresoTotal (precio vigente del
+   servicio vía $lookup, solo reservas "completada" cuentan como ingreso).
+===================================================== */
+export const estadisticasPorProfesional = async (req, res) => {
+  try {
+    const empresaId = toId(req.usuario.empresaId);
+
+    if (!esAdmin(req)) {
+      return err(
+        res,
+        "Solo un administrador puede ver el resumen del equipo",
+        403,
+      );
+    }
+
+    const { desde, hasta, servicioId } = req.query;
+    const hoy = new Date();
+    const { inicio: inicioMesActual } = rangoMes(hoy.getFullYear(), hoy.getMonth());
+
+    const inicio = desde ? new Date(`${desde}T00:00:00`) : inicioMesActual;
+    const fin = hasta ? new Date(`${hasta}T23:59:59`) : hoy;
+
+    const matchBase = {
+      empresa: empresaId,
+      fecha: { $gte: inicio, $lte: fin },
+    };
+    if (servicioId) matchBase.servicio = toId(servicioId);
+
+    const [barberos, ingresoPorBarbero, volumenPorBarbero] = await Promise.all([
+      usuarioModel
+        .find({ empresa: empresaId, rol: "barbero" })
+        .select("nombre apellido estado esAdmin perfilProfesional.fotoPerfil")
+        .sort({ nombre: 1 })
+        .lean(),
+
+      // Ingreso: solo reservas completadas, precio vigente del servicio
+      // (mismo criterio que ingresoTotal, para que los números calcen).
+      reservaModel.aggregate([
+        { $match: { ...matchBase, estado: "completada" } },
+        {
+          $lookup: {
+            from: "servicios",
+            localField: "servicio",
+            foreignField: "_id",
+            as: "servicioData",
+          },
+        },
+        { $unwind: { path: "$servicioData", preserveNullAndEmptyArrays: true } },
+        {
+          $group: {
+            _id: "$barbero",
+            ingresoServicios: { $sum: { $ifNull: ["$servicioData.precio", 0] } },
+            ingresoProductos: { $sum: { $ifNull: ["$totalProductos", 0] } },
+            ingresoExtras: { $sum: { $ifNull: ["$totalExtras", 0] } },
+            reservasCompletadas: { $sum: 1 },
+          },
+        },
+      ]),
+
+      // Volumen: todas las reservas "válidas" del periodo (agendadas,
+      // confirmadas, completadas) — para medir carga de trabajo, no ingreso.
+      reservaModel.aggregate([
+        { $match: { ...matchBase, estado: ESTADOS_VALIDOS } },
+        {
+          $group: {
+            _id: "$barbero",
+            reservasTotales: { $sum: 1 },
+            noAsistio: {
+              $sum: { $cond: [{ $eq: ["$estado", "no_asistio"] }, 1, 0] },
+            },
+          },
+        },
+      ]),
+
+      // noAsistio no cumple ESTADOS_VALIDOS (se excluye ahí), así que en
+      // realidad nunca va a sumar — se deja explícito con su propio conteo
+      // más abajo, no acá.
+    ]);
+
+    // "no_asistio" queda fuera de ESTADOS_VALIDOS a propósito (no es un
+    // servicio prestado), así que se cuenta aparte para no perder el dato.
+    const noAsistioPorBarbero = await reservaModel.aggregate([
+      { $match: { ...matchBase, estado: "no_asistio" } },
+      { $group: { _id: "$barbero", total: { $sum: 1 } } },
+    ]);
+
+    const mapaIngreso = new Map(
+      ingresoPorBarbero.map((r) => [String(r._id), r]),
+    );
+    const mapaVolumen = new Map(
+      volumenPorBarbero.map((r) => [String(r._id), r]),
+    );
+    const mapaNoAsistio = new Map(
+      noAsistioPorBarbero.map((r) => [String(r._id), r.total]),
+    );
+
+    const equipo = barberos.map((b) => {
+      const ing = mapaIngreso.get(String(b._id)) || {};
+      const vol = mapaVolumen.get(String(b._id)) || {};
+      const ingresoServicios = ing.ingresoServicios || 0;
+      const ingresoProductos = ing.ingresoProductos || 0;
+      const ingresoExtras = ing.ingresoExtras || 0;
+      const ingresoTotalBarbero = ingresoServicios + ingresoProductos + ingresoExtras;
+      const reservasCompletadas = ing.reservasCompletadas || 0;
+
+      return {
+        barberoId: b._id,
+        nombre: b.nombre,
+        apellido: b.apellido || "",
+        estado: b.estado,
+        esAdmin: b.esAdmin === true,
+        fotoPerfil: b.perfilProfesional?.fotoPerfil?.url || null,
+        ingresoServicios,
+        ingresoProductos,
+        ingresoExtras,
+        ingresoTotal: ingresoTotalBarbero,
+        reservasCompletadas,
+        reservasTotales: vol.reservasTotales || 0,
+        noAsistio: mapaNoAsistio.get(String(b._id)) || 0,
+        ticketPromedio:
+          reservasCompletadas > 0
+            ? Math.round(ingresoTotalBarbero / reservasCompletadas)
+            : 0,
+      };
+    });
+
+    const totalesEquipo = equipo.reduce(
+      (acc, p) => ({
+        ingresoTotal: acc.ingresoTotal + p.ingresoTotal,
+        reservasCompletadas: acc.reservasCompletadas + p.reservasCompletadas,
+        reservasTotales: acc.reservasTotales + p.reservasTotales,
+        noAsistio: acc.noAsistio + p.noAsistio,
+      }),
+      { ingresoTotal: 0, reservasCompletadas: 0, reservasTotales: 0, noAsistio: 0 },
+    );
+
+    return ok(res, {
+      rango: { desde: inicio, hasta: fin },
+      equipo: equipo.sort((a, b) => b.ingresoTotal - a.ingresoTotal),
+      totalesEquipo,
+    });
+  } catch (error) {
+    console.error("❌ Error estadisticasPorProfesional:", error);
+    return err(res, "Error al obtener el resumen del equipo");
+  }
+};
+
+/* =====================================================
+   ESTADÍSTICAS DE SERVICIOS
+   Página independiente enfocada en RENTABILIDAD por servicio, para que
+   un profesional (o el admin de una clínica con varios) sepa qué
+   servicios conviene mantener, promocionar, subir de precio o sacar
+   del catálogo. Todo lo que sale de acá es sobre el servicio, no sobre
+   quién lo hizo (para eso está /estadisticas/equipo).
+
+   Alcance: igual criterio que el resto del archivo — un profesional ve
+   solo lo suyo, un admin ve toda la empresa o puede acotar a un
+   profesional puntual con ?profesionalId=.
+===================================================== */
+
+/** Igual que filtroBarbero, pero permite a un admin acotar a UN
+ * profesional puntual (?profesionalId=) sin perder el resto de sus
+ * permisos. Un no-admin nunca puede pedir datos de otro profesional. */
+const filtroProfesionalServicios = (req, profesionalId) => {
+  if (!esAdmin(req)) return { barbero: toId(req.usuario.id) };
+  if (profesionalId) return { barbero: toId(profesionalId) };
+  return {};
+};
+
+/** % de cambio entre dos números, con manejo explícito de "no había
+ * nada antes" (sin eso, division por cero rompía el cálculo). */
+const variacionPorcentual = (actual, anterior) => {
+  if (!anterior) return actual > 0 ? 100 : 0;
+  return Math.round(((actual - anterior) / anterior) * 100);
+};
+
+/** Trae, para un rango de fechas ya armado (matchBase), un Map por
+ * servicio con: ingreso y cantidad de reservas completadas, minutos
+ * de silla ocupados (para "rentabilidad por hora"), volumen total
+ * válido del periodo, y fricción (canceladas + no-asistió). */
+const agregarPorServicio = async (matchBase) => {
+  const [ingresoAgg, volumenAgg, friccionAgg] = await Promise.all([
+    reservaModel.aggregate([
+      { $match: { ...matchBase, estado: "completada" } },
+      {
+        $lookup: {
+          from: "servicios",
+          localField: "servicio",
+          foreignField: "_id",
+          as: "servicioData",
+        },
+      },
+      { $unwind: { path: "$servicioData", preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: "$servicio",
+          ingreso: { $sum: { $ifNull: ["$servicioData.precio", 0] } },
+          cantidad: { $sum: 1 },
+          minutosOcupados: { $sum: { $ifNull: ["$duracion", 0] } },
+        },
+      },
+    ]),
+    reservaModel.aggregate([
+      { $match: { ...matchBase, estado: ESTADOS_VALIDOS } },
+      { $group: { _id: "$servicio", reservasTotales: { $sum: 1 } } },
+    ]),
+    reservaModel.aggregate([
+      { $match: { ...matchBase, estado: { $in: ["cancelada", "no_asistio"] } } },
+      { $group: { _id: "$servicio", friccion: { $sum: 1 } } },
+    ]),
+  ]);
+
+  const mapa = new Map();
+  const obtener = (id) => {
+    const clave = String(id);
+    if (!mapa.has(clave)) {
+      mapa.set(clave, {
+        ingreso: 0,
+        cantidad: 0,
+        minutosOcupados: 0,
+        reservasTotales: 0,
+        friccion: 0,
+      });
+    }
+    return mapa.get(clave);
+  };
+
+  for (const r of ingresoAgg) {
+    const entrada = obtener(r._id);
+    entrada.ingreso = r.ingreso;
+    entrada.cantidad = r.cantidad;
+    entrada.minutosOcupados = r.minutosOcupados;
+  }
+  for (const r of volumenAgg) obtener(r._id).reservasTotales = r.reservasTotales;
+  for (const r of friccionAgg) obtener(r._id).friccion = r.friccion;
+
+  return mapa;
+};
+
+export const estadisticasServicios = async (req, res) => {
+  try {
+    const empresaId = toId(req.usuario.empresaId);
+    const { desde, hasta, servicioId, profesionalId } = req.query;
+
+    if (!esAdmin(req) && profesionalId && profesionalId !== req.usuario.id) {
+      return err(
+        res,
+        "No tienes permiso para ver las estadísticas de otro profesional",
+        403,
+      );
+    }
+
+    const hoy = new Date();
+    const { inicio: inicioMesActual } = rangoMes(hoy.getFullYear(), hoy.getMonth());
+    const inicio = desde ? new Date(`${desde}T00:00:00`) : inicioMesActual;
+    const fin = hasta ? new Date(`${hasta}T23:59:59`) : hoy;
+
+    // Periodo anterior, de exactamente la misma duración, para calcular
+    // tendencias ("¿este servicio está subiendo o bajando?").
+    const duracionMs = Math.max(fin.getTime() - inicio.getTime(), 0);
+    const finAnterior = new Date(inicio.getTime() - 1);
+    const inicioAnterior = new Date(finAnterior.getTime() - duracionMs);
+
+    const filtroProf = filtroProfesionalServicios(req, profesionalId);
+    const matchBase = {
+      empresa: empresaId,
+      ...filtroProf,
+      fecha: { $gte: inicio, $lte: fin },
+    };
+    const matchAnterior = {
+      empresa: empresaId,
+      ...filtroProf,
+      fecha: { $gte: inicioAnterior, $lte: finAnterior },
+    };
+    if (servicioId) {
+      matchBase.servicio = toId(servicioId);
+      matchAnterior.servicio = toId(servicioId);
+    }
+
+    const [servicios, actualPorServicio, anteriorPorServicio] = await Promise.all([
+      servicioModel
+        .find({ empresa: empresaId })
+        .select("nombre precio categoria activo")
+        .sort({ nombre: 1 })
+        .lean(),
+      agregarPorServicio(matchBase),
+      agregarPorServicio(matchAnterior),
+    ]);
+
+    const vacio = {
+      ingreso: 0,
+      cantidad: 0,
+      minutosOcupados: 0,
+      reservasTotales: 0,
+      friccion: 0,
+    };
+
+    const listaBase = servicios.map((s) => {
+      const idStr = String(s._id);
+      const act = actualPorServicio.get(idStr) || vacio;
+      const ant = anteriorPorServicio.get(idStr) || vacio;
+
+      const horasOcupadas = act.minutosOcupados / 60;
+      const ticketPromedio = act.cantidad > 0 ? Math.round(act.ingreso / act.cantidad) : 0;
+      const ingresoPorHora = horasOcupadas > 0 ? Math.round(act.ingreso / horasOcupadas) : 0;
+      const baseFriccion = act.cantidad + act.friccion;
+      const tasaFriccion =
+        baseFriccion > 0 ? Math.round((act.friccion / baseFriccion) * 100) : 0;
+
+      let tendencia = "estable";
+      const variacionIngreso = variacionPorcentual(act.ingreso, ant.ingreso);
+      if (ant.cantidad === 0 && act.cantidad > 0) tendencia = "nuevo";
+      else if (act.cantidad === 0 && ant.cantidad > 0) tendencia = "sin_actividad";
+      else if (variacionIngreso >= 10) tendencia = "subiendo";
+      else if (variacionIngreso <= -10) tendencia = "bajando";
+
+      return {
+        servicioId: s._id,
+        nombre: s.nombre,
+        precioActual: s.precio,
+        activo: s.activo !== false,
+        ingreso: act.ingreso,
+        cantidad: act.cantidad,
+        reservasTotales: act.reservasTotales,
+        ticketPromedio,
+        ingresoPorHora,
+        tasaFriccion,
+        variacionIngreso,
+        variacionVolumen: variacionPorcentual(act.cantidad, ant.cantidad),
+        tendencia,
+      };
+    });
+
+    const ingresoTotalPeriodo = listaBase.reduce((acc, s) => acc + s.ingreso, 0);
+    const ingresoTotalAnterior = [...anteriorPorServicio.values()].reduce(
+      (acc, v) => acc + v.ingreso,
+      0,
+    );
+
+    const lista = listaBase
+      .map((s) => ({
+        ...s,
+        participacion:
+          ingresoTotalPeriodo > 0
+            ? Math.round((s.ingreso / ingresoTotalPeriodo) * 1000) / 10
+            : 0,
+      }))
+      .sort((a, b) => b.ingreso - a.ingreso);
+
+    const conVentas = lista.filter((s) => s.cantidad > 0);
+
+    const resumen = {
+      ingresoTotal: ingresoTotalPeriodo,
+      ingresoTotalAnterior,
+      variacionIngresoTotal: variacionPorcentual(ingresoTotalPeriodo, ingresoTotalAnterior),
+      ventasTotales: lista.reduce((acc, s) => acc + s.cantidad, 0),
+      ticketPromedioGeneral: conVentas.length
+        ? Math.round(
+            ingresoTotalPeriodo / lista.reduce((acc, s) => acc + s.cantidad, 0),
+          )
+        : 0,
+      servicioTopIngreso: conVentas[0] || null,
+      servicioTopVolumen:
+        [...conVentas].sort((a, b) => b.cantidad - a.cantidad)[0] || null,
+      servicioMenorIngreso: conVentas.length
+        ? [...conVentas].sort((a, b) => a.ingreso - b.ingreso)[0]
+        : null,
+      mayorCrecimiento:
+        conVentas.length > 1
+          ? [...conVentas].sort((a, b) => b.variacionIngreso - a.variacionIngreso)[0]
+          : null,
+      mayorCaida:
+        conVentas.length > 1
+          ? [...conVentas]
+              .filter((s) => s.tendencia === "bajando" || s.tendencia === "sin_actividad")
+              .sort((a, b) => a.variacionIngreso - b.variacionIngreso)[0] || null
+          : null,
+      mejorRentabilidadHora: conVentas.length
+        ? [...conVentas].sort((a, b) => b.ingresoPorHora - a.ingresoPorHora)[0]
+        : null,
+      serviciosSinVentas: lista.filter((s) => s.cantidad === 0).map((s) => s.nombre),
+    };
+
+    // ── Evolución mensual (últimos 6 meses, siempre "hoy" para atrás —
+    // independiente del rango de fechas elegido arriba, para que el
+    // gráfico de tendencia no se achique si el usuario filtra "Hoy") ──
+    const MESES_EVOLUCION = 6;
+    const inicioEvolucion = new Date(
+      hoy.getFullYear(),
+      hoy.getMonth() - (MESES_EVOLUCION - 1),
+      1,
+    );
+    inicioEvolucion.setHours(0, 0, 0, 0);
+
+    const matchEvolucion = {
+      empresa: empresaId,
+      ...filtroProf,
+      estado: "completada",
+      fecha: { $gte: inicioEvolucion, $lte: hoy },
+    };
+    if (servicioId) matchEvolucion.servicio = toId(servicioId);
+
+    const evolucionAgg = await reservaModel.aggregate([
+      { $match: matchEvolucion },
+      {
+        $lookup: {
+          from: "servicios",
+          localField: "servicio",
+          foreignField: "_id",
+          as: "servicioData",
+        },
+      },
+      { $unwind: { path: "$servicioData", preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: {
+            servicio: "$servicio",
+            anio: { $year: { date: "$fecha", timezone: ZONA } },
+            mes: { $month: { date: "$fecha", timezone: ZONA } },
+          },
+          ingreso: { $sum: { $ifNull: ["$servicioData.precio", 0] } },
+        },
+      },
+    ]);
+
+    const nombrePorServicioId = new Map(lista.map((s) => [String(s.servicioId), s.nombre]));
+
+    // Máximo 5 series en el gráfico (si hay un servicio filtrado, es la
+    // única serie) — más de eso deja de leerse y el propio criterio de
+    // paleta categórica de la app tiene un techo ahí.
+    const idsParaGrafico = servicioId
+      ? [String(servicioId)]
+      : lista.slice(0, 5).map((s) => String(s.servicioId));
+
+    const buckets = [];
+    for (let i = MESES_EVOLUCION - 1; i >= 0; i--) {
+      const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+      buckets.push({
+        anio: d.getFullYear(),
+        mes: d.getMonth() + 1,
+        label: d.toLocaleDateString("es-CL", { month: "short", year: "2-digit" }),
+      });
+    }
+
+    const evolucionMensual = buckets.map((b) => {
+      const punto = { mes: b.label };
+      for (const id of idsParaGrafico) {
+        const encontrado = evolucionAgg.find(
+          (e) =>
+            String(e._id.servicio) === id &&
+            e._id.anio === b.anio &&
+            e._id.mes === b.mes,
+        );
+        punto[nombrePorServicioId.get(id) || "Servicio"] = encontrado?.ingreso || 0;
+      }
+      return punto;
+    });
+
+    const seriesEvolucion = idsParaGrafico.map(
+      (id) => nombrePorServicioId.get(id) || "Servicio",
+    );
+
+    // ── Cruce por profesional (solo admin): quién genera cuánto en cada
+    // servicio — responde "ingresos generados por cada profesional según
+    // los servicios que realiza". ──
+    let porProfesional = [];
+    if (esAdmin(req)) {
+      const crossAgg = await reservaModel.aggregate([
+        { $match: { ...matchBase, estado: "completada" } },
+        {
+          $lookup: {
+            from: "servicios",
+            localField: "servicio",
+            foreignField: "_id",
+            as: "servicioData",
+          },
+        },
+        { $unwind: { path: "$servicioData", preserveNullAndEmptyArrays: true } },
+        {
+          $group: {
+            _id: { barbero: "$barbero", servicio: "$servicio" },
+            ingreso: { $sum: { $ifNull: ["$servicioData.precio", 0] } },
+            cantidad: { $sum: 1 },
+          },
+        },
+      ]);
+
+      const barberoIds = [...new Set(crossAgg.map((c) => String(c._id.barbero)))];
+      const barberos = barberoIds.length
+        ? await usuarioModel
+            .find({ _id: { $in: barberoIds } })
+            .select("nombre apellido")
+            .lean()
+        : [];
+      const nombrePorBarbero = new Map(
+        barberos.map((b) => [String(b._id), `${b.nombre} ${b.apellido || ""}`.trim()]),
+      );
+
+      porProfesional = crossAgg
+        .map((c) => ({
+          barberoId: c._id.barbero,
+          nombreBarbero: nombrePorBarbero.get(String(c._id.barbero)) || "Sin nombre",
+          servicioId: c._id.servicio,
+          nombreServicio: nombrePorServicioId.get(String(c._id.servicio)) || "Servicio",
+          ingreso: c.ingreso,
+          cantidad: c.cantidad,
+        }))
+        .sort((a, b) => b.ingreso - a.ingreso);
+    }
+
+    return ok(res, {
+      rango: { desde: inicio, hasta: fin },
+      rangoAnterior: { desde: inicioAnterior, hasta: finAnterior },
+      esAdmin: esAdmin(req),
+      servicios: lista,
+      resumen,
+      evolucionMensual,
+      seriesEvolucion,
+      porProfesional,
+    });
+  } catch (error) {
+    console.error("❌ Error estadisticasServicios:", error);
+    return err(res, "Error al obtener las estadísticas de servicios");
   }
 };
 

@@ -174,6 +174,38 @@ export const updatePerfil = async (req, res) => {
   }
 };
 
+/* =======================================================
+   🟢 EQUIPO: listado liviano de profesionales de la empresa, para el
+   panel "Equipo" del admin (selector de profesional, tarjetas de
+   resumen, etc.) — a diferencia de getUsuarios(), acá se filtra por
+   rol="barbero" directamente en la consulta (no trae clientes) y solo
+   se seleccionan los campos que la UI necesita.
+======================================================= */
+export const getBarberosDeEmpresa = async (req, res) => {
+  try {
+    const empresaId = req.usuario?.empresaId;
+    if (!empresaId) {
+      return res
+        .status(400)
+        .json({ message: "No se pudo identificar la empresa del usuario" });
+    }
+
+    const barberos = await usuarioModel
+      .find({ empresa: empresaId, rol: "barbero" })
+      .select(
+        "nombre apellido email telefono estado esAdmin perfilProfesional.fotoPerfil",
+      )
+      .sort({ nombre: 1 })
+      .lean();
+
+    res.json(barberos);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error al obtener el equipo", error: error.message });
+  }
+};
+
 export const updateUsuarioDesdeAdmin = async (req, res) => {
   try {
     const { nombre, apellido, telefono } = req.body;
@@ -223,6 +255,16 @@ export const updateUsuarioDesdeAdmin = async (req, res) => {
     if (correoNormalizado) datosActualizar.correo = correoNormalizado; // ← Guardar normalizado
     if (telefono) datosActualizar.telefono = telefono;
 
+    // 👇 NUEVO: permitir que un admin marque/desmarque a un profesional
+    // como también-admin (panel "Equipo"). Solo lo puede hacer alguien que
+    // YA es admin (si no, se ignora en silencio — falla hacia el lado
+    // seguro), y solo aplica a profesionales, no a clientes.
+    if (typeof req.body.esAdmin === "boolean") {
+      if (req.usuario?.esAdmin === true && usuario.rol === "barbero") {
+        datosActualizar.esAdmin = req.body.esAdmin;
+      }
+    }
+
     // 4. Actualizar
     const usuarioActualizado = await usuarioModel.findByIdAndUpdate(
       id,
@@ -263,6 +305,7 @@ export const updateUsuario = async (req, res) => {
       apellido,
       descripcion,
       aniosExperiencia,
+      esAdmin,
     } = req.body || {};
 
     const data = {};
@@ -273,6 +316,20 @@ export const updateUsuario = async (req, res) => {
     if (suscrito !== undefined) data.suscrito = suscrito;
     if (rol !== undefined) data.rol = rol;
     if (descripcion !== undefined) data.descripcion = descripcion;
+
+    // 👇 NUEVO: marcar/desmarcar a un profesional como también-admin
+    // (panel "Equipo"). Esta ruta ya está protegida con verificarRol()
+    // (solo esAdmin pasa), pero se revalida acá también por si el día de
+    // mañana se relaja ese middleware. multer manda los campos de texto
+    // como string, por eso se compara contra "true" además del booleano.
+    // Solo aplica a profesionales — nunca a un cliente, para que ese rol
+    // no termine con acceso a datos de toda la empresa por error.
+    if (esAdmin !== undefined && req.usuario?.esAdmin === true) {
+      const usuarioObjetivo = await Usuario.findById(id).select("rol");
+      if (usuarioObjetivo?.rol === "barbero") {
+        data.esAdmin = esAdmin === true || esAdmin === "true";
+      }
+    }
 
     // Campos anidados de perfilProfesional
     if (aniosExperiencia !== undefined)
@@ -432,6 +489,7 @@ export const crearBarbero = async (req, res) => {
       descripcion,
       password,
       confirmaPassword,
+      esAdmin, // 👈 NUEVO: opcional — solo se aplica si quien crea ya es admin
     } = req.body;
 
     const empresaId = req.usuario?.empresaId; // 👈 viene del token
@@ -486,6 +544,11 @@ export const crearBarbero = async (req, res) => {
       fotoPerfil = { url: resultado.secure_url, publicId: resultado.public_id };
     }
 
+    // multer manda los campos de texto como string (multipart/form-data),
+    // por eso se compara contra "true" además del booleano.
+    const esAdminNuevoBarbero =
+      req.usuario?.esAdmin === true && (esAdmin === true || esAdmin === "true");
+
     const nuevoBarbero = await Usuario.create({
       rut,
       nombre,
@@ -497,6 +560,7 @@ export const crearBarbero = async (req, res) => {
       empresa: empresaId, // 👈 agrega esto
       password: hashedPassword,
       perfilProfesional: { fotoPerfil },
+      esAdmin: esAdminNuevoBarbero,
     });
 
     const empresaBarbero = await empresaModel.findById(empresaId);

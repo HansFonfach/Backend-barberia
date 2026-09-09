@@ -11,6 +11,7 @@ import {
   crearCliente,
   cambiarEstadoUsuario,
   getBarberosPublicos,
+  getBarberosDeEmpresa,
   updatePerfil,
   getUsuarioByRutPublico,
   actualizarNotaCliente,
@@ -27,6 +28,8 @@ router.get("/rut/:rut", validarToken, getUsuarioByRut);
 router.get("/publico/:slug/rut/:rut", getUsuarioByRutPublico);
 router.get("/todosLosUsuarios", validarToken, getAllUsersWithSuscripcion);
 router.get("/misPuntos", validarToken, verMisPuntos);
+// Panel "Equipo" (solo admin) — listado liviano de profesionales
+router.get("/equipo/lista", validarToken, getBarberosDeEmpresa);
 router.put("/actualizarPerfil", validarToken, updatePerfil);
 router.put("/:id/notas", validarToken, actualizarNotaCliente);
 

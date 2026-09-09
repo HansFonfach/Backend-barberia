@@ -1064,15 +1064,42 @@ export const getReservasPorFechaBarbero = async (req, res) => {
     // (ej. una semana) en vez de un solo día — lo usa la vista de "Semana
     // completa" del panel de reservas. Si no viene, se comporta exactamente
     // igual que antes (un solo día).
-    const { fecha, hasta } = req.query;
-    const barberoId = req.usuario.id;
+    //
+    // 🔧 "barberoId" es opcional y SOLO lo puede usar un admin — permite
+    // ver la agenda de un profesional puntual del equipo ("<id>") o de
+    // todos a la vez ("todos"), para el panel "Equipo". Un usuario normal
+    // siempre ve solo la suya, sin importar qué mande acá (se ignora).
+    const { fecha, hasta, barberoId: barberoIdQuery } = req.query;
+    const empresaId = req.usuario.empresaId;
+    const esAdminUsuario = req.usuario.esAdmin === true;
+
+    let filtroBarbero;
+    if (esAdminUsuario && barberoIdQuery === "todos") {
+      filtroBarbero = {};
+    } else if (esAdminUsuario && barberoIdQuery) {
+      // Verificar que el profesional pedido sea de la MISMA empresa —
+      // nunca confiar en un id que viene del cliente sin validarlo.
+      const barberoObjetivo = await usuarioModel
+        .findOne({ _id: barberoIdQuery, empresa: empresaId, rol: "barbero" })
+        .select("_id");
+      if (!barberoObjetivo) {
+        return res
+          .status(403)
+          .json({ message: "Ese profesional no pertenece a tu equipo" });
+      }
+      filtroBarbero = { barbero: barberoIdQuery };
+    } else {
+      filtroBarbero = { barbero: req.usuario.id };
+    }
 
     const inicioDia = new Date(fecha + "T00:00:00");
     const finDia = new Date((hasta || fecha) + "T23:59:59");
 
-    // 1. Obtener todas las reservas del día
+    // 1. Obtener todas las reservas del día (siempre acotadas a la propia
+    // empresa, sin importar el filtro de barbero de arriba)
     const reservas = await Reserva.find({
-      barbero: barberoId,
+      empresa: empresaId,
+      ...filtroBarbero,
       fecha: { $gte: inicioDia, $lte: finDia },
       estado: { $ne: "cancelada" },
     })
@@ -1081,6 +1108,7 @@ export const getReservasPorFechaBarbero = async (req, res) => {
         "nombre apellido telefono rut email notasProfesional",
       )
       .populate("servicio", "nombre duracion precio _id")
+      .populate("barbero", "nombre apellido") // 👈 NUEVO: para poder mostrar de quién es cada reserva en la vista "todos"
       .sort({ fecha: 1 });
 
     // 2. Procesar cada reserva para incluir posición dentro de la suscripción
