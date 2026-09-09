@@ -1060,11 +1060,15 @@ export const getReservasActivas = async (req, res) => {
 };
 export const getReservasPorFechaBarbero = async (req, res) => {
   try {
-    const { fecha } = req.query;
+    // 🔧 "hasta" es opcional: si viene, trae el rango fecha→hasta completo
+    // (ej. una semana) en vez de un solo día — lo usa la vista de "Semana
+    // completa" del panel de reservas. Si no viene, se comporta exactamente
+    // igual que antes (un solo día).
+    const { fecha, hasta } = req.query;
     const barberoId = req.usuario.id;
 
     const inicioDia = new Date(fecha + "T00:00:00");
-    const finDia = new Date(fecha + "T23:59:59");
+    const finDia = new Date((hasta || fecha) + "T23:59:59");
 
     // 1. Obtener todas las reservas del día
     const reservas = await Reserva.find({
