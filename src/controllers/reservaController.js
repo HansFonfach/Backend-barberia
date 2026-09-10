@@ -1156,6 +1156,22 @@ export const getReservasPorFechaBarbero = async (req, res) => {
 
         let serviciosAcumulados = 0;
         const esCombo = sus.tipoPlan === "combo_visita_corte_barba";
+        // 🔧 FIX: los planes creados desde "Gestión de planes de suscripción"
+        // (tipoPlan "plan_personalizado", ej. "La Santa Dupla") cuentan
+        // 1 reserva = 1 servicio, SIN el peso especial de "duración >= 120
+        // min = 2 servicios" que usan los 4 planes viejos hardcodeados —
+        // mismo criterio que calcularEstadoPlanPersonalizado.js (usado en
+        // el resto del sistema: estado del cliente, dashboard, listado de
+        // Suscripciones). Antes esta función no distinguía el caso y le
+        // aplicaba el peso viejo igual, así que una reserva de 120+ min
+        // (ej. "Corte + perfilado barba", 15:00–17:00) contaba como 2/2 acá
+        // aunque el resto del sistema (correctamente) la contara como 1/2.
+        const esPersonalizado = sus.tipoPlan === "plan_personalizado";
+        const serviciosPermitidosPersonalizado = esPersonalizado
+          ? (sus.planSnapshot?.serviciosPermitidos || []).map((s) =>
+              s.toString(),
+            )
+          : [];
 
         for (const r of reservasDelCliente) {
           let peso = 0;
@@ -1163,8 +1179,16 @@ export const getReservasPorFechaBarbero = async (req, res) => {
           if (esCombo) {
             // Solo cuenta si es el servicio combo específico
             peso = r.servicio?.toString() === SERVICIO_COMBO_ID ? 1 : 0;
+          } else if (esPersonalizado) {
+            const cubierto =
+              serviciosPermitidosPersonalizado.length === 0 ||
+              serviciosPermitidosPersonalizado.includes(
+                r.servicio?.toString(),
+              );
+            peso = cubierto ? 1 : 0;
           } else {
-            // Plan creditos: duración >= 120 = 2 servicios
+            // Planes viejos hardcodeados (creditos/padre_e_hijo/barba):
+            // duración >= 120 = 2 servicios, comportamiento intacto.
             peso = r.duracion >= 120 ? 2 : 1;
           }
 
@@ -1175,7 +1199,12 @@ export const getReservasPorFechaBarbero = async (req, res) => {
         // Determinar si esta reserva específica está cubierta por la suscripción
         const esCubierta = esCombo
           ? reserva.servicio?._id?.toString() === SERVICIO_COMBO_ID
-          : true;
+          : esPersonalizado
+            ? serviciosPermitidosPersonalizado.length === 0 ||
+              serviciosPermitidosPersonalizado.includes(
+                reserva.servicio?._id?.toString(),
+              )
+            : true;
 
         return {
           ...reserva.toObject(),
@@ -1183,7 +1212,8 @@ export const getReservasPorFechaBarbero = async (req, res) => {
             ? {
                 posicion: serviciosAcumulados,
                 limite: sus.serviciosTotales,
-                esDobleServicio: !esCombo && reserva.duracion >= 120,
+                esDobleServicio:
+                  !esCombo && !esPersonalizado && reserva.duracion >= 120,
               }
             : null, // null = debe pagar, no está en el plan
         };
