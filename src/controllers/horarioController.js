@@ -13,6 +13,8 @@ import barberoServicioModel from "../models/barberoServicio.model.js";
 import suscripcionModel from "../models/suscripcion.model.js";
 import horarioModel from "../models/horario.model.js";
 import empresaModel from "../models/empresa.model.js";
+import feriadoEmpresaModel from "../models/feriadoEmpresa.model.js";
+import { resolverPrecioEspecial } from "../utils/precioEspecial.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -147,41 +149,6 @@ export const getHorasDisponibles = async (req, res) => {
 
     const duracionServicio = Number(barberoServicio.duracion);
 
-    /* ================= FERIADOS ================= */
-    const feriado = await verificarFeriadoConComportamiento(fecha);
-    let trabajaFeriado = false;
-
-    if (feriado?.comportamiento === "bloquear_todo") {
-      const inicioFeriado = fechaConsulta
-        .startOf("day")
-        .subtract(4, "hour")
-        .utc()
-        .toDate();
-      const finFeriado = fechaConsulta
-        .endOf("day")
-        .add(4, "hour")
-        .utc()
-        .toDate();
-
-      const excepcionFeriado = await ExcepcionHorarioModel.findOne({
-        barbero: barberoId,
-        tipo: "trabajo_feriado",
-        fecha: { $gte: inicioFeriado, $lt: finFeriado },
-      });
-
-      if (!excepcionFeriado) {
-        return res.json({
-          fecha,
-          horas: [],
-          esFeriado: true,
-          nombreFeriado: feriado.nombre,
-          mensaje: `Feriado: ${feriado.nombre}. No se trabaja este día.`,
-        });
-      }
-
-      trabajaFeriado = true;
-    }
-
     /* ================= BARBERO ================= */
     const barbero = await Usuario.findById(barberoId).populate(
       "horariosDisponibles",
@@ -193,6 +160,95 @@ export const getHorasDisponibles = async (req, res) => {
 
     /* ================= EMPRESA ================= */
     const empresaDoc = await empresaModel.findById(barbero.empresa);
+
+    /* ================= FERIADOS =================
+       El catálogo de feriados (fecha/nombre) sigue siendo compartido por
+       toda la plataforma — eso está bien, son feriados nacionales. Lo que
+       NO puede ser global es si ESTA empresa los trabaja: eso se resuelve
+       contra FeriadoEmpresa, scopeado a barbero.empresa. Si la empresa
+       nunca se pronunció sobre este feriado puntual, se trata como
+       cerrado — salvo que un profesional ya tuviera el opt-in individual
+       de antes de este cambio, en cuyo caso se respeta (no le apagamos
+       algo que ya tenía activado). */
+    const feriado = await verificarFeriadoConComportamiento(fecha);
+    let trabajaFeriado = false;
+    let excepcionFeriado = null;
+
+    if (feriado) {
+      const inicioFeriado = fechaConsulta
+        .startOf("day")
+        .subtract(4, "hour")
+        .utc()
+        .toDate();
+      const finFeriado = fechaConsulta
+        .endOf("day")
+        .add(4, "hour")
+        .utc()
+        .toDate();
+
+      const feriadoEmpresa = await feriadoEmpresaModel
+        .findOne({ empresa: barbero.empresa, feriado: feriado._id })
+        .lean();
+
+      let empresaAbierta;
+      if (feriadoEmpresa) {
+        empresaAbierta = feriadoEmpresa.habilitado === true;
+      } else {
+        const yaHabiaOptIn = await ExcepcionHorarioModel.exists({
+          barbero: barberoId,
+          tipo: "trabajo_feriado",
+          fecha: { $gte: inicioFeriado, $lt: finFeriado },
+        });
+        empresaAbierta = !!yaHabiaOptIn;
+      }
+
+      if (!empresaAbierta) {
+        return res.json({
+          fecha,
+          horas: [],
+          esFeriado: true,
+          nombreFeriado: feriado.nombre,
+          mensaje: `Feriado: ${feriado.nombre}. No se trabaja este día.`,
+        });
+      }
+
+      excepcionFeriado = await ExcepcionHorarioModel.findOne({
+        barbero: barberoId,
+        tipo: "trabajo_feriado",
+        fecha: { $gte: inicioFeriado, $lt: finFeriado },
+      });
+
+      if (!excepcionFeriado) {
+        return res.json({
+          fecha,
+          horas: [],
+          esFeriado: true,
+          nombreFeriado: feriado.nombre,
+          mensaje: `Feriado: ${feriado.nombre}. Este profesional no trabaja este día.`,
+        });
+      }
+
+      // Si el admin restringió los servicios disponibles este feriado y
+      // el que se está consultando no está en la lista, no hay nada que
+      // ofrecer — cortamos acá, antes de calcular ningún bloque.
+      if (excepcionFeriado.serviciosPermitidos?.length) {
+        const servicioPermitidoFeriado = excepcionFeriado.serviciosPermitidos
+          .map((s) => s.toString())
+          .includes(servicioId);
+
+        if (!servicioPermitidoFeriado) {
+          return res.json({
+            fecha,
+            horas: [],
+            esFeriado: true,
+            nombreFeriado: feriado.nombre,
+            mensaje: `Este servicio no está disponible en el feriado "${feriado.nombre}".`,
+          });
+        }
+      }
+
+      trabajaFeriado = true;
+    }
 
     /* ================= SUSCRIPCIÓN ================= */
     let suscripcionActiva = null;
@@ -237,14 +293,39 @@ export const getHorasDisponibles = async (req, res) => {
     }
 
     const diaSemana = fechaConsulta.day();
-    const horariosDelDia = barbero.horariosDisponibles.filter(
+    let horariosDelDia = barbero.horariosDisponibles.filter(
       (h) => Number(h.diaSemana) === diaSemana,
     );
+
+    // Un feriado con horario propio REEMPLAZA el horario semanal normal
+    // de ese día (no se combinan — es un horario aparte, como pidió el
+    // negocio). Si el admin no definió horario propio para este feriado,
+    // se sigue usando el horario habitual de ese día de la semana, tal
+    // como funcionaba antes de este cambio.
+    if (
+      trabajaFeriado &&
+      excepcionFeriado?.horaInicio &&
+      excepcionFeriado?.horaFin
+    ) {
+      horariosDelDia = [
+        {
+          horaInicio: excepcionFeriado.horaInicio,
+          horaFin: excepcionFeriado.horaFin,
+          colacionInicio: null,
+          colacionFin: null,
+          duracionBloque: horariosDelDia[0]?.duracionBloque || 30,
+          horasAncla: [],
+        },
+      ];
+    }
+
     if (!horariosDelDia.length) {
       return res.json({
         fecha,
         horas: [],
-        mensaje: "El barbero no trabaja este día",
+        mensaje: trabajaFeriado
+          ? "Este profesional no tiene un horario configurado para este feriado"
+          : "El barbero no trabaja este día",
       });
     }
 
@@ -534,6 +615,17 @@ export const getHorasDisponibles = async (req, res) => {
 
     const todasLasHoras = new Set([...horasDisponibles, ...horasReservadas]);
 
+    // Precio por hora: mismo cálculo que hace createReserva al confirmar
+    // (precio especial de feriado/hora extra si aplica, si no el precio
+    // normal del servicio), resuelto UNA vez acá para que el precio que
+    // ve el cliente en el listado sea exactamente el que se le va a
+    // cobrar — nunca un cálculo aparte en el frontend.
+    const servicioDoc = barberoServicio.servicio;
+    const excepcionesConPrecio = [
+      ...(excepcionFeriado ? [excepcionFeriado] : []),
+      ...horasExtra,
+    ];
+
     const horas = [...todasLasHoras].sort().reduce((acc, hora) => {
       const inicio = dayjs.tz(
         `${fecha} ${hora}`,
@@ -560,9 +652,22 @@ export const getHorasDisponibles = async (req, res) => {
       const capacidad = horasExtraSet.has(hora) ? 2 : 1;
       const ocupadas = conteoReservasPorHora[hora] || 0;
 
+      const precioEspecialHora = resolverPrecioEspecial(
+        excepcionesConPrecio,
+        hora,
+        servicioId,
+      );
+      const precio =
+        precioEspecialHora != null
+          ? precioEspecialHora
+          : servicioDoc?.calcularPrecioFinal
+            ? servicioDoc.calcularPrecioFinal(inicio.toDate())
+            : Number(servicioDoc?.precio ?? 0);
+
       acc.push({
         hora,
         estado: ocupadas >= 1 ? "reservada" : "disponible",
+        precio,
       });
       return acc;
     }, []);

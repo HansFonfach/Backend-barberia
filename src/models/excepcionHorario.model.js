@@ -38,6 +38,28 @@ const ExcepcionHorarioSchema = new Schema(
         ref: "Servicio",
       },
     ],
+
+    // Precio distinto al normal del servicio, solo para esta excepción
+    // (feriado u hora extra) — opcional. Si un servicio no aparece acá,
+    // se usa su precio normal (con su descuento vigente si corresponde),
+    // exactamente igual que hoy. No reemplaza el descuento por
+    // porcentaje del servicio: ese es "cóbrame menos para atraer
+    // clientes", esto es "cóbrame más porque este horario vale más" —
+    // son cosas distintas a propósito.
+    preciosEspeciales: {
+      type: [
+        {
+          servicio: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Servicio",
+            required: true,
+          },
+          precio: { type: Number, required: true, min: 0 },
+        },
+      ],
+      default: [],
+    },
+
     // Para vacaciones (rango)
     fechaInicio: Date,
     fechaFin: Date,

@@ -8,6 +8,8 @@ import {
   obtenerExcepcionesPorDia,
   toggleTrabajoFeriado, // 👈 nuevo
   obtenerFeriadosConEstado, // 👈 nuevo
+  configurarTrabajoFeriado, // 👈 panel de equipo (admin)
+  quitarTrabajoFeriado, // 👈 panel de equipo (admin)
 } from "../controllers/excepcionHorarioController.js";
 
 const router = Router();
@@ -29,6 +31,12 @@ router.post("/eliminar-hora-extra", validarToken, eliminarHoraExtra);
 // 👇 nuevas, ANTES de la genérica
 router.post("/feriado/toggle", validarToken, toggleTrabajoFeriado);
 router.get("/feriado/:barberoId", validarToken, obtenerFeriadosConEstado);
+
+// Panel de equipo (admin): detalle por profesional de un feriado —
+// horario propio, servicios disponibles y precio especial, todo opcional.
+router.post("/feriado/configurar", validarToken, configurarTrabajoFeriado);
+router.post("/feriado/quitar", validarToken, quitarTrabajoFeriado);
+
 // Ruta para obtener excepciones por día (se mantiene igual)
 router.get("/:barberoId", validarToken, obtenerExcepcionesPorDia);
 

@@ -4,6 +4,8 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
 import feriados from "../models/feriados.js";
+import usuarioModel from "../models/usuario.model.js";
+import feriadoEmpresaModel from "../models/feriadoEmpresa.model.js";
 
 
 dayjs.extend(utc);
@@ -94,6 +96,7 @@ export const agregarHoraExtra = async (req, res) => {
     horaInicio,
     horaFin,
     serviciosPermitidos = [],
+    preciosEspeciales = [], // ✅ opcional: [{ servicio, precio }]
   } = req.body;
   try {
     const fechaUTC = fechaChileToUTC(fecha);
@@ -105,6 +108,7 @@ export const agregarHoraExtra = async (req, res) => {
       horaFin,
       tipo: "extra",
       serviciosPermitidos, // ✅
+      preciosEspeciales, // ✅
     });
 
     res.status(201).json({
@@ -149,7 +153,7 @@ export const eliminarHoraExtra = async (req, res) => {
 // No permite dejar afuera reservas que ya se hicieron dentro de ella:
 // si alguna reserva activa terminaría después del nuevo horaFin, se rechaza.
 export const actualizarHoraExtra = async (req, res) => {
-  const { barbero, fecha, horaInicio, horaFin, serviciosPermitidos } =
+  const { barbero, fecha, horaInicio, horaFin, serviciosPermitidos, preciosEspeciales } =
     req.body;
 
   if (!barbero || !fecha || !horaInicio || !horaFin) {
@@ -230,6 +234,9 @@ export const actualizarHoraExtra = async (req, res) => {
     horaExtra.horaFin = horaFin;
     if (Array.isArray(serviciosPermitidos)) {
       horaExtra.serviciosPermitidos = serviciosPermitidos;
+    }
+    if (Array.isArray(preciosEspeciales)) {
+      horaExtra.preciosEspeciales = preciosEspeciales;
     }
     await horaExtra.save();
 
@@ -530,6 +537,258 @@ export const obtenerFeriadosConEstado = async (req, res) => {
     console.error("❌ Error en obtenerFeriadosConEstado:", error);
     res.status(500).json({
       message: "Error al obtener feriados",
+      error: error.message,
+    });
+  }
+};
+
+/* =====================================================
+   CONFIGURACIÓN DETALLADA DE FERIADO POR PROFESIONAL (admin)
+
+   A diferencia de toggleTrabajoFeriado (el interruptor simple de
+   siempre, que cualquier profesional sigue pudiendo usar para sí
+   mismo), esta función es la que usa un admin/secretaria desde el
+   panel de equipo para armar el detalle de UN profesional en UN
+   feriado: horario propio (opcional), servicios disponibles
+   (opcional) y precio especial por servicio (opcional). Si no se
+   manda horario o servicios, ese profesional sigue trabajando con
+   su horario y servicios habituales — nada que configurar de más.
+===================================================== */
+
+/** Revisa si alguna reserva YA agendada quedaría fuera de la nueva
+ * configuración (horario más acotado, o un servicio que deja de estar
+ * permitido). Devuelve la lista de conflictos, vacía si no hay ninguno. */
+const conflictosPorConfiguracion = async (
+  barberoId,
+  fecha,
+  { horaInicio, horaFin, serviciosPermitidos },
+) => {
+  const { inicioUTC, finUTC } = rangoDiaChileUTC(fecha);
+
+  const reservasDelDia = await Reserva.find({
+    barbero: barberoId,
+    fecha: { $gte: inicioUTC, $lte: finUTC },
+    estado: { $in: ["pendiente", "confirmada"] },
+  }).populate("servicio", "nombre");
+
+  if (!reservasDelDia.length) return [];
+
+  const conflictos = [];
+
+  for (const r of reservasDelDia) {
+    const horaReserva = dayjs(r.fecha).tz("America/Santiago").format("HH:mm");
+    const finReserva = dayjs(r.fecha)
+      .tz("America/Santiago")
+      .add(r.duracion || 30, "minute")
+      .format("HH:mm");
+
+    const fueraDeHorario =
+      horaInicio &&
+      horaFin &&
+      (horaReserva < horaInicio || finReserva > horaFin);
+
+    const servicioNoPermitido =
+      Array.isArray(serviciosPermitidos) &&
+      serviciosPermitidos.length > 0 &&
+      !serviciosPermitidos.map(String).includes(String(r.servicio?._id));
+
+    if (fueraDeHorario || servicioNoPermitido) {
+      conflictos.push({
+        id: r._id,
+        hora: horaReserva,
+        servicio: r.servicio?.nombre || "Servicio",
+        motivo: fueraDeHorario
+          ? "queda fuera del nuevo horario"
+          : "el servicio ya no estaría disponible",
+      });
+    }
+  }
+
+  return conflictos;
+};
+
+export const configurarTrabajoFeriado = async (req, res) => {
+  const {
+    barberoId,
+    fecha,
+    horaInicio,
+    horaFin,
+    serviciosPermitidos,
+    preciosEspeciales,
+  } = req.body;
+
+  if (!req.usuario?.esAdmin) {
+    return res.status(403).json({
+      message:
+        "Solo un administrador puede configurar el equipo para un feriado",
+    });
+  }
+
+  if (!barberoId || !fecha) {
+    return res
+      .status(400)
+      .json({ message: "barberoId y fecha son requeridos" });
+  }
+
+  try {
+    // El profesional tiene que ser de la misma empresa que el admin que
+    // está configurando — nunca confiar en un barberoId que llega del
+    // cliente sin verificar a quién pertenece.
+    const barbero = await usuarioModel.findOne({
+      _id: barberoId,
+      empresa: req.usuario.empresaId,
+      rol: "barbero",
+    });
+
+    if (!barbero) {
+      return res
+        .status(403)
+        .json({ message: "Ese profesional no pertenece a tu empresa" });
+    }
+
+    const { inicioUTC, finUTC } = rangoDiaChileUTC(fecha);
+
+    const feriadoDelDia = await feriados.findOne({
+      fecha: { $gte: inicioUTC, $lte: finUTC },
+      activo: true,
+    });
+
+    if (!feriadoDelDia) {
+      return res.status(400).json({ message: "Esa fecha no es un feriado" });
+    }
+
+    // La empresa tiene que haber habilitado este feriado primero — no se
+    // puede configurar a un profesional para un día que la empresa
+    // todavía tiene cerrado.
+    const feriadoEmpresa = await feriadoEmpresaModel.findOne({
+      empresa: req.usuario.empresaId,
+      feriado: feriadoDelDia._id,
+    });
+
+    if (!feriadoEmpresa?.habilitado) {
+      return res.status(400).json({
+        message: `Primero debes habilitar el feriado "${feriadoDelDia.nombre}" para tu empresa`,
+      });
+    }
+
+    if (horaInicio && horaFin && horaFin <= horaInicio) {
+      return res
+        .status(400)
+        .json({ message: "horaFin debe ser posterior a horaInicio" });
+    }
+
+    const conflictos = await conflictosPorConfiguracion(barberoId, fecha, {
+      horaInicio,
+      horaFin,
+      serviciosPermitidos,
+    });
+
+    if (conflictos.length) {
+      return res.status(409).json({
+        message:
+          "Ya hay reservas ese día que quedarían fuera de esta configuración. Revísalas antes de guardar.",
+        conflictos,
+      });
+    }
+
+    const datos = {
+      barbero: barberoId,
+      tipo: "trabajo_feriado",
+      fecha: fechaChileToUTC(fecha),
+      motivo: `Trabaja el feriado ${feriadoDelDia.nombre}`,
+      // null (no undefined) a propósito: si el admin desmarca "horario
+      // propio" después de haberlo configurado, esto SÍ borra el valor
+      // anterior en la base — con undefined, Mongoose lo habría ignorado
+      // y habría dejado pegado el horario viejo.
+      horaInicio: horaInicio || null,
+      horaFin: horaFin || null,
+      serviciosPermitidos: Array.isArray(serviciosPermitidos)
+        ? serviciosPermitidos
+        : [],
+      preciosEspeciales: Array.isArray(preciosEspeciales)
+        ? preciosEspeciales
+        : [],
+    };
+
+    const excepcion = await excepcionHorario.findOneAndUpdate(
+      {
+        barbero: barberoId,
+        tipo: "trabajo_feriado",
+        fecha: { $gte: inicioUTC, $lte: finUTC },
+      },
+      datos,
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
+
+    return res.status(200).json({
+      message: `${barbero.nombre} queda configurado para trabajar el feriado "${feriadoDelDia.nombre}"`,
+      excepcion,
+    });
+  } catch (error) {
+    console.error("❌ Error en configurarTrabajoFeriado:", error);
+    res.status(500).json({
+      message: "Error al configurar el feriado",
+      error: error.message,
+    });
+  }
+};
+
+export const quitarTrabajoFeriado = async (req, res) => {
+  const { barberoId, fecha } = req.body;
+
+  if (!req.usuario?.esAdmin) {
+    return res.status(403).json({
+      message:
+        "Solo un administrador puede quitar a un profesional de un feriado",
+    });
+  }
+
+  if (!barberoId || !fecha) {
+    return res
+      .status(400)
+      .json({ message: "barberoId y fecha son requeridos" });
+  }
+
+  try {
+    const barbero = await usuarioModel.findOne({
+      _id: barberoId,
+      empresa: req.usuario.empresaId,
+      rol: "barbero",
+    });
+
+    if (!barbero) {
+      return res
+        .status(403)
+        .json({ message: "Ese profesional no pertenece a tu empresa" });
+    }
+
+    const { inicioUTC, finUTC } = rangoDiaChileUTC(fecha);
+
+    const reservasDelDia = await Reserva.countDocuments({
+      barbero: barberoId,
+      fecha: { $gte: inicioUTC, $lte: finUTC },
+      estado: { $in: ["pendiente", "confirmada"] },
+    });
+
+    if (reservasDelDia > 0) {
+      return res.status(409).json({
+        message: `${barbero.nombre} ya tiene ${reservasDelDia} reserva(s) ese día. Reagéndalas o cancélalas antes de quitarlo del feriado.`,
+      });
+    }
+
+    await excepcionHorario.findOneAndDelete({
+      barbero: barberoId,
+      tipo: "trabajo_feriado",
+      fecha: { $gte: inicioUTC, $lte: finUTC },
+    });
+
+    return res.status(200).json({
+      message: `${barbero.nombre} ya no trabaja ese feriado`,
+    });
+  } catch (error) {
+    console.error("❌ Error en quitarTrabajoFeriado:", error);
+    res.status(500).json({
+      message: "Error al quitar el feriado",
       error: error.message,
     });
   }

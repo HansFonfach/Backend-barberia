@@ -29,6 +29,7 @@ import { getHorasDisponibles } from "./horarioController.js";
 import { validarDisponibilidad } from "../helpers/validarDisponibilidad.js";
 import reservaModel from "../models/reserva.model.js";
 import productoModel from "../models/producto.Model.js";
+import { obtenerPrecioEspecial } from "../utils/precioEspecial.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -286,11 +287,22 @@ export const createReserva = async (req, res) => {
     const { duracion: duracionServicio, intervaloMinimo = 15 } =
       barberoServicio;
 
-    // El precio viene del servicio poblado, no de BarberoServicio
+    // El precio viene del servicio poblado, no de BarberoServicio — salvo
+    // que exista un precio especial configurado para este feriado/hora
+    // extra puntual, en cuyo caso ese manda. Si no hay ninguno (el caso
+    // normal, hoy el único), sigue exactamente el cálculo de siempre.
     const servicioDoc = barberoServicio.servicio;
-    const precioServicio = servicioDoc?.calcularPrecioFinal
-      ? servicioDoc.calcularPrecioFinal(inicioReservaChile.toDate())
-      : Number(servicioDoc?.precio ?? 0);
+    const precioEspecial = await obtenerPrecioEspecial(
+      barbero,
+      servicio,
+      inicioReservaChile.toDate(),
+    );
+    const precioServicio =
+      precioEspecial != null
+        ? precioEspecial
+        : servicioDoc?.calcularPrecioFinal
+          ? servicioDoc.calcularPrecioFinal(inicioReservaChile.toDate())
+          : Number(servicioDoc?.precio ?? 0);
 
     const nombreServicio = barberoServicio.servicio.nombre;
     const finReservaChile = inicioReservaChile.add(duracionServicio, "minute");
