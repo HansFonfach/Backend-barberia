@@ -718,6 +718,170 @@ export const sendRecordatorioPagoEmail = async (empresa, { tipo }) => {
   });
 };
 
+// ─────────────────────────────────────────────
+// EMAIL: Pago acreditado (panel super-admin → negocio)
+// Se manda cuando Hans registra un pago de la mensualidad: confirma que se
+// recibió, que el plan se renovó por 1 mes y hasta cuándo queda cubierto.
+// ─────────────────────────────────────────────
+export const sendPagoAcreditadoEmail = async (
+  empresa,
+  { monto, fechaPago, proximoPago, reactivada = false },
+) => {
+  const destinatario = empresa?.correo;
+  if (!destinatario) return;
+
+  const esc = (s) =>
+    String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+  const fmtFecha = (f) =>
+    new Date(f).toLocaleDateString("es-CL", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "America/Santiago",
+    });
+
+  const nombre = esc(empresa.nombre);
+  const montoTxt = `$${Number(monto).toLocaleString("es-CL")}`;
+  const fechaPagoTxt = fmtFecha(fechaPago);
+  const proximoTxt = proximoPago ? fmtFecha(proximoPago) : null;
+  const panelUrl = `https://www.agendafonfach.cl/${empresa.slug}/admin`;
+
+  const fila = (label, valor, ultima = false) => `
+    <tr>
+      <td style="padding:14px 20px;font-size:14px;color:#6b7280;${ultima ? "" : "border-bottom:1px solid #eef0f3;"}">${label}</td>
+      <td align="right" style="padding:14px 20px;font-size:14px;font-weight:bold;color:#111827;${ultima ? "" : "border-bottom:1px solid #eef0f3;"}">${valor}</td>
+    </tr>`;
+
+  const avisoReactivada = reactivada
+    ? `
+      <tr><td style="padding:0 40px 24px;">
+        <div style="background:#eff6ff;border-left:4px solid #2563eb;padding:14px 16px;border-radius:6px;">
+          <p style="margin:0;font-size:14px;color:#1e3a8a;line-height:1.6;">
+            <strong>Tu acceso fue reactivado.</strong> Tú y tus clientes ya pueden volver a usar el sistema con normalidad.
+          </p>
+        </div>
+      </td></tr>`
+    : "";
+
+  const html = `<!DOCTYPE html>
+  <html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Pago acreditado</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+      Recibimos tu pago de ${montoTxt}. Tu plan quedó renovado por 1 mes.
+    </div>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f4f6">
+      <tr><td align="center" style="padding:32px 16px;">
+        <table width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff"
+          style="max-width:600px;width:100%;border-radius:12px;overflow:hidden;">
+
+          <tr>
+            <td style="background:#111827;padding:22px 40px;">
+              <p style="margin:0;color:#ffffff;font-size:18px;font-weight:bold;letter-spacing:0.3px;">Agenda Fonfach</p>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding:40px 40px 8px;">
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" width="64" height="64" bgcolor="#dcfce7"
+                    style="width:64px;height:64px;border-radius:32px;font-size:32px;line-height:64px;color:#16a34a;font-weight:bold;">&#10003;</td>
+                </tr>
+              </table>
+              <h1 style="margin:20px 0 8px;font-size:26px;color:#111827;">¡Pago acreditado!</h1>
+              <p style="margin:0;font-size:15px;color:#6b7280;line-height:1.6;">
+                Hola <strong style="color:#111827;">${nombre}</strong>, recibimos tu pago y tu plan quedó
+                <strong style="color:#111827;">renovado por 1 mes</strong>.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:28px 40px 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                style="border:1px solid #eef0f3;border-radius:10px;background:#fafafa;">
+                ${fila("Monto acreditado", montoTxt)}
+                ${fila("Fecha de pago", fechaPagoTxt)}
+                ${fila("Periodo renovado", "1 mes")}
+                ${proximoTxt ? fila("Próximo vencimiento", proximoTxt, true) : ""}
+              </table>
+            </td>
+          </tr>
+
+          ${avisoReactivada}
+
+          <tr>
+            <td style="padding:0 40px 8px;">
+              <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:14px 16px;border-radius:6px;">
+                <p style="margin:0;font-size:14px;color:#166534;line-height:1.6;">
+                  Tu servicio sigue funcionando con total normalidad. No tienes que hacer nada más.
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding:24px 40px 8px;">
+              <a href="${panelUrl}"
+                style="display:inline-block;padding:14px 32px;background-color:#111827;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:15px;">
+                Ir a mi panel
+              </a>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:24px 40px 36px;">
+              <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.6;text-align:center;">
+                Guarda este correo como comprobante de tu pago.<br/>
+                ¿Tienes alguna duda? Respóndenos este correo y te ayudamos.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background:#f9fafb;padding:18px 40px;text-align:center;border-top:1px solid #eef0f3;">
+              <p style="margin:0;font-size:12px;color:#9ca3af;">© Agenda Fonfach · agendafonfach.cl</p>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+  </html>`;
+
+  const text = [
+    `¡Pago acreditado!`,
+    ``,
+    `Hola ${empresa.nombre}, recibimos tu pago y tu plan quedó renovado por 1 mes.`,
+    ``,
+    `Monto acreditado: ${montoTxt}`,
+    `Fecha de pago: ${fechaPagoTxt}`,
+    `Periodo renovado: 1 mes`,
+    proximoTxt ? `Próximo vencimiento: ${proximoTxt}` : null,
+    reactivada ? `\nTu acceso fue reactivado.` : null,
+    ``,
+    `Tu servicio sigue funcionando con normalidad. Panel: ${panelUrl}`,
+  ]
+    .filter((l) => l !== null)
+    .join("\n");
+
+  return await sendBaseEmail({
+    to: destinatario,
+    subject: "✅ Pago acreditado – tu plan fue renovado por 1 mes",
+    html,
+    text,
+  });
+};
+
 export const sendPostServiceCareEmail = async (to, data) => {
   const {
     nombreCliente,

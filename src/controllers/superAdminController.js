@@ -2,6 +2,17 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { TOKEN_SECRET } from "../config.js";
 import Empresa from "../models/empresa.model.js";
+import PagoEmpresa from "../models/pagoEmpresa.model.js";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
+import {
+  sendPagoAcreditadoEmail,
+  sendRecordatorioPagoEmail,
+} from "./mailController.js";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const ESTADOS_EMPRESA = ["activo", "inactivo"];
 const ESTADOS_SUSCRIPCION = ["trial", "activo", "suspendido", "cancelado"];
@@ -70,7 +81,7 @@ export const listarEmpresas = async (req, res) => {
   try {
     const empresas = await Empresa.find(
       {},
-      "nombre slug rubro tipo estado estadoSuscripcion cuotaMensual fechaPago ultimoPago proximoPago suspendidaDesde motivoSuspension trial creadoEn",
+      "nombre slug correo rubro tipo estado estadoSuscripcion cuotaMensual fechaPago ultimoPago proximoPago suspendidaDesde motivoSuspension trial creadoEn",
     )
       .sort({ nombre: 1 })
       .lean();
@@ -190,7 +201,7 @@ export const actualizarCobro = async (req, res) => {
 export const registrarPago = async (req, res) => {
   try {
     const { id } = req.params;
-    const { monto, notas } = req.body;
+    const { monto, notas, enviarCorreo = true } = req.body;
 
     const empresa = await Empresa.findById(id);
     if (!empresa) {
@@ -220,7 +231,10 @@ export const registrarPago = async (req, res) => {
     empresa.proximoPago = proximo;
 
     // Si estaba suspendida por no pago, un pago registrado la reactiva sola.
-    if (["suspendido", "cancelado"].includes(empresa.estadoSuscripcion)) {
+    const estabaSuspendida = ["suspendido", "cancelado"].includes(
+      empresa.estadoSuscripcion,
+    );
+    if (estabaSuspendida) {
       empresa.estadoSuscripcion = "activo";
       empresa.suspendidaDesde = null;
       empresa.motivoSuspension = "";
@@ -228,10 +242,119 @@ export const registrarPago = async (req, res) => {
 
     await empresa.save();
 
-    return res.json({ message: "Pago registrado", empresa });
+    // Si este negocio tenía un cobro pendiente en la colección PagoEmpresa
+    // (el que usa el cron de correos automáticos), se cierra como pagado:
+    // si no, el cron seguiría viéndolo como "atrasado" y lo suspendería a
+    // los 3 días aunque ya hayas registrado el pago. Se cierra solo el más
+    // antiguo (un pago salda una mensualidad). Es "best effort": el pago ya
+    // quedó guardado arriba, así que si esto falla no se rompe nada.
+    try {
+      const pendiente = await PagoEmpresa.findOne({
+        empresa: empresa._id,
+        estado: { $in: ["pendiente", "atrasado"] },
+      }).sort({ fechaVencimiento: 1 });
+
+      if (pendiente) {
+        pendiente.estado = "pagado";
+        pendiente.fechaPago = ahora;
+        if (!pendiente.monto) pendiente.monto = montoFinal;
+        await pendiente.save();
+      }
+    } catch (err) {
+      console.error("No se pudo cerrar el cobro pendiente (PagoEmpresa):", err.message);
+    }
+
+    // Correo de "pago acreditado" al negocio. Un fallo acá nunca debe
+    // deshacer el pago: se informa en la respuesta para que el panel avise.
+    let correo = { enviado: false, destino: null, motivo: "" };
+    if (enviarCorreo !== false) {
+      if (!empresa.correo) {
+        correo.motivo = "El negocio no tiene un correo registrado";
+      } else {
+        try {
+          const resultado = await sendPagoAcreditadoEmail(empresa, {
+            monto: montoFinal,
+            fechaPago: ahora,
+            proximoPago: proximo,
+            reactivada: estabaSuspendida,
+          });
+          if (resultado?.error) {
+            throw new Error(resultado.error.message || "Error del proveedor de correo");
+          }
+          correo = { enviado: true, destino: empresa.correo, motivo: "" };
+        } catch (err) {
+          console.error("Error enviando correo de pago acreditado:", err.message);
+          correo.motivo = "No se pudo enviar el correo";
+        }
+      }
+    } else {
+      correo.motivo = "Envío de correo desactivado para este pago";
+    }
+
+    return res.json({ message: "Pago registrado", empresa, correo });
   } catch (error) {
     console.error("Error al registrar pago:", error);
     return res.status(500).json({ message: "Error al registrar el pago" });
+  }
+};
+
+/* =====================================================
+   AVISO MANUAL: "TU PLAN VENCE HOY"
+   Mismo correo que manda el cron automático (tipo vencimiento_hoy), pero
+   a pedido desde el panel. Sirve, por ejemplo, para negocios que todavía
+   no tienen su cobro cargado en PagoEmpresa y por eso el cron no los ve.
+===================================================== */
+export const enviarRecordatorioVencimiento = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const empresa = await Empresa.findById(id);
+    if (!empresa) {
+      return res.status(404).json({ message: "Empresa no encontrada" });
+    }
+    if (!empresa.correo) {
+      return res.status(400).json({
+        message: `${empresa.nombre} no tiene un correo registrado, no hay a dónde enviarlo`,
+      });
+    }
+
+    const resultado = await sendRecordatorioPagoEmail(empresa, {
+      tipo: "vencimiento_hoy",
+    });
+    if (resultado?.error) {
+      console.error("Resend rechazó el aviso de vencimiento:", resultado.error);
+      return res.status(502).json({ message: "El proveedor de correo rechazó el envío" });
+    }
+
+    // Si este negocio tiene un cobro pendiente que vence HOY, se marca el
+    // aviso de "vence hoy" como ya enviado para que el cron de las 9:00 no
+    // lo repita. Si el cobro vence otro día, no se toca (el cron seguirá
+    // mandando sus avisos normales ese día).
+    try {
+      const hoy = dayjs().tz("America/Santiago").startOf("day");
+      const pendientes = await PagoEmpresa.find({
+        empresa: empresa._id,
+        estado: { $in: ["pendiente", "atrasado"] },
+      });
+      for (const pago of pendientes) {
+        const vence = dayjs(pago.fechaVencimiento).tz("America/Santiago").startOf("day");
+        if (vence.diff(hoy, "day") === 0 && !pago.notificaciones?.diaVencimiento) {
+          pago.notificaciones.diaVencimiento = true;
+          pago.markModified("notificaciones");
+          await pago.save();
+        }
+      }
+    } catch (err) {
+      console.error("No se pudo marcar el aviso en PagoEmpresa:", err.message);
+    }
+
+    return res.json({
+      message: `Aviso enviado a ${empresa.correo}`,
+      destino: empresa.correo,
+    });
+  } catch (error) {
+    console.error("Error al enviar aviso de vencimiento:", error);
+    return res.status(500).json({ message: "No se pudo enviar el aviso" });
   }
 };
 

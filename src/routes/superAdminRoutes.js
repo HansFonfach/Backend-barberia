@@ -7,6 +7,7 @@ import {
   actualizarEstadoSuscripcion,
   actualizarCobro,
   registrarPago,
+  enviarRecordatorioVencimiento,
   resumenGanancias,
 } from "../controllers/superAdminController.js";
 import { verificarSuperAdmin } from "../middlewares/verificarSuperAdmin.js";
@@ -23,6 +24,11 @@ router.patch("/empresas/:id/estado", verificarSuperAdmin, actualizarEstadoEmpres
 router.patch("/empresas/:id/suscripcion", verificarSuperAdmin, actualizarEstadoSuscripcion);
 router.patch("/empresas/:id/cobro", verificarSuperAdmin, actualizarCobro);
 router.post("/empresas/:id/pago", verificarSuperAdmin, registrarPago);
+router.post(
+  "/empresas/:id/recordatorio-vencimiento",
+  verificarSuperAdmin,
+  enviarRecordatorioVencimiento,
+);
 router.get("/ganancias", verificarSuperAdmin, resumenGanancias);
 
 export default router;
