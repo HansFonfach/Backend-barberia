@@ -35,6 +35,7 @@ import progresoClienteRoutes from "./routes/progresoClienteRoutes.js";
 import entrenamientoPersonalRoutes from "./routes/entrenamientoPersonalRoutes.js";
 import diarioAlimenticioRoutes from "./routes/diarioAlimenticioRoutes.js";
 import superAdminRoutes from "./routes/superAdminRoutes.js";
+import codigoDescuentoRoutes from "./routes/codigoDescuentoRoutes.js";
 
 const app = express();
 app.use(cookieParser());
@@ -105,5 +106,6 @@ app.use("/progreso-cliente", progresoClienteRoutes);
 app.use("/entrenamiento-personal", entrenamientoPersonalRoutes);
 app.use("/diario-alimenticio", diarioAlimenticioRoutes);
 app.use("/superadmin", superAdminRoutes);
+app.use("/codigos-descuento", codigoDescuentoRoutes);
 
 export default app;

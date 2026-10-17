@@ -30,6 +30,7 @@ import { validarDisponibilidad } from "../helpers/validarDisponibilidad.js";
 import reservaModel from "../models/reserva.model.js";
 import productoModel from "../models/producto.Model.js";
 import { obtenerPrecioEspecial } from "../utils/precioEspecial.js";
+import { evaluarCodigoDescuento } from "../utils/codigoDescuento.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -297,12 +298,46 @@ export const createReserva = async (req, res) => {
       servicio,
       inicioReservaChile.toDate(),
     );
-    const precioServicio =
+    let precioServicio =
       precioEspecial != null
         ? precioEspecial
         : servicioDoc?.calcularPrecioFinal
           ? servicioDoc.calcularPrecioFinal(inicioReservaChile.toDate())
           : Number(servicioDoc?.precio ?? 0);
+
+    // Código de descuento (opcional). Si no viene en el body no pasa nada y
+    // el flujo es exactamente el de siempre. Si viene y no es válido, se
+    // rechaza la reserva con el motivo, para que el cliente no se lleve la
+    // sorpresa de pagar el precio completo.
+    let codigoAplicado = null;
+    const codigoIngresado = String(req.body.codigoDescuento || "").trim();
+    if (codigoIngresado) {
+      const evaluacion = await evaluarCodigoDescuento({
+        empresaId: empresa,
+        codigo: codigoIngresado,
+        servicioId: servicio,
+        precioBase: precioServicio,
+        precioLista: Number(servicioDoc?.precio ?? 0),
+        clienteId: cliente,
+      });
+
+      if (!evaluacion.ok) {
+        return res.status(400).json({
+          code: "CODIGO_DESCUENTO_INVALIDO",
+          message: evaluacion.message,
+        });
+      }
+
+      codigoAplicado = {
+        codigoId: evaluacion.codigoDoc._id,
+        codigo: evaluacion.codigoDoc.codigo,
+        tipo: evaluacion.codigoDoc.tipo,
+        valor: evaluacion.codigoDoc.valor,
+        precioOriginal: evaluacion.precioOriginal,
+        descuentoAplicado: evaluacion.descuento,
+      };
+      precioServicio = evaluacion.precioFinal;
+    }
 
     const nombreServicio = barberoServicio.servicio.nombre;
     const finReservaChile = inicioReservaChile.add(duracionServicio, "minute");
@@ -563,6 +598,7 @@ export const createReserva = async (req, res) => {
         precio: precioServicio,
         duracion: duracionServicio,
       },
+      ...(codigoAplicado ? { codigoDescuento: codigoAplicado } : {}),
     });
 
     await actualizarClienteServicioStats({
@@ -1493,6 +1529,14 @@ export const reagendarReserva = async (req, res) => {
       estado:
         reservaOriginal.estado === "confirmada" ? "confirmada" : "pendiente",
       abono: reservaOriginal.abono,
+      // Si la reserva original usó un código de descuento, la nueva conserva
+      // el descuento y el precio ya rebajado (y sigue ocupando ese cupo).
+      ...(reservaOriginal.codigoDescuento?.codigoId
+        ? {
+            codigoDescuento: reservaOriginal.toObject().codigoDescuento,
+            servicioSnapshot: reservaOriginal.toObject().servicioSnapshot,
+          }
+        : {}),
       reagendamiento: {
         reagendadaDe: reservaOriginal._id,
         reagendadaEn: new Date(),

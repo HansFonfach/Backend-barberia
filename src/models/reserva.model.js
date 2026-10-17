@@ -237,6 +237,18 @@ const ReservaSchema = new Schema(
       default: null,
     },
 
+    // Código de descuento aplicado al reservar (opcional). Guarda un resumen
+    // para que la reserva conserve su precio aunque el código se edite o
+    // borre después. Los usos de un código se cuentan desde acá.
+    codigoDescuento: {
+      codigoId: { type: Schema.Types.ObjectId, ref: "CodigoDescuento" },
+      codigo: String,
+      tipo: { type: String, enum: ["porcentaje", "monto"] },
+      valor: Number,
+      precioOriginal: Number,
+      descuentoAplicado: Number,
+    },
+
     descuento: {
       activo: {
         type: Boolean,
@@ -283,6 +295,7 @@ ReservaSchema.set("toJSON", { virtuals: true });
 ReservaSchema.set("toObject", { virtuals: true });
 
 ReservaSchema.index({ barbero: 1, fecha: 1, estado: 1 });
+ReservaSchema.index({ "codigoDescuento.codigoId": 1 }, { sparse: true });
 ReservaSchema.index({ empresa: 1, fecha: 1 });
 
 export default mongoose.model("Reserva", ReservaSchema);
