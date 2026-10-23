@@ -513,7 +513,8 @@ export const sendRetentionEmail = async (to, data) => {
 
 export const sendBienvenidaEmpresaEmail = async (to, data) => {
   const { nombreNegocio, slug, email, password } = data;
-  const panelUrl = `https://www.agendafonfach.cl/admin/login`;
+  // Login del negocio: /<slug>/login (antes apuntaba a /admin/login, que no existe)
+  const panelUrl = `https://www.agendafonfach.cl/${slug}/login`;
   const agendaUrl = `https://www.agendafonfach.cl/${slug}`;
 
   return await sendBaseEmail({

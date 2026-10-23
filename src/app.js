@@ -36,6 +36,7 @@ import entrenamientoPersonalRoutes from "./routes/entrenamientoPersonalRoutes.js
 import diarioAlimenticioRoutes from "./routes/diarioAlimenticioRoutes.js";
 import superAdminRoutes from "./routes/superAdminRoutes.js";
 import codigoDescuentoRoutes from "./routes/codigoDescuentoRoutes.js";
+import reservaMesaRoutes from "./routes/reservaMesaRoutes.js";
 
 const app = express();
 app.use(cookieParser());
@@ -107,5 +108,6 @@ app.use("/entrenamiento-personal", entrenamientoPersonalRoutes);
 app.use("/diario-alimenticio", diarioAlimenticioRoutes);
 app.use("/superadmin", superAdminRoutes);
 app.use("/codigos-descuento", codigoDescuentoRoutes);
+app.use("/reservas-mesa", reservaMesaRoutes);
 
 export default app;

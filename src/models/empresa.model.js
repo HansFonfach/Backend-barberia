@@ -34,6 +34,8 @@ const EmpresaSchema = new mongoose.Schema({
       "medicina_general",
       // Deporte (nuevo)
       "gimnasio",
+      // Gastronomía: bar / restaurante (módulo reservasMesas)
+      "restaurante",
       // Genérico
       "otros",
     ],
@@ -59,6 +61,7 @@ const EmpresaSchema = new mongoose.Schema({
     examenesLab: { type: Boolean, default: false },
     clasesGrupales: { type: Boolean, default: false }, // gimnasios/boxes: clases con cupo
     entrenamientoPersonal: { type: Boolean, default: false }, // bitácora de entrenamiento libre + sugerencia del día (uso personal, no depende de clasesGrupales)
+    reservasMesas: { type: Boolean, default: false }, // bares/restaurantes: reservas de mesa por sector con control de capacidad
     // En el futuro puedes agregar: recetas, derivaciones, etc.
   },
 
