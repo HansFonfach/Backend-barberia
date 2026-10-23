@@ -12,6 +12,8 @@ import {
   listarBloqueos,
   crearBloqueo,
   eliminarBloqueo,
+  afectadasDeBloqueo,
+  cancelarAfectadas,
   disponibilidad,
   reservasDelDia,
   listarReservas,
@@ -51,6 +53,8 @@ router.put("/configuracion", ...admin, guardarConfiguracion);
 router.get("/bloqueos", ...personal, listarBloqueos);
 router.post("/bloqueos", ...admin, crearBloqueo);
 router.delete("/bloqueos/:id", ...admin, eliminarBloqueo);
+router.get("/bloqueos/:id/afectadas", ...admin, afectadasDeBloqueo);
+router.post("/bloqueos/:id/cancelar-afectadas", ...admin, cancelarAfectadas);
 
 router.get("/disponibilidad", ...personal, disponibilidad);
 router.get("/dia/:fecha", ...personal, reservasDelDia);

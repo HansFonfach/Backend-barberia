@@ -10,6 +10,8 @@ import {
   horasDeLlegada,
   validarSolicitud,
   bloqueoQueAplica,
+  mensajeBloqueo,
+  diasEspecialesPublicos,
 } from "../src/services/reservasMesa/reglas.js";
 import { calcularDisponibilidad, buscarAlternativas, cupoLibre } from "../src/services/reservasMesa/disponibilidad.js";
 import { validarCambioEstado, puedeTransicionar, ocupaCupo } from "../src/services/reservasMesa/transiciones.js";
@@ -110,6 +112,39 @@ test("bloqueo por tramo de horas", () => {
   const b = [{ fecha: VIERNES, sector: null, horaDesde: "21:00", horaHasta: "22:00", motivo: "Evento" }];
   assert.equal(bloqueoQueAplica(b, { fecha: VIERNES, hora: "20:30", sectorId: TERRAZA }), null);
   assert.ok(bloqueoQueAplica(b, { fecha: VIERNES, hora: "21:30", sectorId: SALON }));
+});
+
+test("día solo por orden de llegada: bloquea web y panel con un mensaje claro", () => {
+  const bloqueos = [{ fecha: VIERNES, sector: null, tipo: "orden_llegada", motivo: "Día de la Madre" }];
+  const base = { config: config(), fecha: VIERNES, hora: "20:00", personas: 2, sectorId: TERRAZA, ahora: AHORA, bloqueos };
+  const web = validarSolicitud({ ...base, canal: "web" });
+  assert.equal(web.codigo, "BLOQUEADO");
+  assert.equal(web.mensaje, "Día de la Madre: ese día atendemos solo por orden de llegada, sin reservas.");
+  assert.equal(validarSolicitud(base).codigo, "BLOQUEADO");
+  // Bloqueos antiguos (sin tipo) mantienen su mensaje de siempre
+  assert.equal(mensajeBloqueo({ motivo: "Lluvia" }), "No se reciben reservas en ese horario: Lluvia");
+  assert.equal(
+    mensajeBloqueo({ tipo: "orden_llegada", horaDesde: "20:00", horaHasta: "23:00", motivo: "" }),
+    "Entre las 20:00 y las 23:00 atendemos solo por orden de llegada, sin reservas.",
+  );
+  assert.equal(
+    mensajeBloqueo({ tipo: "orden_llegada", horaDesde: "20:00", horaHasta: "23:59", motivo: "Día de la Mujer" }),
+    "Día de la Mujer: desde las 20:00 atendemos solo por orden de llegada, sin reservas.",
+  );
+});
+
+test("días especiales públicos: solo los de todo el local, ordenados", () => {
+  const lista = diasEspecialesPublicos([
+    { fecha: "2026-05-09", sector: null, tipo: "orden_llegada", motivo: "Día de la Madre" },
+    { fecha: "2026-03-07", sector: null, tipo: "orden_llegada", horaDesde: "20:00", horaHasta: "23:00" },
+    { fecha: "2026-03-01", sector: TERRAZA, motivo: "Lluvia" }, // un sector: no se anuncia
+    { fecha: "2026-03-02", sector: null, horaDesde: "18:00", horaHasta: "20:00", motivo: "Evento" }, // tramo sin reservas: no
+    { fecha: "2026-03-03", sector: null }, // día completo sin reservas: sí
+  ]);
+  assert.deepEqual(lista.map((d) => d.fecha), ["2026-03-03", "2026-03-07", "2026-05-09"]);
+  assert.equal(lista[0].mensaje, "Ese día no recibimos reservas.");
+  assert.equal(lista[1].diaCompleto, false);
+  assert.equal(lista[2].tipo, "orden_llegada");
 });
 
 test("disponibilidad: el peor tramo manda y se puede descontar la propia reserva", () => {

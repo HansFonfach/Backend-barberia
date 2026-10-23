@@ -4,7 +4,13 @@
 import Empresa from "../models/empresa.model.js";
 import ConfiguracionReservasMesa from "../models/configuracionReservasMesa.model.js";
 import ReservaMesa from "../models/reservaMesa.model.js";
-import { faltantesConfiguracion, horasDeLlegada, CANAL_WEB } from "../services/reservasMesa/reglas.js";
+import BloqueoReservaMesa from "../models/bloqueoReservaMesa.model.js";
+import {
+  faltantesConfiguracion,
+  horasDeLlegada,
+  diasEspecialesPublicos,
+  CANAL_WEB,
+} from "../services/reservasMesa/reglas.js";
 import { disponibilidadDelDia } from "../services/reservasMesa/disponibilidad.js";
 import { crearReserva, cambiarEstadoReserva } from "../services/reservasMesa/reservas.js";
 import { esFechaValida, hoyChile, sumarDias } from "../services/reservasMesa/tiempo.js";
@@ -36,6 +42,14 @@ const fallo = (res, accion, error) => {
   return res.status(500).json({ message: "Ocurrió un error, intenta de nuevo" });
 };
 
+/** Días especiales (sin reservas / solo por orden de llegada) de un rango. */
+const diasEspeciales = async (empresaId, desde, hasta) =>
+  diasEspecialesPublicos(
+    await BloqueoReservaMesa.find({ empresa: empresaId, sector: null, fecha: { $gte: desde, $lte: hasta } })
+      .select("fecha sector horaDesde horaHasta motivo tipo")
+      .lean(),
+  );
+
 const notificar = (fn) => {
   Promise.resolve()
     .then(fn)
@@ -52,6 +66,7 @@ export const info = async (req, res) => {
     const config = await ConfiguracionReservasMesa.findOne({ empresa: empresa._id }).lean();
     const activa = faltantesConfiguracion(config, CANAL_WEB).length === 0;
     const hoy = hoyChile();
+    const hasta = activa ? sumarDias(hoy, config.anticipacionMaximaDias) : null;
 
     return res.json({
       empresa: {
@@ -68,7 +83,8 @@ export const info = async (req, res) => {
               .map((s) => ({ id: String(s._id), nombre: s.nombre })),
             maxPersonas: config.maxPersonasWeb,
             hoy,
-            hasta: sumarDias(hoy, config.anticipacionMaximaDias),
+            hasta,
+            diasEspeciales: await diasEspeciales(empresa._id, hoy, hasta),
             diasAbiertos: config.horario.filter((d) => d.abierto).map((d) => d.dia),
             toleranciaMinutos: config.toleranciaMinutos,
             mensajePublico: config.mensajePublico,
@@ -105,6 +121,14 @@ export const disponibilidadPublica = async (req, res) => {
       return res.json({ horas: [], fueraDeRango: true });
     }
 
+    // Día completo sin reservas o solo por orden de llegada: se dice claro,
+    // en vez de mostrar "no quedan horas".
+    const especiales = await diasEspeciales(empresa._id, fecha, fecha);
+    const diaEspecial = especiales.find((d) => d.diaCompleto) || null;
+    if (diaEspecial) return res.json({ cerrado: false, horas: [], diaEspecial });
+    // Tramos por orden de llegada (por ejemplo, desde las 20:00): se avisan
+    const avisos = especiales.filter((d) => d.tipo === "orden_llegada").map((d) => d.mensaje);
+
     const horas = await disponibilidadDelDia({
       empresaId: empresa._id,
       config,
@@ -116,6 +140,7 @@ export const disponibilidadPublica = async (req, res) => {
     // Al público solo se le dice si hay lugar, no cuántos cupos quedan
     return res.json({
       cerrado: horasDeLlegada(config, fecha).length === 0,
+      avisos,
       horas: horas
         .map((h) => ({
           hora: h.hora,

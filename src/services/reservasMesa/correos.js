@@ -87,7 +87,9 @@ export const correoReservaCliente = (reserva, empresa, { token = null, config } 
   );
 };
 
-export const correoReservaCancelada = (reserva, empresa) =>
+// `mensaje` (opcional): explicación del local, por ejemplo cuando un día
+// pasa a atenderse solo por orden de llegada.
+export const correoReservaCancelada = (reserva, empresa, { mensaje = "" } = {}) =>
   enviar(
     reserva.cliente.email,
     `Reserva cancelada en ${empresa.nombre}`,
@@ -95,6 +97,7 @@ export const correoReservaCancelada = (reserva, empresa) =>
       empresa,
       `<h2 style="margin:0 0 8px;">Tu reserva fue cancelada</h2>
        <p>Hola ${esc(reserva.cliente.nombre)}, la reserva de abajo quedó cancelada${reserva.cancelacion?.por === "cliente" ? " a tu pedido" : ""}.</p>
+       ${mensaje ? `<p style="background:#f6f1e7;border-radius:8px;padding:12px 14px;">${esc(mensaje)}</p>` : ""}
        ${tablaReserva(reserva, empresa)}
        <p><a href="${BASE_URL}/${esc(empresa.slug)}/reservar-mesa" style="color:#1a73e8;">Hacer una nueva reserva</a></p>${contacto(empresa)}`,
     ),

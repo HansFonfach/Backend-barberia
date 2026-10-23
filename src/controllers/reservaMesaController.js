@@ -4,7 +4,7 @@
 import mongoose from "mongoose";
 import Empresa from "../models/empresa.model.js";
 import ConfiguracionReservasMesa from "../models/configuracionReservasMesa.model.js";
-import BloqueoReservaMesa from "../models/bloqueoReservaMesa.model.js";
+import BloqueoReservaMesa, { TIPOS_BLOQUEO_MESA } from "../models/bloqueoReservaMesa.model.js";
 import ReservaMesa, {
   ESTADOS_RESERVA_MESA,
   ORIGENES_RESERVA_MESA,
@@ -13,7 +13,7 @@ import {
   configuracionVacia,
   validarConfiguracion,
 } from "../services/reservasMesa/configuracion.js";
-import { faltantesConfiguracion, CANAL_PANEL, CANAL_WEB } from "../services/reservasMesa/reglas.js";
+import { faltantesConfiguracion, tipoBloqueo, FIN_DEL_DIA, CANAL_PANEL, CANAL_WEB } from "../services/reservasMesa/reglas.js";
 import { disponibilidadDelDia } from "../services/reservasMesa/disponibilidad.js";
 import {
   crearReserva,
@@ -135,6 +135,35 @@ export const guardarConfiguracion = async (req, res) => {
 
 /* ─────────── Bloqueos ─────────── */
 
+const ESTADOS_AFECTABLES = ["pendiente", "confirmada"];
+
+/** Reservas ya tomadas que caen dentro de un bloqueo. */
+const filtroAfectadas = (b) => ({
+  empresa: b.empresa,
+  fecha: b.fecha,
+  estado: { $in: ESTADOS_AFECTABLES },
+  ...(b.sector ? { "sector.id": b.sector } : {}),
+  ...(b.horaDesde && b.horaHasta ? { hora: { $gte: b.horaDesde, $lt: b.horaHasta } } : {}),
+});
+
+const buscarAfectadas = async (b) => {
+  const filas = await ReservaMesa.find(filtroAfectadas(b))
+    .select("codigo cliente hora personas sector estado")
+    .sort({ hora: 1 })
+    .lean();
+  // Al panel solo le sirve saber si tiene correo, no el correo en sí
+  return filas.map(({ cliente, ...r }) => ({
+    ...r,
+    cliente: { nombre: cliente.nombre, telefono: cliente.telefono, tieneCorreo: !!cliente.email },
+  }));
+};
+
+const buscarBloqueo = (req) => {
+  const { id } = req.params;
+  if (!mongoose.isValidObjectId(id)) return null;
+  return BloqueoReservaMesa.findOne({ _id: id, empresa: req.usuario.empresaId }).lean();
+};
+
 export const listarBloqueos = async (req, res) => {
   try {
     const desde = esFechaValida(req.query.desde) ? req.query.desde : hoyChile();
@@ -144,7 +173,11 @@ export const listarBloqueos = async (req, res) => {
     })
       .sort({ fecha: 1, horaDesde: 1 })
       .lean();
-    return res.json(bloqueos);
+    // Cuántas reservas tomadas siguen dentro de cada bloqueo (para revisarlas)
+    const conteos = await Promise.all(bloqueos.map((b) => ReservaMesa.countDocuments(filtroAfectadas(b))));
+    return res.json(
+      bloqueos.map((b, i) => ({ ...b, tipo: tipoBloqueo(b), afectadas: conteos[i] })),
+    );
   } catch (error) {
     return fallo(res, "listar bloqueos", error);
   }
@@ -153,9 +186,13 @@ export const listarBloqueos = async (req, res) => {
 export const crearBloqueo = async (req, res) => {
   try {
     const empresa = req.usuario.empresaId;
-    const { fecha, sectorId, horaDesde, horaHasta } = req.body;
+    const { fecha, sectorId, horaDesde } = req.body;
     const motivo = limpiarTexto(req.body.motivo, 200);
+    const tipo = req.body.tipo || "sin_reservas";
+    // "Desde las 20:00 por orden de llegada": sin hora de término, dura hasta el cierre
+    const horaHasta = tipo === "orden_llegada" && horaDesde && !req.body.horaHasta ? FIN_DEL_DIA : req.body.horaHasta;
 
+    if (!TIPOS_BLOQUEO_MESA.includes(tipo)) return res.status(400).json({ message: "Tipo de bloqueo inválido" });
     if (!esFechaValida(fecha)) return res.status(400).json({ message: "La fecha no es válida" });
     if (fecha < hoyChile()) return res.status(400).json({ message: "No se puede bloquear un día que ya pasó" });
 
@@ -177,27 +214,81 @@ export const crearBloqueo = async (req, res) => {
       sector: sector?._id || null,
       horaDesde: conHoras ? horaDesde : null,
       horaHasta: conHoras ? horaHasta : null,
+      tipo,
       motivo,
       creadoPor: req.usuario.id,
     });
 
     // Reservas ya tomadas que caen en el bloqueo: no se tocan solas, se
-    // devuelven para que el local decida (mover de sector, avisar, cancelar).
-    const filtro = {
-      empresa,
-      fecha,
-      estado: { $in: ["pendiente", "confirmada"] },
-      ...(sector ? { "sector.id": sector._id } : {}),
-      ...(conHoras ? { hora: { $gte: horaDesde, $lt: horaHasta } } : {}),
-    };
-    const afectadas = await ReservaMesa.find(filtro)
-      .select("codigo cliente.nombre cliente.telefono hora personas sector estado")
-      .sort({ hora: 1 })
-      .lean();
-
+    // devuelven para que el local decida (mantener, mover o cancelar avisando).
+    const afectadas = await buscarAfectadas(bloqueo.toObject());
     return res.status(201).json({ bloqueo, afectadas });
   } catch (error) {
     return fallo(res, "crear bloqueo", error);
+  }
+};
+
+export const afectadasDeBloqueo = async (req, res) => {
+  try {
+    const bloqueo = await buscarBloqueo(req);
+    if (!bloqueo) return res.status(404).json({ message: "Bloqueo no encontrado" });
+    return res.json({ bloqueo: { ...bloqueo, tipo: tipoBloqueo(bloqueo) }, afectadas: await buscarAfectadas(bloqueo) });
+  } catch (error) {
+    return fallo(res, "reservas afectadas", error);
+  }
+};
+
+/**
+ * Cancela las reservas elegidas de un bloqueo y avisa por correo a quienes
+ * dejaron uno. Solo acepta reservas que de verdad caen en ese bloqueo.
+ */
+export const cancelarAfectadas = async (req, res) => {
+  try {
+    const bloqueo = await buscarBloqueo(req);
+    if (!bloqueo) return res.status(404).json({ message: "Bloqueo no encontrado" });
+
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter((id) => mongoose.isValidObjectId(id));
+    if (ids.length === 0) return res.status(400).json({ message: "Elige al menos una reserva" });
+    const mensaje = limpiarTexto(req.body.mensaje, 500);
+
+    const reservas = await ReservaMesa.find({ ...filtroAfectadas(bloqueo), _id: { $in: ids } });
+    const empresa = await Empresa.findById(req.usuario.empresaId).select("nombre slug telefono direccion").lean();
+    const actor = actorDe(req);
+    const detalle = `Bloqueo del ${bloqueo.fecha}${bloqueo.motivo ? ` (${bloqueo.motivo})` : ""}`;
+
+    const canceladas = [];
+    const fallidas = [];
+    for (const reserva of reservas) {
+      const r = await cambiarEstadoReserva({
+        reserva,
+        hacia: "cancelada",
+        motivo: "local_no_puede_atender",
+        detalle,
+        por: "local",
+        actor,
+      });
+      if (!r.ok) {
+        fallidas.push({ _id: reserva._id, codigo: reserva.codigo, nombre: reserva.cliente.nombre, mensaje: r.mensaje });
+        continue;
+      }
+      const conCorreo = !!r.reserva.cliente.email;
+      if (conCorreo) notificar(() => correoReservaCancelada(r.reserva, empresa, { mensaje }));
+      canceladas.push({
+        _id: r.reserva._id,
+        codigo: r.reserva.codigo,
+        hora: r.reserva.hora,
+        personas: r.reserva.personas,
+        cliente: { nombre: r.reserva.cliente.nombre, telefono: r.reserva.cliente.telefono },
+        correoEnviado: conCorreo,
+      });
+    }
+    // Las que ya no estaban (se cancelaron o cambiaron de hora entretanto)
+    const encontradas = new Set(reservas.map((r) => String(r._id)));
+    const noEncontradas = ids.filter((id) => !encontradas.has(String(id))).length;
+
+    return res.json({ canceladas, fallidas, noEncontradas });
+  } catch (error) {
+    return fallo(res, "cancelar afectadas", error);
   }
 };
 
@@ -326,7 +417,7 @@ export const calendario = async (req, res) => {
         },
       ]),
       BloqueoReservaMesa.find({ empresa, fecha: { $gte: desde, $lte: hasta } })
-        .select("fecha sector horaDesde horaHasta motivo")
+        .select("fecha sector horaDesde horaHasta motivo tipo")
         .lean(),
     ]);
     return res.json({
@@ -337,7 +428,7 @@ export const calendario = async (req, res) => {
         pendientes: f.pendientes,
         cumpleanos: f.cumpleanos,
       })),
-      bloqueos,
+      bloqueos: bloqueos.map((b) => ({ ...b, tipo: tipoBloqueo(b) })),
     });
   } catch (error) {
     return fallo(res, "calendario", error);

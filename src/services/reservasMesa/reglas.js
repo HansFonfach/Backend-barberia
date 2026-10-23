@@ -76,6 +76,61 @@ export const bloqueoQueAplica = (bloqueos, { fecha, hora, sectorId }) =>
     return hora >= b.horaDesde && hora < b.horaHasta;
   }) || null;
 
+/** "Hasta" de un tramo que dura hasta el cierre (ej: desde las 20:00 por orden de llegada). */
+export const FIN_DEL_DIA = "23:59";
+
+/** Tipo efectivo de un bloqueo (los antiguos no traen tipo). */
+export const tipoBloqueo = (b) => (b?.tipo === "orden_llegada" ? "orden_llegada" : "sin_reservas");
+
+const esDeTodoElLocal = (b) => !b.sector;
+const esDiaCompleto = (b) => !b.horaDesde || !b.horaHasta;
+
+const conMotivo = (motivo, texto) =>
+  motivo ? `${motivo}: ${texto}.` : `${texto.charAt(0).toUpperCase()}${texto.slice(1)}.`;
+
+/** Texto que ve el cliente cuando un bloqueo le impide reservar. */
+export const mensajeBloqueo = (b) => {
+  if (tipoBloqueo(b) === "orden_llegada") {
+    return conMotivo(
+      b.motivo,
+      esDiaCompleto(b)
+        ? "ese día atendemos solo por orden de llegada, sin reservas"
+        : b.horaHasta === FIN_DEL_DIA
+          ? `desde las ${b.horaDesde} atendemos solo por orden de llegada, sin reservas`
+          : `entre las ${b.horaDesde} y las ${b.horaHasta} atendemos solo por orden de llegada, sin reservas`,
+    );
+  }
+  return b.motivo
+    ? `No se reciben reservas en ese horario: ${b.motivo}`
+    : "No se reciben reservas en ese horario";
+};
+
+/** Texto para anunciar un día especial en la página pública. */
+const mensajeDiaEspecial = (b) =>
+  tipoBloqueo(b) === "orden_llegada"
+    ? mensajeBloqueo(b)
+    : conMotivo(b.motivo, "ese día no recibimos reservas");
+
+/**
+ * Bloqueos que se anuncian en la página pública: los de todo el local que
+ * cierran el día completo o que lo dejan por orden de llegada. Los de un
+ * sector (terraza con lluvia) no se anuncian: el cliente simplemente no ve
+ * ese sector.
+ */
+export const diasEspecialesPublicos = (bloqueos) =>
+  (bloqueos || [])
+    .filter((b) => esDeTodoElLocal(b) && (esDiaCompleto(b) || tipoBloqueo(b) === "orden_llegada"))
+    .map((b) => ({
+      fecha: b.fecha,
+      tipo: tipoBloqueo(b),
+      diaCompleto: esDiaCompleto(b),
+      horaDesde: esDiaCompleto(b) ? null : b.horaDesde,
+      horaHasta: esDiaCompleto(b) ? null : b.horaHasta,
+      motivo: b.motivo || "",
+      mensaje: mensajeDiaEspecial(b),
+    }))
+    .sort((a, b) => (a.fecha + (a.horaDesde || "")).localeCompare(b.fecha + (b.horaDesde || "")));
+
 const sectoresDelCanal = (config, canal) =>
   (config.sectores || []).filter(
     (s) => s.activo && s.capacidad > 0 && (canal !== CANAL_WEB || s.reservableOnline),
@@ -196,14 +251,7 @@ export const validarSolicitud = ({
   }
 
   const bloqueo = bloqueoQueAplica(bloqueos, { fecha, hora, sectorId: sector._id });
-  if (bloqueo) {
-    return falta(
-      "BLOQUEADO",
-      bloqueo.motivo
-        ? `No se reciben reservas en ese horario: ${bloqueo.motivo}`
-        : "No se reciben reservas en ese horario",
-    );
-  }
+  if (bloqueo) return falta("BLOQUEADO", mensajeBloqueo(bloqueo));
 
   return resultado();
 };
