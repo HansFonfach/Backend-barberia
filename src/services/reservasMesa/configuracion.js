@@ -26,6 +26,7 @@ export const configuracionVacia = () => ({
   reservasWebActivas: false,
   maxPersonasWeb: null,
   confirmacionAutomaticaWeb: false,
+  mostrarCuposWeb: false,
   mensajePublico: "",
   mensajeCumpleanos: "",
   cancelacionWeb: { permitida: false, horasLimite: null },
@@ -124,6 +125,7 @@ export const validarConfiguracion = (body = {}) => {
   // ── Web, cancelación, recordatorio, permisos ──
   datos.reservasWebActivas = !!body.reservasWebActivas;
   datos.confirmacionAutomaticaWeb = !!body.confirmacionAutomaticaWeb;
+  datos.mostrarCuposWeb = !!body.mostrarCuposWeb;
   datos.mensajePublico = limpiarTexto(body.mensajePublico, 600);
   datos.mensajeCumpleanos = limpiarTexto(body.mensajeCumpleanos, 300);
 

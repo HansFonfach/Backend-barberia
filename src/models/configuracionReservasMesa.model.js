@@ -56,6 +56,8 @@ const ConfiguracionReservasMesaSchema = new Schema(
     reservasWebActivas: { type: Boolean, default: false },
     maxPersonasWeb: { type: Number, default: null },
     confirmacionAutomaticaWeb: { type: Boolean, default: false },
+    // Mostrar al cliente cuántos lugares quedan en cada hora y sector
+    mostrarCuposWeb: { type: Boolean, default: false },
     mensajePublico: { type: String, default: "", maxlength: 600 },
     mensajeCumpleanos: { type: String, default: "", maxlength: 300 },
 

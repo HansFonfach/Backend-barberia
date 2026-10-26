@@ -66,6 +66,16 @@ const enviar = async (to, subject, html) => {
 };
 
 /** Al crear (web o panel con correo) y al confirmar una pendiente. */
+/** Mensajes que el local quiere que el cliente lea (ej: "todos deben presentar carnet"). */
+const avisosDelLocal = (reserva, config) => {
+  const parrafo = (texto) =>
+    `<p style="background:#f6f1e7;border-radius:8px;padding:12px 14px;font-size:14px;white-space:pre-line;">${esc(texto)}</p>`;
+  return [
+    config?.mensajePublico ? parrafo(config.mensajePublico) : "",
+    reserva.cumpleanos?.es && config?.mensajeCumpleanos ? parrafo(`🎂 ${config.mensajeCumpleanos}`) : "",
+  ].join("");
+};
+
 export const correoReservaCliente = (reserva, empresa, { token = null, config } = {}) => {
   const confirmada = reserva.estado === "confirmada";
   const titulo = confirmada ? "¡Tu reserva está confirmada!" : "Recibimos tu solicitud de reserva";
@@ -82,7 +92,7 @@ export const correoReservaCliente = (reserva, empresa, { token = null, config } 
     confirmada ? `✅ Reserva confirmada en ${empresa.nombre}` : `📩 Solicitud de reserva en ${empresa.nombre}`,
     layout(
       empresa,
-      `<h2 style="margin:0 0 8px;">${titulo}</h2><p>${intro}</p>${tablaReserva(reserva, empresa)}${tolerancia}${permiteCancelar ? linkCancelar(empresa, token) : ""}${contacto(empresa)}`,
+      `<h2 style="margin:0 0 8px;">${titulo}</h2><p>${intro}</p>${tablaReserva(reserva, empresa)}${avisosDelLocal(reserva, config)}${tolerancia}${permiteCancelar ? linkCancelar(empresa, token) : ""}${contacto(empresa)}`,
     ),
   );
 };
@@ -112,6 +122,7 @@ export const correoRecordatorio = (reserva, empresa, { token = null, config } = 
       `<h2 style="margin:0 0 8px;">Te esperamos pronto</h2>
        <p>Hola ${esc(reserva.cliente.nombre)}, te recordamos tu reserva:</p>
        ${tablaReserva(reserva, empresa)}
+       ${avisosDelLocal(reserva, config)}
        ${config?.cancelacionWeb?.permitida ? linkCancelar(empresa, token) : ""}${contacto(empresa)}`,
     ),
   );

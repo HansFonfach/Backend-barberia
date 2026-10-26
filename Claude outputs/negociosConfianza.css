@@ -1,0 +1,336 @@
+/* Sección "Negocios que confían en nosotros" (página principal). Todo va
+   con prefijo nc- para no chocar con estilos globales del template. */
+
+.nc-seccion {
+  padding: 96px 0;
+  background: linear-gradient(180deg, #f7f8fb 0%, #ffffff 100%);
+}
+
+.nc-encabezado {
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto 36px;
+}
+.nc-eyebrow {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #4361ee;
+  margin-bottom: 12px;
+}
+.nc-titulo {
+  font-size: clamp(1.8rem, 3.4vw, 2.6rem);
+  font-weight: 800;
+  color: #12131a;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0 0 12px;
+}
+.nc-subtitulo {
+  color: #6b7280;
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+/* Filtros por rubro */
+.nc-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 36px;
+}
+.nc-filtros button {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #374151;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.nc-filtros button small {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-left: 4px;
+}
+.nc-filtros button:hover {
+  border-color: #c7cbd4;
+}
+.nc-filtros button.activo {
+  background: #12131a;
+  border-color: #12131a;
+  color: #fff;
+}
+.nc-filtros button.activo small {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Grilla */
+.nc-grilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 28px;
+}
+.nc-vacio {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: #6b7280;
+  padding: 24px 0;
+}
+
+/* Tarjeta */
+.nc-card {
+  --nc-color: #4361ee;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid #eceef2;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px -12px rgba(16, 24, 40, 0.12);
+  color: inherit;
+  text-decoration: none !important;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.nc-card:hover,
+.nc-card:focus-visible {
+  transform: translateY(-6px);
+  border-color: transparent;
+  box-shadow: 0 24px 48px -16px rgba(16, 24, 40, 0.28);
+}
+.nc-card:focus-visible {
+  outline: 3px solid var(--nc-color);
+  outline-offset: 3px;
+}
+
+/* Portada */
+.nc-portada {
+  position: relative;
+  height: 168px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1b1c24;
+}
+.nc-portada-fondo {
+  position: absolute;
+  inset: -40px;
+  width: calc(100% + 80px);
+  height: calc(100% + 80px);
+  object-fit: cover;
+  filter: blur(28px) saturate(1.5);
+  transform: scale(1.1);
+  transition: transform 0.6s ease;
+}
+.nc-portada-color {
+  background: linear-gradient(135deg, var(--nc-color), #12131a);
+  filter: none;
+}
+.nc-card:hover .nc-portada-fondo {
+  transform: scale(1.2);
+}
+.nc-portada-velo {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(10, 10, 16, 0.05) 0%, rgba(10, 10, 16, 0.35) 100%);
+}
+.nc-logo {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  border-radius: 24px;
+  object-fit: cover;
+  background: #fff;
+  border: 4px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 16px 32px -10px rgba(0, 0, 0, 0.55);
+  transition: transform 0.25s ease;
+}
+.nc-card:hover .nc-logo {
+  transform: scale(1.04);
+}
+.nc-logo-iniciales {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--nc-color);
+}
+
+.nc-estado {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(15, 16, 22, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.nc-estado i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25);
+}
+.nc-estado.cerrado i {
+  background: #f87171;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.25);
+}
+
+/* Cuerpo */
+.nc-cuerpo {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 22px 22px 22px;
+}
+.nc-categoria {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--nc-color);
+  margin-bottom: 6px;
+}
+.nc-nombre {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #12131a;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+}
+.nc-descripcion {
+  font-size: 14px;
+  line-height: 1.55;
+  color: #6b7280;
+  margin: 0 0 14px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.nc-datos {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 18px;
+  display: grid;
+  gap: 6px;
+}
+.nc-datos li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #4b5563;
+  min-width: 0;
+}
+.nc-datos svg {
+  flex-shrink: 0;
+  color: #9ca3af;
+}
+.nc-datos span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nc-boton {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 46px;
+  border-radius: 12px;
+  background: #12131a;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.2s ease;
+}
+.nc-boton svg {
+  transition: transform 0.2s ease;
+}
+.nc-card:hover .nc-boton {
+  background: var(--nc-color);
+}
+.nc-card:hover .nc-boton svg {
+  transform: translateX(3px);
+}
+
+/* Cargando */
+.nc-skeleton {
+  pointer-events: none;
+}
+.nc-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: #eef0f4;
+}
+.nc-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  animation: nc-brillo 1.4s infinite;
+}
+@keyframes nc-brillo {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 575px) {
+  .nc-seccion {
+    padding: 64px 0;
+  }
+  .nc-grilla {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .nc-filtros {
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-left: -15px;
+    margin-right: -15px;
+    padding-left: 15px;
+    padding-right: 15px;
+    scrollbar-width: none;
+  }
+  .nc-filtros::-webkit-scrollbar {
+    display: none;
+  }
+  .nc-filtros button {
+    flex-shrink: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nc-card,
+  .nc-portada-fondo,
+  .nc-logo,
+  .nc-boton svg {
+    transition: none;
+  }
+  .nc-shimmer::after {
+    animation: none;
+  }
+}

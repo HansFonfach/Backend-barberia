@@ -90,6 +90,7 @@ export const info = async (req, res) => {
             mensajePublico: config.mensajePublico,
             mensajeCumpleanos: config.mensajeCumpleanos,
             confirmacionAutomatica: config.confirmacionAutomaticaWeb,
+            mostrarCupos: !!config.mostrarCuposWeb,
             cancelacion: config.cancelacionWeb,
           }
         : {}),
@@ -137,7 +138,9 @@ export const disponibilidadPublica = async (req, res) => {
       canal: CANAL_WEB,
     });
 
-    // Al público solo se le dice si hay lugar, no cuántos cupos quedan
+    // Al público se le dice si hay lugar; cuántos lugares quedan, solo si el
+    // local lo activó en la configuración.
+    const conCupos = !!config.mostrarCuposWeb;
     return res.json({
       cerrado: horasDeLlegada(config, fecha).length === 0,
       avisos,
@@ -146,7 +149,7 @@ export const disponibilidadPublica = async (req, res) => {
           hora: h.hora,
           sectores: h.sectores
             .filter((s) => s.disponible)
-            .map((s) => ({ id: s.id, nombre: s.nombre, disponible: true })),
+            .map((s) => ({ id: s.id, nombre: s.nombre, disponible: true, ...(conCupos ? { libre: s.libre } : {}) })),
         }))
         .filter((h) => h.sectores.length > 0),
     });
