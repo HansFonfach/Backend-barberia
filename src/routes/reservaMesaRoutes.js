@@ -31,11 +31,23 @@ import {
   infoCancelacion,
   cancelarPublico,
 } from "../controllers/reservaMesaPublicaController.js";
+import {
+  clientes,
+  exportarClientes,
+  cambiarPromociones,
+  campanas,
+  crearCampana,
+  enviarPrueba,
+  infoBaja,
+  darDeBaja,
+} from "../controllers/reservaMesaClientesController.js";
 
 const router = Router();
 
 /* ── Público (sin login) ── rutas fijas antes que "/:id" ── */
 router.get("/publico/cancelacion/:token", limitarLecturaPublica, infoCancelacion);
+router.get("/publico/baja/:token", limitarLecturaPublica, infoBaja);
+router.post("/publico/baja", limitarEscrituraPublica, darDeBaja);
 router.post("/publico/cancelar", limitarEscrituraPublica, cancelarPublico);
 router.get("/publico/:slug/info", limitarLecturaPublica, info);
 router.get("/publico/:slug/disponibilidad", limitarLecturaPublica, disponibilidadPublica);
@@ -60,6 +72,14 @@ router.get("/disponibilidad", ...personal, disponibilidad);
 router.get("/dia/:fecha", ...personal, reservasDelDia);
 router.get("/resumen", ...admin, resumen);
 router.get("/calendario", ...personal, calendario);
+
+/* ── Clientes y promociones (solo admin) ── antes que "/:id" ── */
+router.get("/clientes", ...admin, clientes);
+router.get("/clientes/exportar", ...admin, exportarClientes);
+router.patch("/clientes/:telefono/promociones", ...admin, cambiarPromociones);
+router.get("/campanas", ...admin, campanas);
+router.post("/campanas", ...admin, crearCampana);
+router.post("/campanas/prueba", ...admin, enviarPrueba);
 
 router.get("/", ...personal, listarReservas);
 router.post("/", ...personal, crear);

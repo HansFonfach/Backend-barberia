@@ -24,6 +24,7 @@ import {
 import { ESTADOS_QUE_OCUPAN } from "../services/reservasMesa/transiciones.js";
 import { esFechaValida, esHoraValida, hoyChile, sumarDias } from "../services/reservasMesa/tiempo.js";
 import { escaparRegex, limpiarTexto, normalizarTelefono } from "../services/reservasMesa/utilidades.js";
+import { registrarClienteDeReserva } from "../services/reservasMesa/clientes.js";
 import {
   correoReservaCliente,
   correoReservaCancelada,
@@ -507,6 +508,18 @@ export const crear = async (req, res) => {
     if (!r.repetida && r.reserva.cliente.email) {
       const empresa = await Empresa.findById(empresaId).select("nombre slug telefono direccion").lean();
       notificar(() => correoReservaCliente(r.reserva, empresa, { token: r.tokenCancelacion, config }));
+    }
+    if (!r.repetida) {
+      // Lista de clientes (y permiso de promociones si el personal lo marcó)
+      notificar(() =>
+        registrarClienteDeReserva({
+          empresaId,
+          reserva: r.reserva,
+          aceptaPromociones: req.body.aceptaPromociones === true,
+          origen: "panel",
+          actorNombre: actorDe(req).nombre,
+        }),
+      );
     }
     return res.status(r.repetida ? 200 : 201).json(reservaParaPanel(r.reserva));
   } catch (error) {

@@ -142,3 +142,45 @@ export const correoAvisoLocal = (reserva, empresa) =>
        <p><a href="${BASE_URL}/${esc(empresa.slug)}/admin/reservas-mesa-hoy" style="color:#1a73e8;">Abrir el panel</a></p>`,
     ),
   );
+
+/* ─────────── Promociones ─────────── */
+
+const asuntoPromocion = (asunto, empresa) =>
+  asunto.toLowerCase().includes(String(empresa.nombre || "").toLowerCase())
+    ? asunto
+    : `${asunto} · ${empresa.nombre}`;
+
+/**
+ * Promoción a un cliente que aceptó recibirlas. A diferencia de los otros
+ * correos, devuelve true/false para llevar la cuenta de enviados y fallidos.
+ * `prueba: true` agrega un aviso arriba y deja el link de baja inactivo.
+ */
+export const correoPromocion = async (cliente, empresa, { asunto, mensaje, prueba = false }) => {
+  const nombre = String(cliente.nombre || "").trim().split(/\s+/)[0];
+  const baja = prueba
+    ? "#"
+    : `${BASE_URL}/baja-promociones?token=${encodeURIComponent(cliente.tokenBaja)}`;
+  const html = layout(
+    empresa,
+    `${prueba ? `<p style="background:#fff3cd;border-radius:6px;padding:8px 12px;font-size:13px;">Correo de prueba: así lo verán tus clientes.</p>` : ""}
+     <p>Hola${nombre ? ` ${esc(nombre)}` : ""},</p>
+     <div style="white-space:pre-line;">${esc(mensaje)}</div>
+     <p style="margin:24px 0;"><a href="${BASE_URL}/${esc(empresa.slug)}/reservar-mesa" style="display:inline-block;padding:12px 22px;background:#1a1a1a;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">Reservar mesa</a></p>
+     ${contacto(empresa)}
+     <p style="font-size:12px;color:#888;border-top:1px solid #eee;padding-top:12px;margin-top:24px;">
+       Recibes este correo porque aceptaste recibir promociones de ${esc(empresa.nombre)} al hacer una reserva.
+       <a href="${baja}" style="color:#888;">Dejar de recibir promociones</a>.
+     </p>`,
+  );
+  try {
+    const r = await sendBaseEmail({ to: cliente.email, subject: asuntoPromocion(asunto, empresa), html });
+    if (r?.error) {
+      console.error("❌ Resend rechazó una promoción:", r.error);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("❌ Error enviando promoción:", e.message);
+    return false;
+  }
+};

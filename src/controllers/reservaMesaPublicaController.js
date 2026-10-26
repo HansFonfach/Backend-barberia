@@ -15,6 +15,7 @@ import { disponibilidadDelDia } from "../services/reservasMesa/disponibilidad.js
 import { crearReserva, cambiarEstadoReserva } from "../services/reservasMesa/reservas.js";
 import { esFechaValida, hoyChile, sumarDias } from "../services/reservasMesa/tiempo.js";
 import { hashToken } from "../services/reservasMesa/utilidades.js";
+import { registrarClienteDeReserva } from "../services/reservasMesa/clientes.js";
 import {
   correoReservaCliente,
   correoAvisoLocal,
@@ -144,14 +145,19 @@ export const disponibilidadPublica = async (req, res) => {
     return res.json({
       cerrado: horasDeLlegada(config, fecha).length === 0,
       avisos,
+      // Los sectores sin lugar para este grupo se mandan como no disponibles
+      // (no se ocultan), para que el cliente entienda por qué no puede elegirlos.
+      // Los bloqueados sí se ocultan.
       horas: horas
         .map((h) => ({
           hora: h.hora,
           sectores: h.sectores
-            .filter((s) => s.disponible)
-            .map((s) => ({ id: s.id, nombre: s.nombre, disponible: true, ...(conCupos ? { libre: s.libre } : {}) })),
+            .filter((s) => !s.bloqueado)
+            .map((s) => ({ id: s.id, nombre: s.nombre, disponible: s.disponible, ...(conCupos ? { libre: s.libre } : {}) })),
         }))
         .filter((h) => h.sectores.length > 0),
+      hayLugar: horas.some((h) => h.sectores.some((s) => s.disponible)),
+      ...(conCupos ? { maxLibre: Math.max(0, ...horas.flatMap((h) => h.sectores.filter((s) => !s.bloqueado).map((s) => s.libre))) } : {}),
     });
   } catch (error) {
     return fallo(res, "disponibilidad", error);
@@ -202,6 +208,15 @@ export const reservarPublico = async (req, res) => {
     if (!r.repetida) {
       notificar(() => correoReservaCliente(reserva, empresa, { token: r.tokenCancelacion, config }));
       notificar(() => correoAvisoLocal(reserva, empresa));
+      // Lista de clientes (y permiso de promociones si marcó la casilla)
+      notificar(() =>
+        registrarClienteDeReserva({
+          empresaId: empresa._id,
+          reserva,
+          aceptaPromociones: req.body.aceptaPromociones === true,
+          origen: "web",
+        }),
+      );
     }
 
     return res.status(r.repetida ? 200 : 201).json({
