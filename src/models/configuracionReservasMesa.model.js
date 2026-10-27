@@ -71,6 +71,17 @@ const ConfiguracionReservasMesaSchema = new Schema(
       horasAntes: { type: Number, default: null },
     },
 
+    // Contacto que ve el cliente cuando no queda lugar en línea
+    contactoWeb: {
+      whatsapp: { type: String, default: "" }, // número para consultas (si no, el teléfono del local)
+      mensajeSinLugar: { type: String, default: "", maxlength: 300 },
+    },
+
+    // Lista de espera cuando un día no queda lugar para el grupo
+    listaEspera: {
+      activa: { type: Boolean, default: false },
+    },
+
     // WhatsApp (plantillas de Meta: ver services/reservasMesa/whatsapp.js)
     whatsapp: {
       // Aviso al local por cada reserva nueva hecha en la web

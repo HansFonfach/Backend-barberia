@@ -184,3 +184,33 @@ export const correoPromocion = async (cliente, empresa, { asunto, mensaje, prueb
     return false;
   }
 };
+
+/* ─────────── Lista de espera ─────────── */
+
+/** Se liberó lugar el día que la persona quería. Devuelve true si se envió. */
+export const correoLugarDisponible = async (inscripcion, empresa, horas = []) => {
+  const nombre = String(inscripcion.nombre || "").trim().split(/\s+/)[0];
+  const link = `${BASE_URL}/${esc(empresa.slug)}/reservar-mesa?fecha=${inscripcion.fecha}&personas=${inscripcion.personas}`;
+  const html = layout(
+    empresa,
+    `<h2 style="margin:0 0 8px;">¡Se liberó un lugar! 🎉</h2>
+     <p>Hola${nombre ? ` ${esc(nombre)}` : ""}, te anotaste en la lista de espera de ${esc(empresa.nombre)} y ahora hay lugar
+     para <strong>${inscripcion.personas} persona${inscripcion.personas === 1 ? "" : "s"}</strong> el
+     <strong>${esc(fechaLarga(inscripcion.fecha))}</strong>${horas.length ? ` (por ejemplo a las ${horas.map(esc).join(", ")})` : ""}.</p>
+     <p>Los lugares se asignan a quien reserve primero, así que te recomendamos reservar pronto.</p>
+     <p style="margin:24px 0;"><a href="${link}" style="display:inline-block;padding:12px 22px;background:#1a1a1a;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">Reservar ahora</a></p>
+     ${contacto(empresa)}
+     <p style="font-size:12px;color:#888;">Te escribimos solo esta vez por este día. Si ya no alcanzas a reservar, puedes volver a anotarte en la lista de espera.</p>`,
+  );
+  try {
+    const r = await sendBaseEmail({ to: inscripcion.email, subject: `🎉 Se liberó un lugar en ${empresa.nombre}`, html });
+    if (r?.error) {
+      console.error("❌ Resend rechazó aviso de lista de espera:", r.error);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("❌ Error enviando aviso de lista de espera:", e.message);
+    return false;
+  }
+};

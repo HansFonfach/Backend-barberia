@@ -25,6 +25,8 @@ import { ESTADOS_QUE_OCUPAN } from "../services/reservasMesa/transiciones.js";
 import { esFechaValida, esHoraValida, hoyChile, sumarDias } from "../services/reservasMesa/tiempo.js";
 import { escaparRegex, limpiarTexto, normalizarTelefono } from "../services/reservasMesa/utilidades.js";
 import { registrarClienteDeReserva } from "../services/reservasMesa/clientes.js";
+import { revisarListaEsperaEnSegundoPlano } from "../services/reservasMesa/listaEspera.js";
+import ListaEsperaMesa from "../models/listaEsperaMesa.model.js";
 import {
   correoReservaCliente,
   correoReservaCancelada,
@@ -123,6 +125,9 @@ export const guardarConfiguracion = async (req, res) => {
       { $set: { ...datos, empresa } },
       { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
     ).lean();
+
+    // Más capacidad u horario más amplio pueden dar lugar a la lista de espera
+    revisarListaEsperaEnSegundoPlano(empresa);
 
     return res.json({
       configuracion: guardada,
@@ -299,6 +304,8 @@ export const eliminarBloqueo = async (req, res) => {
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ message: "Bloqueo inválido" });
     const borrado = await BloqueoReservaMesa.findOneAndDelete({ _id: id, empresa: req.usuario.empresaId });
     if (!borrado) return res.status(404).json({ message: "Bloqueo no encontrado" });
+    // Quitar un bloqueo puede dar lugar a quien estaba en lista de espera
+    revisarListaEsperaEnSegundoPlano(req.usuario.empresaId, [borrado.fecha]);
     return res.json({ message: "Bloqueo eliminado" });
   } catch (error) {
     return fallo(res, "eliminar bloqueo", error);
@@ -543,6 +550,7 @@ export const editar = async (req, res) => {
     if (!reserva) return res.status(404).json({ message: "Reserva no encontrada" });
 
     const config = await cargarConfig(req.usuario.empresaId);
+    const fechaAntes = reserva.fecha;
     const r = await editarReserva({
       empresaId: req.usuario.empresaId,
       config,
@@ -552,6 +560,8 @@ export const editar = async (req, res) => {
       puedeForzar: permisosDe(req, config).forzar,
     });
     if (!r.ok) return responderError(res, r);
+    // Si cambió de día, hora o personas, pudo quedar lugar
+    revisarListaEsperaEnSegundoPlano(req.usuario.empresaId, [...new Set([fechaAntes, r.reserva.fecha])]);
     return res.json(reservaParaPanel(r.reserva));
   } catch (error) {
     return fallo(res, "editar reserva", error);
@@ -585,9 +595,48 @@ export const cambiarEstado = async (req, res) => {
           : correoReservaCancelada(r.reserva, empresa),
       );
     }
+    // Cancelada, se fue o no llegó: se libera lugar para la lista de espera
+    if (["cancelada", "completada", "no_asistio"].includes(estado)) {
+      revisarListaEsperaEnSegundoPlano(req.usuario.empresaId, [r.reserva.fecha]);
+    }
     return res.json(reservaParaPanel(r.reserva));
   } catch (error) {
     return fallo(res, "cambiar estado", error);
+  }
+};
+
+/* ─────────── Lista de espera ─────────── */
+
+export const listaEspera = async (req, res) => {
+  try {
+    const { fecha } = req.query;
+    if (!esFechaValida(fecha)) return res.status(400).json({ message: "La fecha no es válida" });
+    const items = await ListaEsperaMesa.find({
+      empresa: req.usuario.empresaId,
+      fecha,
+      estado: { $in: ["esperando", "avisado"] },
+    })
+      .sort({ createdAt: 1 })
+      .select("nombre email personas estado avisadoEn createdAt")
+      .lean();
+    return res.json(items);
+  } catch (error) {
+    return fallo(res, "lista de espera", error);
+  }
+};
+
+export const quitarDeListaEspera = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) return res.status(400).json({ message: "Inscripción inválida" });
+    const r = await ListaEsperaMesa.findOneAndUpdate(
+      { _id: id, empresa: req.usuario.empresaId },
+      { $set: { estado: "quitado" } },
+    );
+    if (!r) return res.status(404).json({ message: "No encontrada" });
+    return res.json({ message: "Quitado de la lista de espera" });
+  } catch (error) {
+    return fallo(res, "quitar de lista de espera", error);
   }
 };
 

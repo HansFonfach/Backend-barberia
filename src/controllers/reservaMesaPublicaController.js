@@ -14,8 +14,9 @@ import {
 import { disponibilidadDelDia } from "../services/reservasMesa/disponibilidad.js";
 import { crearReserva, cambiarEstadoReserva } from "../services/reservasMesa/reservas.js";
 import { esFechaValida, hoyChile, sumarDias } from "../services/reservasMesa/tiempo.js";
-import { entradaHistorial, hashToken } from "../services/reservasMesa/utilidades.js";
+import { entradaHistorial, esEmailValido, hashToken, limpiarTexto } from "../services/reservasMesa/utilidades.js";
 import { whatsappAvisoLocal } from "../services/reservasMesa/whatsapp.js";
+import { anotarEnListaEspera, revisarListaEsperaEnSegundoPlano } from "../services/reservasMesa/listaEspera.js";
 import { registrarClienteDeReserva } from "../services/reservasMesa/clientes.js";
 import {
   correoReservaCliente,
@@ -93,6 +94,11 @@ export const info = async (req, res) => {
             mensajeCumpleanos: config.mensajeCumpleanos,
             confirmacionAutomatica: config.confirmacionAutomaticaWeb,
             mostrarCupos: !!config.mostrarCuposWeb,
+            listaEspera: !!config.listaEspera?.activa,
+            contacto: {
+              whatsapp: config.contactoWeb?.whatsapp || "",
+              mensajeSinLugar: config.contactoWeb?.mensajeSinLugar || "",
+            },
             cancelacion: config.cancelacionWeb,
           }
         : {}),
@@ -315,6 +321,7 @@ export const cancelarPublico = async (req, res) => {
     if (!r.ok) return res.status(r.status).json({ message: r.mensaje });
 
     notificar(() => correoReservaCancelada(r.reserva, empresa));
+    revisarListaEsperaEnSegundoPlano(reserva.empresa, [reserva.fecha]);
     return res.json({ message: "Tu reserva fue cancelada", estado: r.reserva.estado });
   } catch (error) {
     return fallo(res, "cancelar", error);
@@ -393,8 +400,44 @@ export const responderAsistencia = async (req, res) => {
     );
     const empresa = await Empresa.findById(reserva.empresa).select("nombre slug telefono direccion").lean();
     notificar(() => correoReservaCancelada(r.reserva, empresa));
+    revisarListaEsperaEnSegundoPlano(reserva.empresa, [reserva.fecha]);
     return res.json({ ...(await datosAsistencia(r.reserva)), respuesta: "cancela" });
   } catch (error) {
     return fallo(res, "responder asistencia", error);
+  }
+};
+
+/* ─────────── Lista de espera ─────────── */
+
+export const anotarListaEspera = async (req, res) => {
+  try {
+    if (req.body?.sitioWeb) return res.status(400).json({ message: "No se pudo procesar la solicitud" });
+    const empresa = await empresaPublica(req.params.slug);
+    if (!empresa) return noDisponible(res);
+    const config = await ConfiguracionReservasMesa.findOne({ empresa: empresa._id }).lean();
+    if (faltantesConfiguracion(config, CANAL_WEB).length || !config.listaEspera?.activa) {
+      return res.status(404).json({ message: "La lista de espera no está disponible" });
+    }
+
+    const fecha = req.body.fecha;
+    const personas = Number(req.body.personas);
+    const nombre = limpiarTexto(req.body.nombre, 80);
+    const email = String(req.body.email || "").trim().toLowerCase().slice(0, 120);
+    const hoy = hoyChile();
+    if (!esFechaValida(fecha) || fecha < hoy || fecha > sumarDias(hoy, config.anticipacionMaximaDias)) {
+      return res.status(400).json({ message: "La fecha no es válida" });
+    }
+    if (!Number.isInteger(personas) || personas < 1 || personas > config.maxPersonasWeb) {
+      return res.status(400).json({ message: "La cantidad de personas no es válida" });
+    }
+    if (nombre.length < 2) return res.status(400).json({ message: "Escribe tu nombre" });
+    if (!esEmailValido(email)) return res.status(400).json({ message: "Escribe un correo válido" });
+
+    await anotarEnListaEspera({ empresaId: empresa._id, fecha, personas, nombre, email });
+    // Por si justo se liberó algo mientras completaba el formulario
+    revisarListaEsperaEnSegundoPlano(empresa._id, [fecha]);
+    return res.status(201).json({ message: "Te anotamos en la lista de espera" });
+  } catch (error) {
+    return fallo(res, "lista de espera", error);
   }
 };

@@ -23,6 +23,8 @@ import {
   cambiarEstado,
   resumen,
   calendario,
+  listaEspera,
+  quitarDeListaEspera,
 } from "../controllers/reservaMesaController.js";
 import {
   info,
@@ -32,6 +34,7 @@ import {
   cancelarPublico,
   infoAsistencia,
   responderAsistencia,
+  anotarListaEspera,
 } from "../controllers/reservaMesaPublicaController.js";
 import {
   clientes,
@@ -55,6 +58,7 @@ router.post("/publico/asistencia", limitarEscrituraPublica, responderAsistencia)
 router.post("/publico/cancelar", limitarEscrituraPublica, cancelarPublico);
 router.get("/publico/:slug/info", limitarLecturaPublica, info);
 router.get("/publico/:slug/disponibilidad", limitarLecturaPublica, disponibilidadPublica);
+router.post("/publico/:slug/lista-espera", limitarEscrituraPublica, anotarListaEspera);
 router.post("/publico/:slug", limitarEscrituraPublica, reservarPublico);
 
 /* ── Panel ──
@@ -76,6 +80,8 @@ router.get("/disponibilidad", ...personal, disponibilidad);
 router.get("/dia/:fecha", ...personal, reservasDelDia);
 router.get("/resumen", ...admin, resumen);
 router.get("/calendario", ...personal, calendario);
+router.get("/lista-espera", ...personal, listaEspera);
+router.delete("/lista-espera/:id", ...admin, quitarDeListaEspera);
 
 /* ── Clientes y promociones (solo admin) ── antes que "/:id" ── */
 router.get("/clientes", ...admin, clientes);

@@ -4,6 +4,7 @@ import ConfiguracionReservasMesa from "../models/configuracionReservasMesa.model
 import ReservaMesa from "../models/reservaMesa.model.js";
 import { correoRecordatorio } from "../services/reservasMesa/correos.js";
 import { whatsappConfirmacionAsistencia } from "../services/reservasMesa/whatsapp.js";
+import { revisarTodasLasListasEspera } from "../services/reservasMesa/listaEspera.js";
 import { generarTokenCancelacion } from "../services/reservasMesa/utilidades.js";
 
 // Recordatorio por correo de las reservas de mesa. Corre cada 15 minutos y
@@ -130,6 +131,12 @@ export const iniciarCronRecordatorioReservasMesa = () => {
         if (w) console.log(`🍽️  Confirmaciones por WhatsApp de reservas de mesa enviadas: ${w}`);
       } catch (error) {
         console.error("❌ Cron WhatsApp reservas de mesa:", error.message);
+      }
+      try {
+        const l = await revisarTodasLasListasEspera();
+        if (l) console.log(`🍽️  Avisos de lista de espera enviados: ${l}`);
+      } catch (error) {
+        console.error("❌ Cron lista de espera de mesas:", error.message);
       }
     },
     { timezone: "America/Santiago" },

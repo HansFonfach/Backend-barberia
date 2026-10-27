@@ -31,6 +31,8 @@ export const configuracionVacia = () => ({
   mensajeCumpleanos: "",
   cancelacionWeb: { permitida: false, horasLimite: null },
   recordatorio: { activo: false, horasAntes: null },
+  listaEspera: { activa: false },
+  contactoWeb: { whatsapp: "", mensajeSinLugar: "" },
   whatsapp: {
     avisoLocal: { activo: false, telefonos: [] },
     confirmacion: { activo: false, horasAntes: null },
@@ -146,6 +148,18 @@ export const validarConfiguracion = (body = {}) => {
   if (datos.recordatorio.activo && datos.recordatorio.horasAntes === null) {
     return { error: "Indica cuántas horas antes se envía el recordatorio" };
   }
+
+  datos.listaEspera = { activa: !!body.listaEspera?.activa };
+
+  const whatsappContacto = limpiarTexto(body.contactoWeb?.whatsapp, 25);
+  const digitosContacto = whatsappContacto.replace(/\D/g, "");
+  if (whatsappContacto && (digitosContacto.length < 8 || digitosContacto.length > 15)) {
+    return { error: "Revisa el número de WhatsApp para consultas" };
+  }
+  datos.contactoWeb = {
+    whatsapp: whatsappContacto,
+    mensajeSinLugar: limpiarTexto(body.contactoWeb?.mensajeSinLugar, 300),
+  };
 
   // ── WhatsApp ──
   const crudos = Array.isArray(body.whatsapp?.avisoLocal?.telefonos)
