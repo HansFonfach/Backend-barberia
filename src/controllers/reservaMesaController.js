@@ -258,7 +258,7 @@ export const cancelarAfectadas = async (req, res) => {
     const mensaje = limpiarTexto(req.body.mensaje, 500);
 
     const reservas = await ReservaMesa.find({ ...filtroAfectadas(bloqueo), _id: { $in: ids } });
-    const empresa = await Empresa.findById(req.usuario.empresaId).select("nombre slug telefono direccion").lean();
+    const empresa = await Empresa.findById(req.usuario.empresaId).select("nombre slug telefono direccion redes").lean();
     const actor = actorDe(req);
     const detalle = `Bloqueo del ${bloqueo.fecha}${bloqueo.motivo ? ` (${bloqueo.motivo})` : ""}`;
 
@@ -513,7 +513,7 @@ export const crear = async (req, res) => {
     if (!r.ok) return responderError(res, r);
 
     if (!r.repetida && r.reserva.cliente.email) {
-      const empresa = await Empresa.findById(empresaId).select("nombre slug telefono direccion").lean();
+      const empresa = await Empresa.findById(empresaId).select("nombre slug telefono direccion redes").lean();
       notificar(() => correoReservaCliente(r.reserva, empresa, { token: r.tokenCancelacion, config }));
     }
     if (!r.repetida) {
@@ -588,7 +588,7 @@ export const cambiarEstado = async (req, res) => {
 
     // Correos al cliente: al confirmar una pendiente y al cancelar
     if (reserva.cliente.email && (estado === "confirmada" || estado === "cancelada")) {
-      const empresa = await Empresa.findById(req.usuario.empresaId).select("nombre slug telefono direccion").lean();
+      const empresa = await Empresa.findById(req.usuario.empresaId).select("nombre slug telefono direccion redes").lean();
       notificar(() =>
         estado === "confirmada"
           ? correoReservaCliente(r.reserva, empresa, { config })

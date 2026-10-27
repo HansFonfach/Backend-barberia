@@ -59,7 +59,7 @@ const ConfiguracionReservasMesaSchema = new Schema(
     // Mostrar al cliente cuántos lugares quedan en cada hora y sector
     mostrarCuposWeb: { type: Boolean, default: false },
     mensajePublico: { type: String, default: "", maxlength: 600 },
-    mensajeCumpleanos: { type: String, default: "", maxlength: 300 },
+    mensajeCumpleanos: { type: String, default: "", maxlength: 600 },
 
     cancelacionWeb: {
       permitida: { type: Boolean, default: false },

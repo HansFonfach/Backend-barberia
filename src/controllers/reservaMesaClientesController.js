@@ -26,7 +26,7 @@ const actorNombre = (req) =>
   `${req.usuario.nombre || ""} ${req.usuario.apellido || ""}`.trim() || "Panel";
 
 const empresaParaCorreo = (empresaId) =>
-  Empresa.findById(empresaId).select("nombre slug telefono direccion").lean();
+  Empresa.findById(empresaId).select("nombre slug telefono direccion redes").lean();
 
 const leerPromocion = (body = {}) => {
   const asunto = limpiarTexto(body.asunto, 120);

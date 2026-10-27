@@ -133,7 +133,7 @@ export const validarConfiguracion = (body = {}) => {
   datos.confirmacionAutomaticaWeb = !!body.confirmacionAutomaticaWeb;
   datos.mostrarCuposWeb = !!body.mostrarCuposWeb;
   datos.mensajePublico = limpiarTexto(body.mensajePublico, 600);
-  datos.mensajeCumpleanos = limpiarTexto(body.mensajeCumpleanos, 300);
+  datos.mensajeCumpleanos = limpiarTexto(body.mensajeCumpleanos, 600);
 
   const horasLimite = entero(body.cancelacionWeb?.horasLimite, 0, 720);
   if (!horasLimite.ok) return { error: "Las horas límite para cancelar deben ser un número entre 0 y 720" };

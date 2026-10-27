@@ -56,7 +56,7 @@ const main = async () => {
 
   await mongoose.connect(process.env.MONGO_URI);
 
-  const empresa = await Empresa.findOne({ slug: slug.toLowerCase() }).select("nombre slug telefono direccion").lean();
+  const empresa = await Empresa.findOne({ slug: slug.toLowerCase() }).select("nombre slug telefono direccion redes").lean();
   if (!empresa) {
     console.error(`No existe una empresa con slug "${slug}".`);
     return salir(1);
@@ -100,7 +100,7 @@ const main = async () => {
       },
     },
   );
-  const contacto = empresa.telefono || config?.whatsapp?.avisoLocal?.telefonos?.[0] || "";
+  const contacto = config?.contactoWeb?.whatsapp || "";
   console.log(`Enviando "${PLANTILLA_CONFIRMACION}" a ${reserva.cliente.telefono}...`);
   const r = await whatsappConfirmacionAsistencia(reserva, empresa, token.token, new Date(), contacto);
   if (r.ok) {

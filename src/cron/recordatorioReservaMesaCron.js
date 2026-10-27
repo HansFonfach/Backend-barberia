@@ -25,7 +25,7 @@ export const enviarRecordatoriosReservasMesa = async (ahora = new Date()) => {
   let enviados = 0;
   for (const config of configs) {
     const empresa = await Empresa.findById(config.empresa)
-      .select("nombre slug telefono direccion estado estadoSuscripcion modulos")
+      .select("nombre slug telefono direccion redes estado estadoSuscripcion modulos")
       .lean();
     if (!empresa?.modulos?.reservasMesas || empresa.estado === "inactivo") continue;
     if (["suspendido", "cancelado"].includes(empresa.estadoSuscripcion)) continue;
@@ -78,7 +78,7 @@ export const enviarConfirmacionesWhatsappMesa = async (ahora = new Date()) => {
   let enviados = 0;
   for (const config of configs) {
     const empresa = await Empresa.findById(config.empresa)
-      .select("nombre slug telefono direccion estado estadoSuscripcion modulos")
+      .select("nombre slug telefono direccion redes estado estadoSuscripcion modulos")
       .lean();
     if (!empresa?.modulos?.reservasMesas || empresa.estado === "inactivo") continue;
     if (["suspendido", "cancelado"].includes(empresa.estadoSuscripcion)) continue;
@@ -104,9 +104,9 @@ export const enviarConfirmacionesWhatsappMesa = async (ahora = new Date()) => {
       );
       if (!reserva) continue; // otro proceso ya lo tomó
 
-      // Teléfono para que el cliente hable con el local: el de la empresa o,
-      // si no tiene, el primero que recibe los avisos de reservas.
-      const contacto = empresa.telefono || config.whatsapp?.avisoLocal?.telefonos?.[0] || "";
+      // Contacto para el cliente: el WhatsApp de consultas (si no, el teléfono o
+      // el Instagram del local). Nunca los números que reciben los avisos.
+      const contacto = config.contactoWeb?.whatsapp || "";
       const r = await whatsappConfirmacionAsistencia(reserva, empresa, token.token, ahora, contacto);
       if (r.ok) enviados++;
       else await ReservaMesa.updateOne({ _id: reserva._id }, { $set: { "whatsapp.error": String(r.error).slice(0, 300) } });

@@ -2,6 +2,7 @@
 // tiene correo, y un fallo de envío nunca deshace la reserva: se registra en
 // consola y la operación sigue.
 import { sendBaseEmail } from "../../controllers/mailController.js";
+import { usuarioInstagram } from "./utilidades.js";
 
 const BASE_URL = "https://www.agendafonfach.cl";
 
@@ -45,10 +46,16 @@ ${r.cumpleanos?.es ? `<tr><td style="color:#555;">Cumpleaños</td><td style="fon
 ${empresa.direccion ? `<tr><td style="color:#555;">Dirección</td><td style="font-weight:bold;">${esc(empresa.direccion)}</td></tr>` : ""}
 </table>`;
 
-const contacto = (empresa) =>
-  empresa.telefono
-    ? `<p style="font-size:14px;color:#555;">¿Algún cambio? Llámanos al <a href="tel:${esc(empresa.telefono)}" style="color:#1a73e8;">${esc(empresa.telefono)}</a>.</p>`
+// Contacto para el cliente: el teléfono del local o, si no tiene, su Instagram
+const contacto = (empresa) => {
+  if (empresa.telefono) {
+    return `<p style="font-size:14px;color:#555;">¿Algún cambio? Llámanos al <a href="tel:${esc(empresa.telefono)}" style="color:#1a73e8;">${esc(empresa.telefono)}</a>.</p>`;
+  }
+  const ig = usuarioInstagram(empresa.redes?.instagram);
+  return ig
+    ? `<p style="font-size:14px;color:#555;">¿Algún cambio? Escríbenos por Instagram: <a href="https://ig.me/m/${esc(ig)}" style="color:#1a73e8;">@${esc(ig)}</a>.</p>`
     : "";
+};
 
 const linkCancelar = (empresa, token) =>
   token

@@ -24,7 +24,7 @@ import {
   correoReservaCancelada,
 } from "../services/reservasMesa/correos.js";
 
-const CAMPOS_EMPRESA = "nombre slug telefono direccion correo logo estado estadoSuscripcion modulos";
+const CAMPOS_EMPRESA = "nombre slug telefono direccion redes correo logo estado estadoSuscripcion modulos";
 
 /** Empresa pública con el módulo activo, o null. */
 const empresaPublica = async (slug) => {
@@ -77,6 +77,7 @@ export const info = async (req, res) => {
         telefono: empresa.telefono || "",
         direccion: empresa.direccion || "",
         logo: empresa.logo || null,
+        instagram: empresa.redes?.instagram || "",
       },
       activa,
       ...(activa
@@ -274,7 +275,7 @@ export const infoCancelacion = async (req, res) => {
     if (!reserva) return res.status(404).json({ message: "El link no es válido o ya no está vigente" });
 
     const [empresa, config] = await Promise.all([
-      Empresa.findById(reserva.empresa).select("nombre slug telefono").lean(),
+      Empresa.findById(reserva.empresa).select("nombre slug telefono redes").lean(),
       ConfiguracionReservasMesa.findOne({ empresa: reserva.empresa }).lean(),
     ]);
     const permitido = puedeCancelarCliente(reserva, config);
@@ -304,7 +305,7 @@ export const cancelarPublico = async (req, res) => {
     if (!reserva) return res.status(404).json({ message: "El link no es válido o ya no está vigente" });
 
     const [empresa, config] = await Promise.all([
-      Empresa.findById(reserva.empresa).select("nombre slug telefono direccion").lean(),
+      Empresa.findById(reserva.empresa).select("nombre slug telefono direccion redes").lean(),
       ConfiguracionReservasMesa.findOne({ empresa: reserva.empresa }).lean(),
     ]);
     const permitido = puedeCancelarCliente(reserva, config);
@@ -336,9 +337,15 @@ const buscarPorTokenAsistencia = async (token) => {
 };
 
 const datosAsistencia = async (reserva) => {
-  const empresa = await Empresa.findById(reserva.empresa).select("nombre slug telefono direccion").lean();
+  const empresa = await Empresa.findById(reserva.empresa).select("nombre slug telefono direccion redes").lean();
   return {
-    empresa: { nombre: empresa?.nombre || "", slug: empresa?.slug || "", telefono: empresa?.telefono || "", direccion: empresa?.direccion || "" },
+    empresa: {
+      nombre: empresa?.nombre || "",
+      slug: empresa?.slug || "",
+      telefono: empresa?.telefono || "",
+      direccion: empresa?.direccion || "",
+      instagram: empresa?.redes?.instagram || "",
+    },
     reserva: {
       codigo: reserva.codigo,
       nombre: reserva.cliente.nombre,
@@ -398,7 +405,7 @@ export const responderAsistencia = async (req, res) => {
       { _id: reserva._id },
       { $set: { "whatsapp.respuesta": "cancela", "whatsapp.respondidaEn": new Date() } },
     );
-    const empresa = await Empresa.findById(reserva.empresa).select("nombre slug telefono direccion").lean();
+    const empresa = await Empresa.findById(reserva.empresa).select("nombre slug telefono direccion redes").lean();
     notificar(() => correoReservaCancelada(r.reserva, empresa));
     revisarListaEsperaEnSegundoPlano(reserva.empresa, [reserva.fecha]);
     return res.json({ ...(await datosAsistencia(r.reserva)), respuesta: "cancela" });

@@ -243,3 +243,16 @@ test("WhatsApp: plantillas con los parámetros y botones esperados", async () =>
     globalThis.fetch = fetchOriginal;
   }
 });
+
+test("contacto para el cliente: nunca el número de los avisos; Instagram si no hay teléfono", async () => {
+  const { contactoParaCliente } = await import("../src/services/reservasMesa/whatsapp.js");
+  const { usuarioInstagram } = await import("../src/services/reservasMesa/utilidades.js");
+  assert.equal(usuarioInstagram("https://www.instagram.com/santafeovalle/?hl=es"), "santafeovalle");
+  assert.equal(usuarioInstagram("@santafeovalle"), "santafeovalle");
+  assert.equal(usuarioInstagram(""), "");
+  const sinTelefono = { telefono: "", redes: { instagram: "https://www.instagram.com/santafeovalle/?hl=es" } };
+  assert.equal(contactoParaCliente(sinTelefono), "Instagram https://www.instagram.com/santafeovalle");
+  assert.equal(contactoParaCliente(sinTelefono, "+56 9 5555 0000"), "+56 9 5555 0000");
+  assert.equal(contactoParaCliente({ telefono: "+56 53 222 3333" }), "+56 53 222 3333");
+  assert.equal(contactoParaCliente({}), "el local");
+});

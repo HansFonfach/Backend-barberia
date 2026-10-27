@@ -31,6 +31,7 @@
 //     Botón "Visitar sitio web" con URL dinámica:
 //       Ver en el panel → https://www.agendafonfach.cl/{{1}}   ({{1}} = "slug/admin/reservas-mesa-hoy?fecha=...")
 import { diaSemana, hoyChile, sumarDias } from "./tiempo.js";
+import { usuarioInstagram } from "./utilidades.js";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -105,8 +106,20 @@ export const cuandoEs = (reserva, ahora = new Date()) => {
 };
 
 /**
+ * Cómo puede hablar el cliente con el local: el WhatsApp de consultas, el
+ * teléfono del local o su Instagram. Nunca los números privados que reciben
+ * los avisos de reservas.
+ */
+export const contactoParaCliente = (empresa, telefonoContacto = "") => {
+  if (telefonoContacto) return telefonoContacto;
+  if (empresa.telefono) return empresa.telefono;
+  const ig = usuarioInstagram(empresa.redes?.instagram);
+  return ig ? `Instagram https://www.instagram.com/${ig}` : "el local";
+};
+
+/**
  * Al cliente: "¿Nos confirmas tu asistencia?" con botones Confirmar / No podré ir.
- * `telefonoContacto`: número que se le muestra para hablar con el local.
+ * `telefonoContacto`: WhatsApp de consultas del local (si lo configuró).
  */
 export const whatsappConfirmacionAsistencia = (reserva, empresa, token, ahora = new Date(), telefonoContacto = "") =>
   enviarPlantilla({
@@ -119,7 +132,7 @@ export const whatsappConfirmacionAsistencia = (reserva, empresa, token, ahora = 
       reserva.personas,
       reserva.sector.nombre,
       empresa.direccion || empresa.nombre,
-      telefonoContacto || empresa.telefono || "el teléfono del local",
+      contactoParaCliente(empresa, telefonoContacto),
     ],
     botonesUrl: [token, token],
   });

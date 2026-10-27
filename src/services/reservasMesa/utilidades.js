@@ -64,3 +64,14 @@ export const diferencias = (antes, despues, campos) => {
   }
   return Object.keys(cambios).length ? cambios : null;
 };
+
+/**
+ * Usuario de Instagram a partir de lo que guardó el local: un link
+ * ("https://www.instagram.com/santafeovalle/?hl=es") o "@santafeovalle".
+ */
+export const usuarioInstagram = (valor) => {
+  const v = String(valor || "").trim();
+  if (!v) return "";
+  const m = v.match(/instagram\.com\/([A-Za-z0-9._]+)/i) || v.match(/^@?([A-Za-z0-9._]+)$/);
+  return m ? m[1] : "";
+};

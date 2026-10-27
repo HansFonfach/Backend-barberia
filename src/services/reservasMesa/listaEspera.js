@@ -39,7 +39,7 @@ export const revisarListaEspera = async (empresaId, fechas = null, ahora = new D
   if (!config?.listaEspera?.activa || !config.reservasWebActivas) return 0;
 
   const empresa = await Empresa.findById(empresaId)
-    .select("nombre slug telefono direccion estado estadoSuscripcion modulos")
+    .select("nombre slug telefono direccion redes estado estadoSuscripcion modulos")
     .lean();
   if (!empresa?.modulos?.reservasMesas || empresa.estado === "inactivo") return 0;
   if (["suspendido", "cancelado"].includes(empresa.estadoSuscripcion)) return 0;
