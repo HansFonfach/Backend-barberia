@@ -31,6 +31,10 @@ export const configuracionVacia = () => ({
   mensajeCumpleanos: "",
   cancelacionWeb: { permitida: false, horasLimite: null },
   recordatorio: { activo: false, horasAntes: null },
+  whatsapp: {
+    avisoLocal: { activo: false, telefonos: [] },
+    confirmacion: { activo: false, horasAntes: null },
+  },
   permisosPersonal: { cancelar: false, forzarSobrecupo: false },
 });
 
@@ -141,6 +145,28 @@ export const validarConfiguracion = (body = {}) => {
   datos.recordatorio = { activo: !!body.recordatorio?.activo, horasAntes: horasAntes.valor };
   if (datos.recordatorio.activo && datos.recordatorio.horasAntes === null) {
     return { error: "Indica cuántas horas antes se envía el recordatorio" };
+  }
+
+  // ── WhatsApp ──
+  const crudos = Array.isArray(body.whatsapp?.avisoLocal?.telefonos)
+    ? body.whatsapp.avisoLocal.telefonos
+    : String(body.whatsapp?.avisoLocal?.telefonos || "").split(/[,;\n]/);
+  const telefonos = [...new Set(crudos.map((t) => limpiarTexto(t, 25)).filter(Boolean))];
+  if (telefonos.length > 3) return { error: "Puedes poner hasta 3 números para el aviso por WhatsApp" };
+  if (telefonos.some((t) => { const d = t.replace(/\D/g, ""); return d.length < 8 || d.length > 15; })) {
+    return { error: "Revisa los números de WhatsApp del local" };
+  }
+  const horasWhatsapp = entero(body.whatsapp?.confirmacion?.horasAntes, 1, 24);
+  if (!horasWhatsapp.ok) return { error: "Las horas para pedir confirmación por WhatsApp deben ser entre 1 y 24" };
+  datos.whatsapp = {
+    avisoLocal: { activo: !!body.whatsapp?.avisoLocal?.activo, telefonos },
+    confirmacion: { activo: !!body.whatsapp?.confirmacion?.activo, horasAntes: horasWhatsapp.valor },
+  };
+  if (datos.whatsapp.avisoLocal.activo && !telefonos.length) {
+    return { error: "Indica el número de WhatsApp que recibe el aviso de reservas nuevas" };
+  }
+  if (datos.whatsapp.confirmacion.activo && datos.whatsapp.confirmacion.horasAntes === null) {
+    return { error: "Indica cuántas horas antes se pide la confirmación por WhatsApp" };
   }
 
   datos.permisosPersonal = {

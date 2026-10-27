@@ -71,6 +71,20 @@ const ConfiguracionReservasMesaSchema = new Schema(
       horasAntes: { type: Number, default: null },
     },
 
+    // WhatsApp (plantillas de Meta: ver services/reservasMesa/whatsapp.js)
+    whatsapp: {
+      // Aviso al local por cada reserva nueva hecha en la web
+      avisoLocal: {
+        activo: { type: Boolean, default: false },
+        telefonos: { type: [String], default: [] },
+      },
+      // Mensaje al cliente para que confirme si viene
+      confirmacion: {
+        activo: { type: Boolean, default: false },
+        horasAntes: { type: Number, default: null },
+      },
+    },
+
     // Qué puede hacer el personal que no es admin
     permisosPersonal: {
       cancelar: { type: Boolean, default: false },

@@ -470,5 +470,6 @@ export const reservaParaPanel = (reserva) => {
   delete r.tokensCancelacion;
   delete r.claveIdempotencia;
   delete r.franjas;
+  if (r.whatsapp) r.whatsapp = { ...r.whatsapp, tokenAsistencia: undefined };
   return r;
 };

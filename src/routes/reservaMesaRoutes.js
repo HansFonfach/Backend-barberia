@@ -30,6 +30,8 @@ import {
   reservarPublico,
   infoCancelacion,
   cancelarPublico,
+  infoAsistencia,
+  responderAsistencia,
 } from "../controllers/reservaMesaPublicaController.js";
 import {
   clientes,
@@ -48,6 +50,8 @@ const router = Router();
 router.get("/publico/cancelacion/:token", limitarLecturaPublica, infoCancelacion);
 router.get("/publico/baja/:token", limitarLecturaPublica, infoBaja);
 router.post("/publico/baja", limitarEscrituraPublica, darDeBaja);
+router.get("/publico/asistencia/:token", limitarLecturaPublica, infoAsistencia);
+router.post("/publico/asistencia", limitarEscrituraPublica, responderAsistencia);
 router.post("/publico/cancelar", limitarEscrituraPublica, cancelarPublico);
 router.get("/publico/:slug/info", limitarLecturaPublica, info);
 router.get("/publico/:slug/disponibilidad", limitarLecturaPublica, disponibilidadPublica);

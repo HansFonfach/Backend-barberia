@@ -126,11 +126,24 @@ const ReservaMesaSchema = new Schema(
     tokensCancelacion: { type: [String], default: [] },
 
     recordatorioEnviadoEn: { type: Date, default: null },
+
+    // Confirmación de asistencia por WhatsApp (plantilla con botones)
+    whatsapp: {
+      recordatorioEnviadoEn: { type: Date, default: null },
+      tokenAsistencia: { type: String, default: null }, // hash del token de los botones
+      respuesta: { type: String, enum: ["confirma", "cancela", null], default: null },
+      respondidaEn: { type: Date, default: null },
+      error: { type: String, default: "" },
+    },
   },
   { timestamps: true },
 );
 
 ReservaMesaSchema.index({ empresa: 1, codigo: 1 }, { unique: true });
+ReservaMesaSchema.index(
+  { "whatsapp.tokenAsistencia": 1 },
+  { partialFilterExpression: { "whatsapp.tokenAsistencia": { $type: "string" } } },
+);
 ReservaMesaSchema.index({ empresa: 1, inicio: 1 });
 ReservaMesaSchema.index({ empresa: 1, fecha: 1, estado: 1 });
 ReservaMesaSchema.index({ empresa: 1, "cliente.telefonoNormalizado": 1, fecha: 1 });

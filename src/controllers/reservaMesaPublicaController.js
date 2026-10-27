@@ -14,7 +14,8 @@ import {
 import { disponibilidadDelDia } from "../services/reservasMesa/disponibilidad.js";
 import { crearReserva, cambiarEstadoReserva } from "../services/reservasMesa/reservas.js";
 import { esFechaValida, hoyChile, sumarDias } from "../services/reservasMesa/tiempo.js";
-import { hashToken } from "../services/reservasMesa/utilidades.js";
+import { entradaHistorial, hashToken } from "../services/reservasMesa/utilidades.js";
+import { whatsappAvisoLocal } from "../services/reservasMesa/whatsapp.js";
 import { registrarClienteDeReserva } from "../services/reservasMesa/clientes.js";
 import {
   correoReservaCliente,
@@ -208,6 +209,9 @@ export const reservarPublico = async (req, res) => {
     if (!r.repetida) {
       notificar(() => correoReservaCliente(reserva, empresa, { token: r.tokenCancelacion, config }));
       notificar(() => correoAvisoLocal(reserva, empresa));
+      if (config.whatsapp?.avisoLocal?.activo && config.whatsapp.avisoLocal.telefonos?.length) {
+        notificar(() => whatsappAvisoLocal(reserva, empresa, config.whatsapp.avisoLocal.telefonos));
+      }
       // Lista de clientes (y permiso de promociones si marcó la casilla)
       notificar(() =>
         registrarClienteDeReserva({
@@ -314,5 +318,83 @@ export const cancelarPublico = async (req, res) => {
     return res.json({ message: "Tu reserva fue cancelada", estado: r.reserva.estado });
   } catch (error) {
     return fallo(res, "cancelar", error);
+  }
+};
+
+/* ─────────── Confirmar asistencia desde el WhatsApp ─────────── */
+
+const buscarPorTokenAsistencia = async (token) => {
+  if (!token || typeof token !== "string" || token.length < 32) return null;
+  return ReservaMesa.findOne({ "whatsapp.tokenAsistencia": hashToken(token) });
+};
+
+const datosAsistencia = async (reserva) => {
+  const empresa = await Empresa.findById(reserva.empresa).select("nombre slug telefono direccion").lean();
+  return {
+    empresa: { nombre: empresa?.nombre || "", slug: empresa?.slug || "", telefono: empresa?.telefono || "", direccion: empresa?.direccion || "" },
+    reserva: {
+      codigo: reserva.codigo,
+      nombre: reserva.cliente.nombre,
+      fecha: reserva.fecha,
+      hora: reserva.hora,
+      personas: reserva.personas,
+      sector: reserva.sector.nombre,
+      estado: reserva.estado,
+    },
+    respuesta: reserva.whatsapp?.respuesta || null,
+    vigente: ["pendiente", "confirmada"].includes(reserva.estado) && new Date(reserva.fin).getTime() > Date.now(),
+  };
+};
+
+export const infoAsistencia = async (req, res) => {
+  try {
+    const reserva = await buscarPorTokenAsistencia(req.params.token);
+    if (!reserva) return res.status(404).json({ message: "El link no es válido o ya no está vigente" });
+    return res.json(await datosAsistencia(reserva));
+  } catch (error) {
+    return fallo(res, "info asistencia", error);
+  }
+};
+
+/** accion: "confirmar" (voy) o "cancelar" (no podré ir: se libera la mesa). */
+export const responderAsistencia = async (req, res) => {
+  try {
+    const { token, accion } = req.body || {};
+    if (!["confirmar", "cancelar"].includes(accion)) return res.status(400).json({ message: "Acción inválida" });
+    const reserva = await buscarPorTokenAsistencia(token);
+    if (!reserva) return res.status(404).json({ message: "El link no es válido o ya no está vigente" });
+
+    const datos = await datosAsistencia(reserva);
+    if (reserva.whatsapp?.respuesta) return res.json({ ...datos, yaRespondida: true });
+    if (!datos.vigente) return res.status(409).json({ ...datos, message: "Esta reserva ya no se puede modificar." });
+
+    if (accion === "confirmar") {
+      reserva.whatsapp.respuesta = "confirma";
+      reserva.whatsapp.respondidaEn = new Date();
+      reserva.historial.push(
+        entradaHistorial({ id: null, nombre: "cliente (WhatsApp)" }, "asistencia_confirmada", { detalle: "Confirmó que viene" }),
+      );
+      await reserva.save();
+      return res.json({ ...(await datosAsistencia(reserva)), respuesta: "confirma" });
+    }
+
+    const r = await cambiarEstadoReserva({
+      reserva,
+      hacia: "cancelada",
+      motivo: "cliente_cancelo",
+      detalle: "Avisó por WhatsApp que no podrá ir",
+      por: "cliente",
+      actor: { id: null, nombre: "cliente (WhatsApp)" },
+    });
+    if (!r.ok) return res.status(r.status).json({ message: r.mensaje });
+    await ReservaMesa.updateOne(
+      { _id: reserva._id },
+      { $set: { "whatsapp.respuesta": "cancela", "whatsapp.respondidaEn": new Date() } },
+    );
+    const empresa = await Empresa.findById(reserva.empresa).select("nombre slug telefono direccion").lean();
+    notificar(() => correoReservaCancelada(r.reserva, empresa));
+    return res.json({ ...(await datosAsistencia(r.reserva)), respuesta: "cancela" });
+  } catch (error) {
+    return fallo(res, "responder asistencia", error);
   }
 };

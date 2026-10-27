@@ -202,3 +202,44 @@ test("utilidades", () => {
   assert.deepEqual(diferencias({ a: 1, b: 2 }, { a: 1, b: 3 }, ["a", "b"]), { b: [2, 3] });
   assert.equal(diferencias({ a: 1 }, { a: 1 }, ["a"]), null);
 });
+
+test("WhatsApp: plantillas con los parámetros y botones esperados", async () => {
+  const { whatsappConfirmacionAsistencia, whatsappAvisoLocal, cuandoEs, formatearTelefono } = await import(
+    "../src/services/reservasMesa/whatsapp.js"
+  );
+  const enviados = [];
+  const fetchOriginal = globalThis.fetch;
+  process.env.ACCESS_TOKEN ||= "token-de-prueba";
+  process.env.PHONE_NUMBER ||= "123";
+  globalThis.fetch = async (url, opciones) => {
+    enviados.push(JSON.parse(opciones.body));
+    return { ok: true, json: async () => ({}) };
+  };
+  try {
+    const reserva = {
+      fecha: VIERNES, hora: "21:00", personas: 4, estado: "pendiente",
+      sector: { nombre: "Salón" }, cumpleanos: { es: true },
+      cliente: { nombre: "Camila Rojas", telefono: "+56 9 1234 5678" },
+    };
+    const empresa = { nombre: "Santa Fe", direccion: "Calle Falsa 123, Ovalle" };
+    const r = await whatsappConfirmacionAsistencia(reserva, empresa, "abc123", instante(VIERNES, "18:00").toDate(), "+56 9 1111 2222");
+    assert.equal(r.ok, true);
+    const [m1] = enviados;
+    assert.equal(m1.to, "56912345678");
+    assert.equal(m1.template.name, "recordatorio_reserva_mesa");
+    assert.deepEqual(m1.template.components[0].parameters.map((p) => p.text), ["Camila", "Santa Fe", "hoy a las 21:00", "4", "Salón", "Calle Falsa 123, Ovalle", "+56 9 1111 2222"]);
+    assert.equal(m1.template.components.filter((c) => c.type === "button").length, 2);
+
+    await whatsappAvisoLocal(reserva, { ...empresa, slug: "santafe" }, ["912345678", "+56 9 8765 4321"]);
+    assert.equal(enviados.length, 3);
+    assert.equal(enviados[1].template.name, "nueva_reserva_mesa");
+    assert.equal(enviados[1].template.components[0].parameters[1].text, "Camila Rojas (cumpleaños)");
+    assert.equal(enviados[2].to, "56987654321");
+    assert.equal(enviados[1].template.components[1].parameters[0].text, `santafe/admin/reservas-mesa-hoy?fecha=${VIERNES}`);
+
+    assert.equal(cuandoEs({ fecha: VIERNES, hora: "21:00" }, instante("2026-10-22", "12:00").toDate()), "mañana a las 21:00");
+    assert.equal(formatearTelefono("9 1234 5678"), "56912345678");
+  } finally {
+    globalThis.fetch = fetchOriginal;
+  }
+});
