@@ -21,7 +21,8 @@ export const iniciarCronSuscripciones = () => {
           .find({
             cliente: sub.usuario,
             fecha: { $gte: sub.fechaInicio, $lte: ahora },
-            estado: { $ne: "cancelada" },
+            // "reagendada" fue reemplazada por otra reserva: no se cuenta dos veces
+            estado: { $nin: ["cancelada", "reagendada"] },
           })
           .populate("servicio", "_id");
 

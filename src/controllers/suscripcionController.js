@@ -6,6 +6,7 @@ import Empresa from "../models/empresa.model.js";
 import PlanSuscripcion from "../models/planSuscripcion.model.js";
 import { checkSuscripcion } from "../utils/checkSuscripcion.js";
 import { calcularEstadoPlanPersonalizado } from "../utils/calcularEstadoPlanPersonalizado.js";
+import { usoSuscripcion } from "../utils/usoSuscripcion.js";
 import { sendSuscriptionActiveEmail } from "./mailController.js";
 
 /* =======================================================
@@ -533,47 +534,18 @@ export const listarSuscripciones = async (req, res) => {
       .populate("usuario", "nombre apellido rut email telefono")
       .sort({ fechaInicio: -1 });
 
-    const SERVICIO_COMBO_ID = "69934ce087e49726a2cd3da1";
-    const SERVICIO_BARBA_ID = "6993a5495dada31f33304c19";
-
+    // Uso contado desde las reservas con un solo criterio (utils/usoSuscripcion.js):
+    // el mismo que muestra el detalle de visitas de cada cliente.
+    const ahora = new Date();
     const suscripcionesConUso = await Promise.all(
       suscripciones.map(async (sus) => {
-        // 🔥 NUEVO: planes creados desde la app usan su propio cálculo
-        // (soporta ciclos, ej. el plan anual con reseteo mensual).
-        if (sus.tipoPlan === "plan_personalizado") {
-          const estado = await calcularEstadoPlanPersonalizado(sus);
-          return {
-            ...sus.toObject(),
-            serviciosUsados: estado.serviciosUsadosCiclo,
-            serviciosTotales: estado.cantidadPorCiclo,
-          };
-        }
-
-        const esCombo = sus.tipoPlan === "combo_visita_corte_barba";
-        const esBarba = sus.tipoPlan === "barba";
-
-        const reservas = await reservaModel
-          .find({
-            cliente: sus.usuario._id,
-            fecha: { $gte: sus.fechaInicio, $lte: sus.fechaFin }, // 👈 todo el período
-            estado: { $in: ["completada", "confirmada"] }, // excluye canceladas
-          })
-          .populate("servicio", "_id");
-
-        let serviciosUsados = 0;
-        for (const r of reservas) {
-          if (esCombo) {
-            if (r.servicio?._id?.toString() === SERVICIO_COMBO_ID)
-              serviciosUsados += 1;
-          } else if (esBarba) {
-            if (r.servicio?._id?.toString() === SERVICIO_BARBA_ID)
-              serviciosUsados += 1;
-          } else {
-            serviciosUsados += r.duracion >= 120 ? 2 : 1;
-          }
-        }
-
-        return { ...sus.toObject(), serviciosUsados };
+        const uso = await usoSuscripcion(sus, { ahora });
+        return {
+          ...sus.toObject(),
+          serviciosUsados: uso.usados,
+          serviciosTotales: uso.total,
+          uso,
+        };
       }),
     );
 
@@ -581,5 +553,39 @@ export const listarSuscripciones = async (req, res) => {
   } catch (error) {
     console.error("Error al listar suscripciones:", error);
     res.status(500).json({ message: error.message });
+  }
+};
+
+/* =======================================================
+   📋 Detalle de uso: visitas del cliente durante la suscripción
+======================================================= */
+export const detalleUsoSuscripcion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!/^[a-f\d]{24}$/i.test(String(id))) {
+      return res.status(400).json({ message: "Suscripción inválida" });
+    }
+    const sus = await suscripcionModel
+      .findOne({ _id: id, empresa: req.usuario.empresaId })
+      .populate("usuario", "nombre apellido rut email telefono");
+    if (!sus) return res.status(404).json({ message: "Suscripción no encontrada" });
+
+    const uso = await usoSuscripcion(sus, { detalle: true });
+    res.json({
+      ok: true,
+      suscripcion: {
+        _id: sus._id,
+        usuario: sus.usuario,
+        tipoPlan: sus.tipoPlan,
+        planSnapshot: sus.planSnapshot,
+        fechaInicio: sus.fechaInicio,
+        fechaFin: sus.fechaFin,
+        activa: sus.activa,
+      },
+      uso,
+    });
+  } catch (error) {
+    console.error("Error al ver uso de suscripción:", error);
+    res.status(500).json({ message: "Error al cargar el detalle" });
   }
 };

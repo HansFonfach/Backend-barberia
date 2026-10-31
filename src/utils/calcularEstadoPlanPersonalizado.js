@@ -48,7 +48,8 @@ export const calcularEstadoPlanPersonalizado = async (suscripcion) => {
     .find({
       cliente: suscripcion.usuario,
       fecha: { $gte: cicloInicio, $lte: cicloFin },
-      estado: { $ne: "cancelada" },
+      // "reagendada" fue reemplazada por otra reserva: no se cuenta dos veces
+      estado: { $nin: ["cancelada", "reagendada"] },
     })
     .select("servicio");
 

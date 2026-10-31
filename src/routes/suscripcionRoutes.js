@@ -5,9 +5,11 @@ import {
   estadoSuscripcionCliente,
   getSuscripcionActiva,
   listarSuscripciones,
+  detalleUsoSuscripcion,
   registrarUsoServicio,
 } from "../controllers/suscripcionController.js";
 import { validarToken } from "../middlewares/validarToken.js";
+import { verificarRol } from "../middlewares/verificarRol.js";
 
 const router = Router();
 
@@ -19,5 +21,7 @@ router.get("/usuario/estado/:userId", validarToken, estadoSuscripcionCliente);
 router.get("/usuario/activa", validarToken,  getSuscripcionActiva);
 router.post("/usuario/usar-servicio", validarToken, registrarUsoServicio);
 router.get("/listar",  validarToken, listarSuscripciones);
+// Visitas del cliente durante la suscripción (solo profesionales y admin)
+router.get("/:id/uso", validarToken, verificarRol("barbero"), detalleUsoSuscripcion);
 
 export default router;
