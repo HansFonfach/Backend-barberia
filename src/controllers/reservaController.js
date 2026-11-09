@@ -27,6 +27,7 @@ import { actualizarClienteServicioStats } from "../helpers/actualizarClienteServ
 import WhatsappService from "../services/whatsappService.js";
 import { getHorasDisponibles } from "./horarioController.js";
 import { validarDisponibilidad } from "../helpers/validarDisponibilidad.js";
+import { buscarClienteBloqueado, esRolPersonal, respuestaBloqueo } from "../utils/bloqueoCliente.js";
 import reservaModel from "../models/reserva.model.js";
 import productoModel from "../models/producto.Model.js";
 import { obtenerPrecioEspecial } from "../utils/precioEspecial.js";
@@ -134,6 +135,18 @@ export const createReserva = async (req, res) => {
       return res.status(404).json({
         message: "Cliente no pertenece a esta empresa",
       });
+    }
+
+    // Cliente bloqueado por el negocio: no puede reservar por su cuenta
+    // (el admin o el profesional sí pueden agendarlo desde el panel).
+    const esPersonalReserva = req.esPersonalReserva ?? esRolPersonal(req.usuario);
+    if (!esPersonalReserva) {
+      const bloqueado = await buscarClienteBloqueado(empresa, clienteDoc, {
+        rut: req.body.rut,
+        email: req.body.email,
+        telefono: req.body.telefono,
+      });
+      if (bloqueado) return res.status(403).json(respuestaBloqueo);
     }
 
     /* =============================
@@ -1479,6 +1492,15 @@ export const reagendarReserva = async (req, res) => {
 
     if (!reservaOriginal)
       return res.status(404).json({ message: "Reserva no encontrada" });
+
+    // Un cliente bloqueado tampoco puede mover sus horas por su cuenta
+    if (!esRolPersonal(req.usuario) && reservaOriginal.cliente) {
+      const bloqueado = await buscarClienteBloqueado(
+        reservaOriginal.empresa?._id || reservaOriginal.empresa,
+        reservaOriginal.cliente,
+      );
+      if (bloqueado) return res.status(403).json(respuestaBloqueo);
+    }
 
     if (
       ["cancelada", "completada", "reagendada"].includes(reservaOriginal.estado)

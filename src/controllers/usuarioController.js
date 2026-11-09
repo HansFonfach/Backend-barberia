@@ -2,6 +2,9 @@ import empresaModel from "../models/empresa.model.js";
 import suscripcionModel from "../models/suscripcion.model.js";
 import usuarioModel from "../models/usuario.model.js";
 import Usuario from "../models/usuario.model.js";
+import mongoose from "mongoose";
+import ReservaModel from "../models/reserva.model.js";
+import InscripcionClaseModel from "../models/inscripcionClase.model.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../config/cloudinary.js";
 import { sendBienvenidaClienteEmail } from "./mailController.js";
@@ -423,6 +426,44 @@ export const cambiarEstadoUsuario = async (req, res) => {
   }
 };
 
+// PATCH /usuarios/:id/bloqueo  { bloquear: true|false, motivo }
+// Bloqueo manual: el cliente no puede reservar ni inscribirse por su
+// cuenta (ver utils/bloqueoCliente.js). Sus horas ya agendadas se mantienen.
+export const cambiarBloqueoUsuario = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: "Cliente inválido" });
+    }
+    const empresaId = req.usuario.empresaId;
+    const bloquear = req.body?.bloquear === true;
+    const motivo = String(req.body?.motivo || "").trim().slice(0, 200);
+
+    const filtro = { _id: id, empresa: empresaId, rol: { $in: ["cliente", "invitado"] } };
+    const bloqueo = bloquear
+      ? { activo: true, motivo, fecha: new Date(), por: req.usuario.id }
+      : { activo: false, motivo: "", fecha: null, por: null };
+
+    // updateOne (no save) para no validar campos antiguos del cliente
+    const r = await Usuario.updateOne(filtro, { $set: { bloqueo } });
+    if (!r.matchedCount) {
+      return res.status(404).json({ message: "Cliente no encontrado" });
+    }
+
+    // Horas y clases que ya tiene agendadas (se mantienen; se informan)
+    const ahora = new Date();
+    const [horas, clases] = await Promise.all([
+      ReservaModel.countDocuments({ empresa: empresaId, cliente: id, fecha: { $gte: ahora }, estado: { $in: ["pendiente", "confirmada"] } }),
+      InscripcionClaseModel.countDocuments({ empresa: empresaId, cliente: id, fecha: { $gte: ahora }, estado: "confirmada" }),
+    ]);
+
+    return res.json({ ok: true, bloqueo, agendadas: horas + clases });
+  } catch (error) {
+    console.error("❌ cambiarBloqueoUsuario:", error);
+    return res.status(500).json({ message: "No se pudo actualizar el bloqueo" });
+  }
+};
+
 export const getAllUsersWithSuscripcion = async (req, res) => {
   try {
     // 🔹 Obtener empresaId del token
@@ -437,6 +478,27 @@ export const getAllUsersWithSuscripcion = async (req, res) => {
       empresa: empresaId,
     }).lean();
 
+    // Inasistencias por cliente (horas + clases), para decidir si bloquear
+    const inasistencias = new Map();
+    try {
+      const empresaObjId = new mongoose.Types.ObjectId(String(empresaId));
+      const porCliente = [
+        { $match: { empresa: empresaObjId, estado: "no_asistio" } },
+        { $group: { _id: "$cliente", n: { $sum: 1 } } },
+      ];
+      const [deReservas, deClases] = await Promise.all([
+        ReservaModel.aggregate(porCliente),
+        InscripcionClaseModel.aggregate(porCliente),
+      ]);
+      for (const f of [...deReservas, ...deClases]) {
+        if (!f._id) continue;
+        const id = String(f._id);
+        inasistencias.set(id, (inasistencias.get(id) || 0) + f.n);
+      }
+    } catch (e) {
+      console.error("⚠️ No se pudieron contar las inasistencias:", e.message);
+    }
+
     const usuariosConSub = await Promise.all(
       usuarios.map(async (u) => {
         const sus = await suscripcionModel
@@ -448,7 +510,11 @@ export const getAllUsersWithSuscripcion = async (req, res) => {
           })
           .lean();
 
-        return { ...u, suscripcion: sus || null };
+        return {
+          ...u,
+          suscripcion: sus || null,
+          inasistencias: inasistencias.get(String(u._id)) || 0,
+        };
       }),
     );
 

@@ -33,6 +33,14 @@ const UsuarioSchema = new Schema(
       type: Number,
       default: 0,
     },
+    // Bloqueo manual del negocio (Clientes → Bloquear): no puede reservar
+    // ni inscribirse por su cuenta. Ver utils/bloqueoCliente.js.
+    bloqueo: {
+      activo: { type: Boolean, default: false },
+      motivo: { type: String, trim: true, maxlength: 200, default: "" },
+      fecha: { type: Date, default: null },
+      por: { type: Schema.Types.ObjectId, ref: "Usuario", default: null },
+    },
     esAdmin: { type: Boolean, default: false },
     plan: {
       type: String,

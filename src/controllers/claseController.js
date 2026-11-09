@@ -10,6 +10,7 @@ import InscripcionClaseModel from "../models/inscripcionClase.model.js";
 import MembresiaClaseModel from "../models/membresiaClase.model.js";
 import UsuarioModel from "../models/usuario.model.js";
 import EmpresaModel from "../models/empresa.model.js";
+import { buscarBloqueoPorId, respuestaBloqueo } from "../utils/bloqueoCliente.js";
 import { esRutValido, formatearRut, limpiarRut } from "../helpers/validarRut.js";
 import { reservarCupoAtomico, liberarCupoAtomico } from "../helpers/cupoSesionHelper.js";
 import {
@@ -776,7 +777,14 @@ const procesarInscripcion = async ({
   tipoAcceso,
   monto,
   metodo,
+  // true solo cuando el admin inscribe a un cliente desde el panel
+  omitirBloqueo = false,
 }) => {
+  // Cliente bloqueado por el negocio: no puede inscribirse por su cuenta
+  if (!omitirBloqueo && (await buscarBloqueoPorId(empresaId, clienteId))) {
+    return { error: { status: 403, message: respuestaBloqueo.message } };
+  }
+
   let pago = { estado: "no_aplica", monto: 0, metodo: null };
   // Si reservamos un cupo de mensualidad más abajo, se guarda aquí para
   // poder liberarlo si algún paso posterior falla (no dejar una clase
@@ -986,6 +994,7 @@ export const inscribirCliente = async (req, res) => {
       empresaId,
       clase: sesion.clase,
       clienteId: clienteObjetivoId,
+      omitirBloqueo: esAdmin && !!clienteId,
       fechaSesion: sesion.fechaSesion,
       cupoEfectivo: sesion.cupoEfectivo,
       tipoAcceso,

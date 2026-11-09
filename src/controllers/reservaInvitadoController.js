@@ -3,6 +3,7 @@ import usuarioModel from "../models/usuario.model.js";
 import { createReserva } from "./reservaController.js";
 import accesTokenModel from "../models/accesToken.model.js";
 import Reserva from "../models/reserva.model.js";
+import { buscarClienteBloqueado, personalDesdeToken, respuestaBloqueo } from "../utils/bloqueoCliente.js";
 
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
@@ -30,6 +31,15 @@ export const reservarComoInvitado = async (req, res) => {
       message: "Este negocio no está disponible por el momento.",
     });
   }
+
+  // Cliente bloqueado por el negocio (RUT, correo o teléfono). Si quien
+  // reserva es el admin/profesional desde "Agendar cliente", se permite.
+  const esPersonal = personalDesdeToken(req, empresa._id);
+  if (!esPersonal) {
+    const bloqueado = await buscarClienteBloqueado(empresa._id, { rut, email, telefono });
+    if (bloqueado) return res.status(403).json(respuestaBloqueo);
+  }
+  req.esPersonalReserva = esPersonal;
 
   // ✅ Buscar por RUT en TODA la empresa, sin importar el rol
   // (tu índice único de rut es global, así que la búsqueda debe serlo también)

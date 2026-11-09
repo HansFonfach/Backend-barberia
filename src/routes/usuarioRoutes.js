@@ -10,6 +10,7 @@ import {
   crearBarbero,
   crearCliente,
   cambiarEstadoUsuario,
+  cambiarBloqueoUsuario,
   getBarberosPublicos,
   getBarberosDeEmpresa,
   updatePerfil,
@@ -57,6 +58,8 @@ router.put(
   upload.single("fotoPerfil"),
   updateUsuario,
 );
+// Bloquear / desbloquear cliente (solo admin)
+router.patch("/:id/bloqueo", validarToken, verificarRol(), cambiarBloqueoUsuario);
 router.patch(
   "/:id/estado",
   validarToken,

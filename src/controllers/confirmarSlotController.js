@@ -3,6 +3,7 @@ import reservaModel from "../models/reserva.model.js";
 import servicioModel from "../models/servicio.model.js";
 import barberoServicioModel from "../models/barberoServicio.model.js";
 import ExcepcionHorarioModel from "../models/excepcionHorario.model.js";
+import { buscarBloqueoPorId, respuestaBloqueo } from "../utils/bloqueoCliente.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
@@ -80,6 +81,11 @@ export const confirmarSlotDesdeToken = async (req, res) => {
     }
 
     const { clienteId, servicioId, barberoId, empresaId, fecha } = payload;
+
+    // Cliente bloqueado por el negocio: el link del correo ya no sirve
+    if (await buscarBloqueoPorId(empresaId, clienteId)) {
+      return res.status(403).json({ success: false, ...respuestaBloqueo });
+    }
 
     const servicio = await servicioModel.findById(servicioId).select("nombre duracionMin precio");
     if (!servicio) return res.status(404).json({ message: "Servicio no encontrado" });
