@@ -309,6 +309,8 @@ export const estadoSuscripcionCliente = async (req, res) => {
         restantes: estado.restantes,
         cobrar: estado.restantes <= 0,
         cicloFin: estado.cicloFin,
+        // Para que el resumen de la reserva sepa qué servicios cubre el plan
+        serviciosPermitidos: suscripcion.planSnapshot?.serviciosPermitidos || [],
       });
     }
 

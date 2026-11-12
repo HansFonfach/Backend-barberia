@@ -249,6 +249,16 @@ const ReservaSchema = new Schema(
       descuentoAplicado: Number,
     },
 
+    // Giftcard usada al reservar (opcional). Lo usado de una giftcard se
+    // calcula desde acá (sin contar canceladas ni reagendadas).
+    giftcard: {
+      giftcardId: { type: Schema.Types.ObjectId, ref: "GiftCard" },
+      codigo: String,
+      tipo: { type: String, enum: ["servicio", "monto"] },
+      montoAplicado: Number,
+      precioOriginal: Number,
+    },
+
     descuento: {
       activo: {
         type: Boolean,
@@ -296,6 +306,7 @@ ReservaSchema.set("toObject", { virtuals: true });
 
 ReservaSchema.index({ barbero: 1, fecha: 1, estado: 1 });
 ReservaSchema.index({ "codigoDescuento.codigoId": 1 }, { sparse: true });
+ReservaSchema.index({ "giftcard.giftcardId": 1 }, { sparse: true });
 ReservaSchema.index({ empresa: 1, fecha: 1 });
 
 export default mongoose.model("Reserva", ReservaSchema);

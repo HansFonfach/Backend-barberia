@@ -32,6 +32,7 @@ import reservaModel from "../models/reserva.model.js";
 import productoModel from "../models/producto.Model.js";
 import { obtenerPrecioEspecial } from "../utils/precioEspecial.js";
 import { evaluarCodigoDescuento } from "../utils/codigoDescuento.js";
+import { consumoGiftcardValido, esCodigoGiftcard, evaluarGiftcard } from "../utils/giftcards.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -183,10 +184,17 @@ export const createReserva = async (req, res) => {
           fechaFin: { $gte: new Date() },
         });
 
+        // Mismos días que muestra el calendario (horarioController): los del
+        // plan de la suscripción, o 40 para las suscripciones antiguas.
+        // Antes acá había 31 fijos y el calendario dejaba elegir días que
+        // después la reserva rechazaba.
+        const diasVisibilidadSuscripcion =
+          suscripcionCliente?.planSnapshot?.diasVisibilidadCalendario ?? 40;
+
         if (suscripcionCliente) {
           const limiteSuscripcion = dayjs(suscripcionCliente.fechaInicio)
             .tz("America/Santiago")
-            .add(31, "day")
+            .add(diasVisibilidadSuscripcion, "day")
             .endOf("day");
 
           limiteDias = limiteSuscripcion.isAfter(limiteNormal)
@@ -197,7 +205,7 @@ export const createReserva = async (req, res) => {
         if (inicioReservaChile.isAfter(limiteDias)) {
           return res.status(400).json({
             message: suscripcionCliente
-              ? "No puedes reservar más allá de los 31 días de tu suscripción"
+              ? `No puedes reservar más allá de los ${diasVisibilidadSuscripcion} días de tu suscripción`
               : `Solo puedes reservar hasta ${diasPermitidos} días desde hoy`,
           });
         }
@@ -323,8 +331,31 @@ export const createReserva = async (req, res) => {
     // rechaza la reserva con el motivo, para que el cliente no se lleve la
     // sorpresa de pagar el precio completo.
     let codigoAplicado = null;
+    let giftcardAplicada = null;
     const codigoIngresado = String(req.body.codigoDescuento || "").trim();
-    if (codigoIngresado) {
+
+    // Giftcard (GC-XXXX-XXXX) escrita en el mismo campo "Código promocional"
+    if (codigoIngresado && esCodigoGiftcard(codigoIngresado)) {
+      const gift = await evaluarGiftcard({
+        empresaId: empresa,
+        codigo: codigoIngresado,
+        servicioId: servicio,
+        precioBase: precioServicio,
+      });
+      if (!gift.ok) {
+        return res.status(400).json({ code: "GIFTCARD_INVALIDA", message: gift.message });
+      }
+      giftcardAplicada = {
+        giftcardId: gift.gc._id,
+        codigo: gift.gc.codigo,
+        tipo: gift.gc.tipo,
+        montoAplicado: gift.descuento,
+        precioOriginal: gift.precioOriginal,
+      };
+      precioServicio = gift.precioFinal;
+    }
+
+    if (codigoIngresado && !giftcardAplicada) {
       const evaluacion = await evaluarCodigoDescuento({
         empresaId: empresa,
         codigo: codigoIngresado,
@@ -569,7 +600,10 @@ export const createReserva = async (req, res) => {
    CALCULAR ABONO
    ============================== */
 
-    const requiereAbono = empresaDoc.pagos?.requiereAbono === true;
+    // Si una giftcard dejó la reserva pagada entera, no se pide abono
+    const requiereAbono =
+      empresaDoc.pagos?.requiereAbono === true &&
+      !(giftcardAplicada && Number(precioServicio) <= 0);
     let abonoData = { requerido: false, monto: 0 };
 
     if (requiereAbono) {
@@ -612,7 +646,17 @@ export const createReserva = async (req, res) => {
         duracion: duracionServicio,
       },
       ...(codigoAplicado ? { codigoDescuento: codigoAplicado } : {}),
+      ...(giftcardAplicada ? { giftcard: giftcardAplicada } : {}),
     });
+
+    // Dos reservas con la misma giftcard al mismo tiempo: esta se deshace
+    if (giftcardAplicada && !(await consumoGiftcardValido(giftcardAplicada.giftcardId))) {
+      await Reserva.deleteOne({ _id: reserva._id });
+      return res.status(409).json({
+        code: "GIFTCARD_INVALIDA",
+        message: "Esta giftcard se acaba de usar en otra reserva. Revisa su saldo e intenta de nuevo.",
+      });
+    }
 
     await actualizarClienteServicioStats({
       clienteId: reserva.cliente,
@@ -1556,6 +1600,13 @@ export const reagendarReserva = async (req, res) => {
       ...(reservaOriginal.codigoDescuento?.codigoId
         ? {
             codigoDescuento: reservaOriginal.toObject().codigoDescuento,
+            servicioSnapshot: reservaOriginal.toObject().servicioSnapshot,
+          }
+        : {}),
+      // Si usó una giftcard, la nueva reserva la sigue usando (mismo precio)
+      ...(reservaOriginal.giftcard?.giftcardId
+        ? {
+            giftcard: reservaOriginal.toObject().giftcard,
             servicioSnapshot: reservaOriginal.toObject().servicioSnapshot,
           }
         : {}),

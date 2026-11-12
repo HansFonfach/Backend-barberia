@@ -7,6 +7,7 @@ import Reserva from "../models/reserva.model.js";
 import Servicio from "../models/servicio.model.js";
 import empresaModel from "../models/empresa.model.js";
 import { obtenerPrecioEspecial } from "../utils/precioEspecial.js";
+import { esCodigoGiftcard, evaluarGiftcard } from "../utils/giftcards.js";
 import {
   ESTADOS_QUE_NO_CUENTAN,
   normalizarCodigo,
@@ -321,6 +322,23 @@ export const validarCodigoPublico = async (req, res) => {
         especial != null ? especial : servicio.calcularPrecioFinal(momento.toDate());
     } else {
       precioBase = servicio.calcularPrecioFinal(new Date());
+    }
+
+    // Giftcard escrita en el mismo campo de código promocional
+    if (esCodigoGiftcard(codigo)) {
+      const gift = await evaluarGiftcard({ empresaId: empresa._id, codigo, servicioId, precioBase });
+      if (!gift.ok) return res.json({ valido: false, message: gift.message });
+      return res.json({
+        valido: true,
+        esGiftcard: true,
+        codigo: gift.gc.codigo,
+        tipo: "giftcard",
+        valor: gift.descuento,
+        descuento: gift.descuento,
+        precioOriginal: gift.precioOriginal,
+        precioFinal: gift.precioFinal,
+        saldoRestante: gift.saldoRestante,
+      });
     }
 
     const evaluacion = await evaluarCodigoDescuento({

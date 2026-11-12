@@ -168,6 +168,17 @@ const EmpresaSchema = new mongoose.Schema({
     },
   },
 
+  // Giftcards (Servicios → Giftcards). Ver utils/giftcards.js
+  giftcards: {
+    activa: { type: Boolean, default: false },
+    permitirServicio: { type: Boolean, default: true },
+    permitirMonto: { type: Boolean, default: true },
+    montoMinimo: { type: Number, default: 5000 },
+    montoMaximo: { type: Number, default: 200000 },
+    mesesVigencia: { type: Number, default: 6 },
+    instrucciones: { type: String, default: "" },
+  },
+
   estadoSuscripcion: {
     type: String,
     enum: ["trial", "activo", "suspendido", "cancelado"],
