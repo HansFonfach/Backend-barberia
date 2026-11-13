@@ -16,6 +16,12 @@ const generarSlug = (nombre) => {
     .replace(/\s+/g, "-");
 };
 
+// Rutas de la página que no pueden ser el slug de un negocio
+const SLUGS_RESERVADOS = [
+  "negocios", "admin", "superadmin", "registro-negocio", "baja-promociones",
+  "asistencia-mesa", "confirmar-reserva", "cancelar-reserva", "sitemap.xml", "robots.txt",
+];
+
 const generarPasswordAleatoria = () => {
   return crypto.randomBytes(6).toString("base64").slice(0, 10);
 };
@@ -39,7 +45,7 @@ export const registroPublicoEmpresa = async (req, res) => {
     // Generar slug único
     let slug = generarSlug(nombre);
     const slugExiste = await empresaModel.findOne({ slug });
-    if (slugExiste) {
+    if (slugExiste || SLUGS_RESERVADOS.includes(slug)) {
       slug = `${slug}-${crypto.randomBytes(3).toString("hex")}`;
     }
 

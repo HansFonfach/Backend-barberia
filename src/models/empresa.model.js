@@ -77,6 +77,9 @@ const EmpresaSchema = new mongoose.Schema({
 
   descripcion: String,
   direccion: String,
+  // Directorio público (agendafonfach.cl/negocios/<ciudad>/<rubro>)
+  ciudad: { type: String, trim: true, default: "" },
+  directorioVisible: { type: Boolean, default: true },
   telefono: String,
   correo: String,
   horarios: String,
@@ -102,6 +105,8 @@ const EmpresaSchema = new mongoose.Schema({
     fuente: { type: String, default: "default" },
     borderRadius: { type: String, default: "24px" },
     usaHorasAncla: { type: Boolean, default: false },
+    // Estilo de la página pública (LandingNegocio): auto | claro | oscuro
+    estiloPagina: { type: String, enum: ["auto", "claro", "oscuro"], default: "auto" },
   },
 
   configuracionRubro: {

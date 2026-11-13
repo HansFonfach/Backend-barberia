@@ -171,6 +171,15 @@ export const actualizarEmpresa = async (req, res) => {
     delete data.plan;
     delete data.trial;
     delete data.logo;
+    // Lo que maneja solo el super-admin (cobro del SaaS, estado, módulos):
+    // un admin no puede cambiárselo desde Configuración.
+    for (const campo of [
+      "_id", "estado", "estadoSuscripcion", "cuotaMensual", "historialPagos",
+      "ultimoPago", "proximoPago", "fechaPago", "suspendidaDesde", "motivoSuspension",
+      "creadoEn", "modulos", "giftcards",
+    ]) {
+      delete data[campo];
+    }
 
     const empresaActualizada = await empresaModel.findByIdAndUpdate(
       empresaId,

@@ -37,6 +37,7 @@ import diarioAlimenticioRoutes from "./routes/diarioAlimenticioRoutes.js";
 import superAdminRoutes from "./routes/superAdminRoutes.js";
 import codigoDescuentoRoutes from "./routes/codigoDescuentoRoutes.js";
 import giftcardRoutes from "./routes/giftcardRoutes.js";
+import seoRoutes from "./routes/seoRoutes.js";
 import reservaMesaRoutes from "./routes/reservaMesaRoutes.js";
 
 const app = express();
@@ -110,6 +111,7 @@ app.use("/diario-alimenticio", diarioAlimenticioRoutes);
 app.use("/superadmin", superAdminRoutes);
 app.use("/codigos-descuento", codigoDescuentoRoutes);
 app.use("/giftcards", giftcardRoutes);
+app.use("/seo", seoRoutes);
 app.use("/reservas-mesa", reservaMesaRoutes);
 
 export default app;
