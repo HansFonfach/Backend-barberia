@@ -20,6 +20,7 @@ export const recordatorioPagoCron = {
 
       // Buscar empresas cuyo proximoPago sea hoy
       const empresas = await empresaModel.find({
+        estado: { $ne: "inactivo" },
         estadoSuscripcion: "activo",
         proximoPago: {
           $gte: hoy.toDate(),

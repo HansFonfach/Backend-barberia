@@ -21,7 +21,8 @@ export const iniciarCronpagoEmpresa = () => {
 
     for (const pago of pagos) {
       const empresa = pago.empresa;
-      if (!empresa || empresa.estadoSuscripcion === "cancelado") continue;
+      // Desactivada o cancelada: no se le cobra ni se le mandan avisos
+      if (!empresa || empresa.estado === "inactivo" || empresa.estadoSuscripcion === "cancelado") continue;
 
       const vencimiento = dayjs(pago.fechaVencimiento)
         .tz("America/Santiago")

@@ -13,7 +13,11 @@ import { sendClaimAccountEmail } from "./mailController.js";
 import { normalizarTelefonoCL } from "../utils/telefono.js";
 
 export const login = async (req, res) => {
-  const { email, password, slug } = req.body;
+  const { password, slug } = req.body;
+  // El correo se guarda en minúsculas: así entra aunque el celular lo escriba con mayúscula
+  const email = String(req.body.email || "").toLowerCase().trim();
+  // "Recordarme": la sesión dura 30 días en vez de 12 horas
+  const recordarme = req.body.recordarme === true;
 
   try {
     /* =========================
@@ -102,7 +106,7 @@ export const login = async (req, res) => {
     /* =========================
        5️⃣ GENERAR TOKEN (CLAVE)
     ========================= */
-    const token = generarToken(usuario);
+    const token = generarToken(usuario, recordarme ? "30d" : "12h");
 
     const userData = usuario.toObject();
     delete userData.password;
@@ -113,7 +117,7 @@ export const login = async (req, res) => {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "none" : "lax",
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge: (recordarme ? 30 : 1) * 24 * 60 * 60 * 1000,
       path: "/",
     });
 

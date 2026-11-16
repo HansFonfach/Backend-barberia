@@ -46,7 +46,12 @@ const enviarAvisosDeEmpresa = async (empresa) => {
 };
 
 const procesarAvisosEntrenamientoPersonal = async () => {
-  const empresas = await Empresa.find({ "modulos.entrenamientoPersonal": true });
+  // Solo negocios activos: uno desactivado o suspendido no manda más correos
+  const empresas = await Empresa.find({
+    "modulos.entrenamientoPersonal": true,
+    estado: { $ne: "inactivo" },
+    estadoSuscripcion: { $nin: ["suspendido", "cancelado"] },
+  });
 
   for (const empresa of empresas) {
     await enviarAvisosDeEmpresa(empresa);

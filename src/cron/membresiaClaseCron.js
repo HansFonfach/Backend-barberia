@@ -36,13 +36,17 @@ const sumarDias = (fecha, dias) => {
   return d;
 };
 
+// Negocio desactivado o suspendido: no se les mandan más correos a sus clientes
+const empresaActiva = (empresa) =>
+  empresa.estado !== "inactivo" && !["suspendido", "cancelado"].includes(empresa.estadoSuscripcion);
+
 const linkRenovarDe = (empresa) => `${BASE_URL}/${empresa.slug}/admin/mi-plan`;
 
 const enviarRecordatorioVencimiento = async (membresia, diasRestantes, campo) => {
   try {
     const cliente = membresia.cliente;
     const empresa = membresia.empresa;
-    if (!cliente?.email || !empresa) return;
+    if (!cliente?.email || !empresa || !empresaActiva(empresa)) return;
 
     await sendRecordatorioVencimientoMembresiaEmail(cliente.email, {
       nombreCliente: cliente.nombre,
@@ -76,7 +80,7 @@ const procesarRecordatoriosVencimiento = async () => {
     },
   })
     .populate("cliente", "nombre email")
-    .populate("empresa", "nombre slug");
+    .populate("empresa", "nombre slug estado estadoSuscripcion");
 
   for (const m of membresias5d) {
     await enviarRecordatorioVencimiento(m, 5, "recordatorio5dEnviado");
@@ -89,7 +93,7 @@ const procesarRecordatoriosVencimiento = async () => {
     fechaFin: { $gte: inicioDelDia(hoy), $lte: finDelDia(hoy) },
   })
     .populate("cliente", "nombre email")
-    .populate("empresa", "nombre slug");
+    .populate("empresa", "nombre slug estado estadoSuscripcion");
 
   for (const m of membresiasHoy) {
     await enviarRecordatorioVencimiento(m, 0, "recordatorioDiaEnviado");
@@ -124,13 +128,13 @@ const procesarWinback = async () => {
     },
   })
     .populate("cliente", "nombre email")
-    .populate("empresa", "nombre slug");
+    .populate("empresa", "nombre slug estado estadoSuscripcion");
 
   for (const m of membresias) {
     try {
       const cliente = m.cliente;
       const empresa = m.empresa;
-      if (!cliente?.email || !empresa) continue;
+      if (!cliente?.email || !empresa || !empresaActiva(empresa)) continue;
 
       await sendMembresiaVencidaWinbackEmail(cliente.email, {
         nombreCliente: cliente.nombre,

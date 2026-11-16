@@ -1,7 +1,8 @@
 import jwt from "jsonwebtoken";
 import { TOKEN_SECRET } from "../config.js";
 
-export const generarToken = (usuario) => {
+// duracion: "12h" normal; "30d" cuando marcan "Recordarme" al iniciar sesión
+export const generarToken = (usuario, duracion = "12h") => {
   return jwt.sign(
     {
       id: usuario._id,
@@ -16,6 +17,6 @@ export const generarToken = (usuario) => {
       empresaId: usuario.empresa, // ✅
     },
     TOKEN_SECRET,
-    { expiresIn: "12h" }, // configurable
+    { expiresIn: duracion },
   );
 };
