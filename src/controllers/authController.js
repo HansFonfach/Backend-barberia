@@ -10,6 +10,7 @@ import suscripcionModel from "../models/suscripcion.model.js";
 import empresaModel from "../models/empresa.model.js";
 import Empresa from "../models/empresa.model.js";
 import { sendClaimAccountEmail } from "./mailController.js";
+import { normalizarTelefonoCL } from "../utils/telefono.js";
 
 export const login = async (req, res) => {
   const { email, password, slug } = req.body;
@@ -146,7 +147,7 @@ export const register = async (req, res) => {
       return res.status(404).json({ message: "Empresa no encontrada" });
     }
 
-    const telefonoCompleto = `569${telefono}`;
+    const telefonoCompleto = normalizarTelefonoCL(telefono);
 
     const usuarioExistente = await Usuario.findOne({
       empresa: empresa._id,

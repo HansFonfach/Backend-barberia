@@ -8,6 +8,7 @@ import InscripcionClaseModel from "../models/inscripcionClase.model.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../config/cloudinary.js";
 import { sendBienvenidaClienteEmail } from "./mailController.js";
+import { normalizarTelefonoCL } from "../utils/telefono.js";
 
 //obtener todos los usuarios
 export const getUsuarios = async (req, res) => {
@@ -142,7 +143,7 @@ export const updatePerfil = async (req, res) => {
     if (nombre !== undefined) data.nombre = nombre;
     if (apellido !== undefined) data.apellido = apellido;
     if (email !== undefined) data.email = email;
-    if (telefono !== undefined) data.telefono = telefono;
+    if (telefono !== undefined) data.telefono = normalizarTelefonoCL(telefono);
 
     if (!Object.keys(data).length) {
       return res.status(400).json({
@@ -235,11 +236,11 @@ export const updateUsuarioDesdeAdmin = async (req, res) => {
 
     // 2. Validar correo duplicado SOLO si cambió
     // ✅ Comparar versiones normalizadas
-    const correoActualNormalizado = usuario.correo?.toLowerCase().trim();
+    const correoActualNormalizado = usuario.email?.toLowerCase().trim();
 
     if (correoNormalizado && correoNormalizado !== correoActualNormalizado) {
       const correoExiste = await usuarioModel.findOne({
-        correo: correoNormalizado, // ← Guardar normalizado
+        email: correoNormalizado,
         empresa: empresaId,
         _id: { $ne: id },
       });
@@ -255,8 +256,11 @@ export const updateUsuarioDesdeAdmin = async (req, res) => {
     const datosActualizar = {};
     if (nombre) datosActualizar.nombre = nombre;
     if (apellido) datosActualizar.apellido = apellido;
-    if (correoNormalizado) datosActualizar.correo = correoNormalizado; // ← Guardar normalizado
-    if (telefono) datosActualizar.telefono = telefono;
+    // El campo en el modelo se llama "email": antes se guardaba como
+    // "correo" (no existe en el esquema), Mongo lo ignoraba y el correo
+    // nunca cambiaba aunque el panel dijera "actualizado".
+    if (correoNormalizado) datosActualizar.email = correoNormalizado;
+    if (telefono) datosActualizar.telefono = normalizarTelefonoCL(telefono);
 
     // 👇 NUEVO: permitir que un admin marque/desmarque a un profesional
     // como también-admin (panel "Equipo"). Solo lo puede hacer alguien que
@@ -315,7 +319,7 @@ export const updateUsuario = async (req, res) => {
     if (nombre !== undefined) data.nombre = nombre;
     if (apellido !== undefined) data.apellido = apellido;
     if (email !== undefined) data.email = email;
-    if (telefono !== undefined) data.telefono = telefono;
+    if (telefono !== undefined) data.telefono = normalizarTelefonoCL(telefono);
     if (suscrito !== undefined) data.suscrito = suscrito;
     if (rol !== undefined) data.rol = rol;
     if (descripcion !== undefined) data.descripcion = descripcion;
@@ -581,9 +585,7 @@ export const crearBarbero = async (req, res) => {
         .status(409)
         .json({ message: "Ya existe un usuario con ese rut o email" });
 
-    const telefonoCompleto = telefono?.startsWith("569")
-      ? telefono
-      : `569${telefono}`;
+    const telefonoCompleto = normalizarTelefonoCL(telefono);
     const passwordPlano = password; // solo para el correo de bienvenida, no se guarda
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -710,11 +712,7 @@ export const crearCliente = async (req, res) => {
         .status(409)
         .json({ message: "Ya existe un usuario con ese rut o email" });
 
-    const telefonoCompleto = telefono
-      ? telefono.startsWith("569")
-        ? telefono
-        : `569${telefono}`
-      : undefined;
+    const telefonoCompleto = telefono ? normalizarTelefonoCL(telefono) : undefined;
     // Contraseña en texto plano solo para el correo de bienvenida de abajo:
     // nunca se guarda así, solo se usa en memoria antes de hashear.
     const passwordPlano = password;
