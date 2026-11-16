@@ -32,6 +32,14 @@ const servicioSchema = new Schema({
     default: true,
   },
 
+  // Recuadro "Servicios destacados" de la página pública:
+  // "" = no, "destacado" = sí, "principal" = muy destacado (★ Recomendado)
+  destacado: {
+    type: String,
+    enum: ["", "destacado", "principal"],
+    default: "",
+  },
+
   instrucciones: { type: String, default: null },
   cuidados: { type: String, default: null },
 

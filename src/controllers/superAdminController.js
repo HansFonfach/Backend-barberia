@@ -82,7 +82,7 @@ export const listarEmpresas = async (req, res) => {
   try {
     const empresas = await Empresa.find(
       {},
-      "nombre slug correo rubro tipo estado estadoSuscripcion cuotaMensual fechaPago ultimoPago proximoPago suspendidaDesde motivoSuspension trial creadoEn",
+      "nombre slug correo logo ciudad rubro tipo estado estadoSuscripcion cuotaMensual fechaPago ultimoPago proximoPago suspendidaDesde motivoSuspension trial creadoEn",
     )
       .sort({ nombre: 1 })
       .lean();

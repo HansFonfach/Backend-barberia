@@ -68,6 +68,7 @@ export const updateServicio = async (req, res) => {
     cuidados,
     categoriaId,
     descuento, // 👈 nuevo: { activo, porcentaje, descripcion, fechaInicio, fechaFin }
+    destacado,
   } = req.body;
 
   console.log(descuento);
@@ -91,6 +92,10 @@ export const updateServicio = async (req, res) => {
     servicio.cuidados = cuidados !== undefined ? cuidados : servicio.cuidados;
 
     servicio.categoria = categoriaId || servicio.categoria;
+
+    if (["", "destacado", "principal"].includes(destacado)) {
+      servicio.destacado = destacado;
+    }
 
     if (
       descuento?.fechaInicio &&
