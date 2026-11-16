@@ -5,6 +5,7 @@ import {
   estadisticasProductos,
   estadisticasPorProfesional,
   estadisticasServicios,
+  detalleExtrasMes,
   getDashboardResumen,
   getHoraMasSolicitada,
   getProximoCliente,
@@ -39,6 +40,8 @@ router.get("/dashboard/resumen", validarToken, getDashboardResumen);
 router.get("/productos", validarToken, estadisticasProductos);
 
 router.get("/ingresos/historial", validarToken, ingresosPorMes);
+// Desglose de "Ingreso Extras" de un mes
+router.get("/ingresos/extras", validarToken, detalleExtrasMes);
 
 // Panel "Equipo" (solo admin) — resumen comparativo por profesional
 router.get("/equipo", validarToken, estadisticasPorProfesional);

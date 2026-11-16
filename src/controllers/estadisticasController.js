@@ -8,6 +8,7 @@ import suscripcionModel from "../models/suscripcion.model.js";
 import mongoose from "mongoose";
 import productoModel from "../models/producto.Model.js";
 import ventaDirectaModel from "../models/ventaDirecta.model.js";
+import giftCardModel from "../models/giftCard.model.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -96,6 +97,48 @@ const agruparPor = (lista, obtenerClave) => {
 
 const formatearRangoHora = (hora) => `${hora}:00 - ${hora + 1}:00`;
 
+/* =====================================================
+   GIFTCARDS
+
+   La plata de una giftcard entra cuando se VENDE (al aprobarla), así que
+   ahí se cuenta como ingreso ("Ingreso giftcards"). Cuando después se usa
+   en una reserva, esa parte ya está pagada: la reserva solo suma lo que
+   quedó por pagar (si la giftcard la cubrió entera, suma $0). Así la
+   misma plata no se cuenta dos veces.
+===================================================== */
+
+/** Lo que el cliente paga por el servicio de una reserva (descontada la giftcard). */
+const precioCobrado = (r) => {
+  const base = r.precio || r.servicio?.precio || 0;
+  if (!r.giftcard?.giftcardId) return base;
+  if (r.servicioSnapshot?.precio != null) return Number(r.servicioSnapshot.precio) || 0;
+  return Math.max(0, base - (Number(r.giftcard.montoAplicado) || 0));
+};
+
+/** Lo mismo dentro de un aggregate (con el servicio en $servicioData). */
+const PRECIO_COBRADO_AGG = {
+  $cond: [
+    { $ifNull: ["$giftcard.giftcardId", false] },
+    { $ifNull: ["$servicioSnapshot.precio", 0] },
+    { $ifNull: ["$servicioData.precio", 0] },
+  ],
+};
+
+/** Giftcards vendidas (aprobadas) en un rango: { total, cantidad }. */
+const sumarGiftcardsVendidas = async (empresaId, rango = null) => {
+  const [r] = await giftCardModel.aggregate([
+    {
+      $match: {
+        empresa: empresaId,
+        estado: "activa",
+        aprobadaEn: rango ? rango : { $ne: null },
+      },
+    },
+    { $group: { _id: null, total: { $sum: "$monto" }, cantidad: { $sum: 1 } } },
+  ]);
+  return { total: r?.total || 0, cantidad: r?.cantidad || 0 };
+};
+
 /** Suma totalFinal de ventas directas en una sola pasada de Mongo */
 const sumarVentasDirectas = async (match) => {
   const [resultado] = await ventaDirectaModel.aggregate([
@@ -135,7 +178,7 @@ const calcularIngresoConSuscripciones = async (reservas, empresaId) => {
   // Sin suscripciones vigentes: todo suma y nos ahorramos la segunda query
   if (!suscripciones.length) {
     return reservas.reduce(
-      (acc, r) => acc + (r.precio || r.servicio?.precio || 0),
+      (acc, r) => acc + precioCobrado(r),
       0,
     );
   }
@@ -167,7 +210,7 @@ const calcularIngresoConSuscripciones = async (reservas, empresaId) => {
   let ingreso = 0;
 
   for (const reserva of reservas) {
-    const precio = reserva.precio || reserva.servicio?.precio || 0;
+    const precio = precioCobrado(reserva);
     const clave = reserva.cliente?.toString();
 
     const sus = (susPorCliente.get(clave) || []).find(
@@ -375,6 +418,7 @@ export const ingresoMensual = async (req, res) => {
       reservasFuturas,
       suscripcionesMes,
       ingresoVentasDirectas,
+      giftcardsMes,
     ] = await Promise.all([
       reservaModel
         .find({
@@ -410,6 +454,11 @@ export const ingresoMensual = async (req, res) => {
         fecha: { $gte: inicioMes, $lte: finMes },
         anulada: false,
       }),
+
+      // Las giftcards son ingreso del negocio, no de un profesional
+      admin
+        ? sumarGiftcardsVendidas(empresaId, { $gte: inicioMes, $lte: finMes })
+        : { total: 0, cantidad: 0 },
     ]);
 
     const [ingresoReservas, posibleIngreso] = await Promise.all([
@@ -430,8 +479,14 @@ export const ingresoMensual = async (req, res) => {
       0,
     );
 
+    const ingresoGiftcards = giftcardsMes.total;
+
     const ingresoTotalMes =
-      ingresoReservas + ingresoSuscripciones + ingresoProductos + ingresoExtras;
+      ingresoReservas +
+      ingresoSuscripciones +
+      ingresoProductos +
+      ingresoExtras +
+      ingresoGiftcards;
 
     return ok(res, {
       alcance: alcanceDe(req),
@@ -443,6 +498,8 @@ export const ingresoMensual = async (req, res) => {
         ingresoExtras,
         ingresoSuscripciones,
         suscripcionesNuevas: suscripcionesMes,
+        ingresoGiftcards,
+        giftcardsVendidas: giftcardsMes.cantidad,
         posibleIngreso: ingresoTotalMes + posibleIngreso,
       },
     });
@@ -465,7 +522,7 @@ export const ingresoTotal = async (req, res) => {
     const filtro = filtroBarbero(req);
     const filtroVenta = filtroVentaBarbero(req);
 
-    const [serviciosAgg, totalesAgg, ingresoVentasDirectas, suscripciones] =
+    const [serviciosAgg, totalesAgg, ingresoVentasDirectas, suscripciones, giftcards] =
       await Promise.all([
         // Servicios de reservas completadas
         reservaModel.aggregate([
@@ -479,7 +536,7 @@ export const ingresoTotal = async (req, res) => {
             },
           },
           { $unwind: "$servicioData" },
-          { $group: { _id: null, total: { $sum: "$servicioData.precio" } } },
+          { $group: { _id: null, total: { $sum: PRECIO_COBRADO_AGG } } },
         ]),
 
         // Productos y extras: antes se traían TODAS las reservas a memoria
@@ -502,6 +559,8 @@ export const ingresoTotal = async (req, res) => {
         }),
 
         admin ? suscripcionModel.countDocuments({ empresa: empresaId }) : 0,
+
+        admin ? sumarGiftcardsVendidas(empresaId) : { total: 0, cantidad: 0 },
       ]);
 
     const ingresoServicios = serviciosAgg[0]?.total || 0;
@@ -517,13 +576,15 @@ export const ingresoTotal = async (req, res) => {
         ingresoProductos +
         ingresoExtras +
         ingresoVentasDirectas +
-        ingresoSuscripciones,
+        ingresoSuscripciones +
+        giftcards.total,
       detalle: {
         ingresoServicios,
         ingresoProductos,
         ingresoExtras,
         ingresoVentasDirectas,
         ingresoSuscripciones,
+        ingresoGiftcards: giftcards.total,
       },
     });
   } catch (error) {
@@ -1333,7 +1394,7 @@ export const getDashboardResumen = async (req, res) => {
           },
         },
         { $unwind: "$servicioData" },
-        { $group: { _id: null, total: { $sum: "$servicioData.precio" } } },
+        { $group: { _id: null, total: { $sum: PRECIO_COBRADO_AGG } } },
       ]),
 
       // 15. Reservas pasadas del mes
@@ -1625,6 +1686,7 @@ export const ingresosPorMes = async (req, res) => {
       reservasFuturas,
       suscripcionesMes,
       ingresoVentasDirectas,
+      giftcardsMes,
     ] = await Promise.all([
       reservaModel
         .find({
@@ -1661,6 +1723,8 @@ export const ingresosPorMes = async (req, res) => {
         fecha: rangoVentas,
         anulada: false,
       }),
+
+      admin ? sumarGiftcardsVendidas(empresaId, rangoVentas) : { total: 0, cantidad: 0 },
     ]);
 
     const [ingresoReservas, posibleIngreso] = await Promise.all([
@@ -1684,8 +1748,14 @@ export const ingresosPorMes = async (req, res) => {
       0,
     );
 
+    const ingresoGiftcards = giftcardsMes.total;
+
     const ingresoTotalMes =
-      ingresoReservas + ingresoSuscripciones + ingresoProductos + ingresoExtras;
+      ingresoReservas +
+      ingresoSuscripciones +
+      ingresoProductos +
+      ingresoExtras +
+      ingresoGiftcards;
 
     // Solo el admin ve el desglose por persona. Acá está el control
     // de acceso real: al resto le llega un array vacío.
@@ -1708,6 +1778,8 @@ export const ingresosPorMes = async (req, res) => {
         ingresoSuscripciones,
         suscripcionesNuevas: suscripcionesMes,
         ingresoVentasDirectas,
+        ingresoGiftcards,
+        giftcardsVendidas: giftcardsMes.cantidad,
         // En meses pasados no tiene sentido proyectar
         posibleIngreso: esMesActual ? ingresoTotalMes + posibleIngreso : null,
       },
@@ -1717,6 +1789,101 @@ export const ingresosPorMes = async (req, res) => {
     return err(res, "Error al obtener ingresos del mes");
   }
 };
+/* =====================================================
+   DETALLE DE EXTRAS DE UN MES
+
+   GET /estadisticas/ingresos/extras?mes=0-11&anio=2026 (por defecto el mes
+   actual). Mismo rango y mismas reservas que "Ingreso Extras" del dashboard
+   y del historial, para que los números calcen.
+   Admin → toda la empresa · Profesional → solo lo suyo
+===================================================== */
+export const detalleExtrasMes = async (req, res) => {
+  try {
+    const empresaIdRaw = req.usuario?.empresaId;
+    if (!empresaIdRaw) return err(res, "Empresa no identificada", 400);
+    const empresaId = toId(empresaIdRaw);
+
+    const ahora = new Date();
+    const mes = req.query.mes !== undefined ? parseInt(req.query.mes) : ahora.getMonth();
+    const anio = req.query.anio !== undefined ? parseInt(req.query.anio) : ahora.getFullYear();
+    if (isNaN(mes) || isNaN(anio) || mes < 0 || mes > 11) {
+      return err(res, "Mes o año inválido", 400);
+    }
+
+    const { inicio: inicioMes, fin: finMes } = rangoMes(anio, mes);
+    const esMesActual = anio === ahora.getFullYear() && mes === ahora.getMonth();
+    const finConsulta = esMesActual ? ahora : finMes;
+
+    const reservas = await reservaModel
+      .find({
+        empresa: empresaId,
+        ...filtroBarbero(req),
+        fecha: { $gte: inicioMes, $lte: finConsulta },
+        estado: ESTADOS_VALIDOS,
+        $or: [{ totalExtras: { $gt: 0 } }, { "extras.0": { $exists: true } }],
+      })
+      .select("fecha extras totalExtras servicioSnapshot cliente barbero servicio")
+      .populate("cliente", "nombre apellido")
+      .populate("barbero", "nombre apellido")
+      .populate("servicio", "nombre")
+      .sort({ fecha: -1 })
+      .lean();
+
+    const nombreDe = (u) => `${u?.nombre || ""} ${u?.apellido || ""}`.trim();
+    const porNombre = new Map();
+    let total = 0;
+
+    const detalle = reservas
+      .map((r) => {
+        const items = (r.extras || []).map((e) => {
+          const cantidad = Number(e.cantidad) || 1;
+          const subtotal = e.subtotal != null ? Number(e.subtotal) || 0 : (Number(e.precio) || 0) * cantidad;
+          return { nombre: String(e.nombre || "Extra").trim() || "Extra", cantidad, subtotal };
+        });
+        const sumaItems = items.reduce((s, i) => s + i.subtotal, 0);
+        // "Ingreso Extras" suma totalExtras: si una reserva vieja no tiene el
+        // detalle completo, la diferencia aparece como "Extra sin detalle".
+        const totalReserva = Number(r.totalExtras) || sumaItems;
+        if (totalReserva > sumaItems) {
+          items.push({ nombre: "Extra sin detalle", cantidad: 1, subtotal: totalReserva - sumaItems });
+        }
+        if (totalReserva <= 0) return null;
+
+        total += totalReserva;
+        for (const i of items) {
+          const clave = i.nombre.toLowerCase();
+          const acc = porNombre.get(clave) || { nombre: i.nombre, veces: 0, total: 0 };
+          acc.veces += i.cantidad;
+          acc.total += i.subtotal;
+          porNombre.set(clave, acc);
+        }
+
+        return {
+          reservaId: r._id,
+          fecha: r.fecha,
+          cliente: nombreDe(r.cliente) || "Cliente",
+          profesional: nombreDe(r.barbero),
+          servicio: r.servicioSnapshot?.nombre || r.servicio?.nombre || "",
+          items,
+          total: totalReserva,
+        };
+      })
+      .filter(Boolean);
+
+    return ok(res, {
+      mes,
+      anio,
+      total,
+      reservas: detalle.length,
+      porNombre: [...porNombre.values()].sort((a, b) => b.total - a.total),
+      detalle,
+    });
+  } catch (error) {
+    console.error("❌ Error detalleExtrasMes:", error);
+    return err(res, "Error al obtener el detalle de extras");
+  }
+};
+
 /* =====================================================
    ESTADÍSTICAS DE PRODUCTOS
 

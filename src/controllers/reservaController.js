@@ -1736,8 +1736,10 @@ export const actualizarReserva = async (req, res) => {
 
     // ── Recalcular totalFinal siempre que cambie algo ──
     if (productos !== undefined || extras !== undefined) {
-      const totalServicio =
-        reserva.servicioSnapshot?.precio || reserva.servicio?.precio || 0;
+      // Con giftcard, el servicio vale lo que quedó por pagar (puede ser $0)
+      const totalServicio = reserva.giftcard?.giftcardId
+        ? Number(reserva.servicioSnapshot?.precio ?? 0)
+        : reserva.servicioSnapshot?.precio || reserva.servicio?.precio || 0;
 
       // Si no vino en este request, usa lo que ya tenía guardado la reserva
       const totalProductos =
