@@ -5,11 +5,16 @@ import {
   actualizarPlanSuscripcion,
   toggleActivoPlanSuscripcion,
   eliminarPlanSuscripcion,
+  listarPlanesPublicos,
 } from "../controllers/planSuscripcionController.js";
+import { limitarLecturaPublica } from "../middlewares/publicRateLimiter.js";
 import { validarToken } from "../middlewares/validarToken.js";
 import { verificarRol } from "../middlewares/verificarRol.js";
 
 const router = Router();
+
+// Público (página del negocio): va antes de exigir sesión
+router.get("/publico/:slug", limitarLecturaPublica, listarPlanesPublicos);
 
 router.use(validarToken);
 

@@ -105,8 +105,8 @@ const EmpresaSchema = new mongoose.Schema({
     fuente: { type: String, default: "default" },
     borderRadius: { type: String, default: "24px" },
     usaHorasAncla: { type: Boolean, default: false },
-    // Estilo de la página pública (LandingNegocio): auto | claro | oscuro
-    estiloPagina: { type: String, enum: ["auto", "claro", "oscuro"], default: "auto" },
+    // Estilo de la página pública (LandingNegocio): auto | claro | oscuro | barberia
+    estiloPagina: { type: String, enum: ["auto", "claro", "oscuro", "barberia"], default: "auto" },
   },
 
   configuracionRubro: {

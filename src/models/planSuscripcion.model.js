@@ -50,6 +50,14 @@ const planSuscripcionSchema = new mongoose.Schema(
     // estaban escritos directo en el controlador de horarios).
     diasVisibilidadCalendario: { type: Number, default: 30, min: 1 },
 
+    // Si se muestra como "Ahorra suscribiéndote" al reservar un servicio que
+    // incluye. Se apaga en planes especiales (ej. "Padre e hijo") que no
+    // corresponde sugerirle a cualquier cliente.
+    sugerirAlReservar: { type: Boolean, default: true },
+
+    // Plan destacado en la página pública ("Recomendado"). Solo uno por negocio.
+    destacado: { type: Boolean, default: false },
+
     activo: { type: Boolean, default: true },
   },
   { timestamps: true },

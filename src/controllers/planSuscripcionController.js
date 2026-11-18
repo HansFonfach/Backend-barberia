@@ -20,6 +20,8 @@ const camposEditables = [
   "cantidadPorCiclo",
   "serviciosPermitidos",
   "diasVisibilidadCalendario",
+  "sugerirAlReservar",
+  "destacado",
 ];
 
 const validarDatosPlan = (body) => {
@@ -80,6 +82,8 @@ export const crearPlanSuscripcion = async (req, res) => {
       cantidadPorCiclo,
       serviciosPermitidos,
       diasVisibilidadCalendario,
+      sugerirAlReservar,
+      destacado,
     } = req.body;
 
     const plan = await PlanSuscripcion.create({
@@ -96,7 +100,14 @@ export const crearPlanSuscripcion = async (req, res) => {
       diasVisibilidadCalendario: diasVisibilidadCalendario
         ? Number(diasVisibilidadCalendario)
         : 30,
+      sugerirAlReservar: sugerirAlReservar !== false,
+      destacado: destacado === true,
     });
+
+    // Solo un plan destacado por negocio
+    if (plan.destacado) {
+      await PlanSuscripcion.updateMany({ empresa: empresaId, _id: { $ne: plan._id } }, { $set: { destacado: false } });
+    }
 
     return res.status(201).json({ message: "Plan creado correctamente", plan });
   } catch (error) {
@@ -155,6 +166,11 @@ export const actualizarPlanSuscripcion = async (req, res) => {
     }
 
     await plan.save();
+
+    // Solo un plan destacado por negocio
+    if (plan.destacado) {
+      await PlanSuscripcion.updateMany({ empresa: plan.empresa, _id: { $ne: plan._id } }, { $set: { destacado: false } });
+    }
 
     return res.json({ message: "Plan actualizado correctamente", plan });
   } catch (error) {
@@ -226,5 +242,38 @@ export const eliminarPlanSuscripcion = async (req, res) => {
     return res
       .status(500)
       .json({ message: "Error interno al eliminar el plan" });
+  }
+};
+
+/**
+ * GET /planesSuscripcion/publico/:slug — planes activos para mostrar en la
+ * página pública del negocio (sin login). Solo si el negocio tiene las
+ * suscripciones habilitadas; si no, devuelve una lista vacía.
+ */
+export const listarPlanesPublicos = async (req, res) => {
+  try {
+    const empresa = await Empresa.findOne({ slug: req.params.slug }).select(
+      "_id permiteSuscripcion estado estadoSuscripcion",
+    );
+    if (
+      !empresa ||
+      !empresa.permiteSuscripcion ||
+      empresa.estado === "inactivo" ||
+      ["suspendido", "cancelado"].includes(empresa.estadoSuscripcion)
+    ) {
+      return res.json({ planes: [] });
+    }
+
+    const planes = await PlanSuscripcion.find({ empresa: empresa._id, activo: true })
+      .select("nombre descripcion precio duracionDias cicloDias cantidadPorCiclo serviciosPermitidos diasVisibilidadCalendario sugerirAlReservar destacado")
+      .populate("serviciosPermitidos", "nombre precio")
+      .sort({ precio: 1 })
+      .lean();
+
+    res.set("Cache-Control", "public, max-age=300");
+    return res.json({ planes });
+  } catch (error) {
+    console.error("Error al listar planes públicos:", error);
+    return res.status(500).json({ message: "No se pudieron cargar los planes" });
   }
 };
