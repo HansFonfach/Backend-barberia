@@ -39,6 +39,7 @@ import codigoDescuentoRoutes from "./routes/codigoDescuentoRoutes.js";
 import giftcardRoutes from "./routes/giftcardRoutes.js";
 import seoRoutes from "./routes/seoRoutes.js";
 import reservaMesaRoutes from "./routes/reservaMesaRoutes.js";
+import canchaRoutes from "./routes/canchaRoutes.js";
 
 const app = express();
 app.use(cookieParser());
@@ -113,5 +114,6 @@ app.use("/codigos-descuento", codigoDescuentoRoutes);
 app.use("/giftcards", giftcardRoutes);
 app.use("/seo", seoRoutes);
 app.use("/reservas-mesa", reservaMesaRoutes);
+app.use("/canchas", canchaRoutes);
 
 export default app;

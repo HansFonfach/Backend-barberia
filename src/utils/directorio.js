@@ -26,6 +26,7 @@ export const RUBROS = {
   masajes: R("masajes", "Masajes", "Masajes"),
   tatuajes: R("tatuajes", "Estudios de tatuajes", "Estudio de tatuajes"),
   restaurante: R("restaurantes", "Bares y restaurantes", "Bar · Restaurante"),
+  cancha: R("canchas", "Canchas de fútbol", "Cancha de fútbol"),
 };
 const RUBRO_OTROS = R("otros", "Otros negocios", "Negocio");
 

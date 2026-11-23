@@ -59,6 +59,7 @@ export const registroPublicoEmpresa = async (req, res) => {
       rutEmpresa: "pendiente", // lo pides luego en onboarding
       // Bares/restaurantes nacen con el módulo de reservas de mesa activo
       ...(rubro === "restaurante" ? { modulos: { reservasMesas: true } } : {}),
+      ...(rubro === "cancha" ? { modulos: { canchas: true } } : {}),
       plan: "trial",
       trial: {
         activo: true,

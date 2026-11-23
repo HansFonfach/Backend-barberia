@@ -36,6 +36,8 @@ const EmpresaSchema = new mongoose.Schema({
       "gimnasio",
       // Gastronomía: bar / restaurante (módulo reservasMesas)
       "restaurante",
+      // Deporte: arriendo de canchas (módulo canchas)
+      "cancha",
       // Genérico
       "otros",
     ],
@@ -62,6 +64,7 @@ const EmpresaSchema = new mongoose.Schema({
     clasesGrupales: { type: Boolean, default: false }, // gimnasios/boxes: clases con cupo
     entrenamientoPersonal: { type: Boolean, default: false }, // bitácora de entrenamiento libre + sugerencia del día (uso personal, no depende de clasesGrupales)
     reservasMesas: { type: Boolean, default: false }, // bares/restaurantes: reservas de mesa por sector con control de capacidad
+    canchas: { type: Boolean, default: false }, // recintos deportivos: arriendo de cancha completa o media, por hora
     // En el futuro puedes agregar: recetas, derivaciones, etc.
   },
 
@@ -153,6 +156,10 @@ const EmpresaSchema = new mongoose.Schema({
     default: 15,
   },
   envioNotificacionReserva: { type: Boolean, default: false },
+  // Dentro de lo anterior: si además del WhatsApp se avisa por correo al
+  // profesional / al local (nueva reserva y cancelación). Se puede apagar
+  // para no recibir el mismo aviso dos veces.
+  notificacionReservaCorreo: { type: Boolean, default: true },
 
   pagos: {
     requiereAbono: { type: Boolean, default: false },

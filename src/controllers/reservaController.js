@@ -746,7 +746,7 @@ export const createReserva = async (req, res) => {
     }
 
     // Email al barbero — siempre, independiente de si la hora pasó
-    if (empresaDoc?.envioNotificacionReserva && barberoDoc?.email) {
+    if (empresaDoc?.envioNotificacionReserva && empresaDoc?.notificacionReservaCorreo !== false && barberoDoc?.email) {
       sendProfesionalNewReservationEmail(barberoDoc.email, {
         ...emailData,
         nombreBarbero: barberoDoc.nombre,
@@ -935,7 +935,7 @@ export const procesarCancelacionReserva = async (
   }
 
   // 7️⃣ Email al barbero
-  if (empresaDoc?.envioNotificacionReserva && reserva.barbero?.email) {
+  if (empresaDoc?.envioNotificacionReserva && empresaDoc?.notificacionReservaCorreo !== false && reserva.barbero?.email) {
     sendProfesionalCancelReservationEmail(
       reserva.barbero.email,
       emailData,
@@ -1452,7 +1452,7 @@ export const responderConfirmacionAsistencia = async (req, res) => {
         );
       }
 
-      if (empresaDoc?.envioNotificacionReserva && reserva.barbero?.email) {
+      if (empresaDoc?.envioNotificacionReserva && empresaDoc?.notificacionReservaCorreo !== false && reserva.barbero?.email) {
         sendProfesionalCancelReservationEmail(
           reserva.barbero.email,
           emailData,

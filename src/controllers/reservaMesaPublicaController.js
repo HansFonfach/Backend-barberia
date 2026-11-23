@@ -24,7 +24,7 @@ import {
   correoReservaCancelada,
 } from "../services/reservasMesa/correos.js";
 
-const CAMPOS_EMPRESA = "nombre slug telefono direccion redes correo logo estado estadoSuscripcion modulos";
+const CAMPOS_EMPRESA = "nombre slug telefono direccion redes correo logo estado estadoSuscripcion modulos notificacionReservaCorreo";
 
 /** Empresa pública con el módulo activo, o null. */
 const empresaPublica = async (slug) => {
@@ -215,7 +215,8 @@ export const reservarPublico = async (req, res) => {
     const reserva = r.reserva;
     if (!r.repetida) {
       notificar(() => correoReservaCliente(reserva, empresa, { token: r.tokenCancelacion, config }));
-      notificar(() => correoAvisoLocal(reserva, empresa));
+      // El aviso por correo al local se puede apagar en Configuración → Notificaciones
+      if (empresa.notificacionReservaCorreo !== false) notificar(() => correoAvisoLocal(reserva, empresa));
       if (config.whatsapp?.avisoLocal?.activo && config.whatsapp.avisoLocal.telefonos?.length) {
         notificar(() => whatsappAvisoLocal(reserva, empresa, config.whatsapp.avisoLocal.telefonos));
       }
