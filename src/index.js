@@ -9,7 +9,9 @@ import { iniciarJobReservas } from "./jobs/reservasEstado.js";
 import recordatoriosJob from "./jobs/recordatoriosJob.js";
 import recordatoriosVolver from "./cron/recordatoriosVolver.js";
 import recordatorioPagoCron from "./cron/recordatoriosPagoCron.js";
-import { iniciarCronSuscripcionesMensual } from "./cron/recomendacionesSuscripcionesCron.js";
+// Desactivado: correo del día 1 de cada mes ofreciendo planes de suscripción a
+// los clientes de la barbería. Para volver a activarlo, descomenta estas dos líneas.
+// import { iniciarCronSuscripcionesMensual } from "./cron/recomendacionesSuscripcionesCron.js";
 import { iniciarCronMembresiaClase } from "./cron/membresiaClaseCron.js";
 import { iniciarCronEntrenamientoPersonal } from "./cron/entrenamientoPersonalCron.js";
 import { iniciarCronRecordatorioReservasMesa } from "./cron/recordatorioReservaMesaCron.js";
@@ -34,7 +36,7 @@ const startServer = async () => {
   iniciarCronSuscripciones();
   iniciarJobReservas();
   iniciarCronpagoEmpresa();
-  iniciarCronSuscripcionesMensual();
+  // iniciarCronSuscripcionesMensual(); // desactivado (ver arriba)
   iniciarCronMembresiaClase();
   iniciarCronEntrenamientoPersonal();
   iniciarCronRecordatorioReservasMesa();
