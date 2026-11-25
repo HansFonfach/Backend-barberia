@@ -511,23 +511,55 @@ export const sendRetentionEmail = async (to, data) => {
   });
 };
 
+const WHATSAPP_AGENDA = "56975297584";
+const fechaCorta = (d) =>
+  new Date(d).toLocaleDateString("es-CL", { timeZone: "America/Santiago", weekday: "long", day: "numeric", month: "long" });
+
+// Primeros pasos del panel según el rubro (links directos a cada pantalla)
+const primerosPasos = (rubro, slug, atiende) => {
+  const p = (ruta) => `https://www.agendafonfach.cl/${slug}/admin${ruta}`;
+  if (rubro === "cancha") {
+    return [
+      ["Revisa el horario, los precios y las reglas", p("/cancha-configuracion")],
+      ["Agrega el WhatsApp que recibe el aviso de cada reserva", p("/cancha-configuracion")],
+      ["Comparte tu link de reservas en Instagram y WhatsApp", `https://www.agendafonfach.cl/${slug}/reservar-cancha`],
+    ];
+  }
+  if (rubro === "restaurante") {
+    return [
+      ["Crea tus sectores y su capacidad", p("/reservas-mesa-sectores")],
+      ["Configura horarios y reglas de las reservas", p("/reservas-mesa-horarios")],
+      ["Activa los avisos por WhatsApp", p("/reservas-mesa-web")],
+      ["Comparte tu link de reservas", `https://www.agendafonfach.cl/${slug}/reservar-mesa`],
+    ];
+  }
+  return [
+    ["Agrega tus servicios con su precio y duración", p("/gestion-servicios")],
+    [atiende ? "Configura tu horario de atención" : "Agrega a tu equipo (los profesionales que atienden)", atiende ? p("/gestion-horarios") : p("/gestion-profesionales")],
+    ["Sube tu logo, colores y ciudad", p("/configuracion-empresa")],
+    ["Comparte tu link para que te reserven", `https://www.agendafonfach.cl/${slug}`],
+  ];
+};
+
 export const sendBienvenidaEmpresaEmail = async (to, data) => {
-  const { nombreNegocio, slug, email, password } = data;
+  const { nombreNegocio, nombreContacto = "", slug, email, password, rubro = "", atiende = true, finPrueba = null } = data;
   // Login del negocio: /<slug>/login (antes apuntaba a /admin/login, que no existe)
   const panelUrl = `https://www.agendafonfach.cl/${slug}/login`;
   const agendaUrl = `https://www.agendafonfach.cl/${slug}`;
+  const pasos = primerosPasos(rubro, slug, atiende);
+  const finTexto = finPrueba ? ` (hasta el ${fechaCorta(finPrueba)})` : "";
 
   return await sendBaseEmail({
     to,
     subject: "¡Tu negocio está listo! – Agenda Fonfach",
     html: layout(`
-        <h2 style="margin-top:0;">¡Bienvenido a Agenda Fonfach! 🎉</h2>
-        <p>Tu negocio <strong>${nombreNegocio}</strong> fue creado exitosamente. Tienes <strong>7 días gratis</strong> para probarlo sin límites.</p>
+        <h2 style="margin-top:0;">¡Bienvenido${nombreContacto ? `, ${nombreContacto}` : ""}! 🎉</h2>
+        <p>Tu negocio <strong>${nombreNegocio}</strong> fue creado. Tienes <strong>7 días gratis</strong>${finTexto} para probarlo sin límites.</p>
 
         <table cellpadding="8" cellspacing="0" border="0" width="100%"
               style="background:#f9f9f9;border-radius:6px;margin:16px 0;">
           <tr>
-            <td style="font-size:14px;color:#555;width:40%;">Tu agenda pública</td>
+            <td style="font-size:14px;color:#555;width:40%;">Tu página</td>
             <td style="font-weight:bold;">
               <a href="${agendaUrl}" style="color:#4361ee;">${agendaUrl}</a>
             </td>
@@ -542,22 +574,71 @@ export const sendBienvenidaEmpresaEmail = async (to, data) => {
           </tr>
         </table>
 
+        ${ctaButton(panelUrl, "Entrar a mi panel", "#4361ee")}
+
+        <h3 style="margin:24px 0 8px;font-size:16px;">Primeros pasos</h3>
+        <ol style="padding-left:20px;margin:0 0 16px;color:#333;font-size:14px;line-height:1.7;">
+          ${pasos.map(([t, href]) => `<li><a href="${href}" style="color:#4361ee;text-decoration:none;">${t}</a></li>`).join("")}
+        </ol>
+
         <div style="background:#fff8f0;border-left:4px solid #f0a500;padding:16px;border-radius:4px;margin:16px 0;">
           <p style="margin:0;font-size:14px;color:#555;">
-            🔒 Por seguridad, te recomendamos cambiar tu contraseña después de iniciar sesión por primera vez.
+            🔒 Por seguridad, cambia tu contraseña después de entrar por primera vez.
           </p>
         </div>
 
-        ${ctaButton(panelUrl, "Ir a mi panel de administración", "#4361ee")}
-
         <p style="color:#555;font-size:14px;">
-          Si tienes alguna duda, responde este correo o escríbenos por WhatsApp. Estamos para ayudarte.
+          ¿Dudas? Responde este correo o escríbenos por <a href="https://wa.me/${WHATSAPP_AGENDA}" style="color:#4361ee;">WhatsApp</a>. Estamos para ayudarte.
         </p>
         <p style="color:#555;font-size:14px;">
           Atentamente,<br/><strong>Equipo 🗓️ Agenda Fonfach</strong>
         </p>
       `),
-    text: `¡Bienvenido a Agenda Fonfach!\n\nTu negocio "${nombreNegocio}" fue creado exitosamente. Tienes 7 días gratis para probarlo.\n\nTu agenda pública: ${agendaUrl}\nCorreo: ${email}\nContraseña temporal: ${password}\n\nInicia sesión en: ${panelUrl}\n\nTe recomendamos cambiar tu contraseña después del primer ingreso.\n\nEquipo 🗓️ Agenda Fonfach`,
+    text: `¡Bienvenido a Agenda Fonfach!\n\nTu negocio "${nombreNegocio}" fue creado. Tienes 7 días gratis${finTexto}.\n\nTu página: ${agendaUrl}\nCorreo: ${email}\nContraseña temporal: ${password}\n\nEntra en: ${panelUrl}\n\nPrimeros pasos:\n${pasos.map(([t, href], i) => `${i + 1}. ${t}: ${href}`).join("\n")}\n\nCambia tu contraseña después del primer ingreso.\n\nEquipo 🗓️ Agenda Fonfach`,
+  });
+};
+
+// ─────────────────────────────────────────────
+// EMAIL: fin del período de prueba (cron/pruebaGratisCron.js)
+//   tipo "previo"  → le quedan 1–2 días
+//   tipo "vencido" → se le acaba de terminar
+// ─────────────────────────────────────────────
+export const sendAvisoFinPruebaEmail = async (to, { empresa, tipo, fin }) => {
+  const vencida = tipo === "vencido";
+  const panelUrl = `https://www.agendafonfach.cl/${empresa.slug}/login`;
+  const wsp = `https://wa.me/${WHATSAPP_AGENDA}?text=${encodeURIComponent(`Hola! Quiero seguir usando Agenda Fonfach con ${empresa.nombre} (${empresa.slug}).`)}`;
+  return await sendBaseEmail({
+    to,
+    subject: vencida ? `Tu prueba gratis de ${empresa.nombre} terminó` : `Tu prueba gratis termina el ${fechaCorta(fin)}`,
+    html: layout(`
+        <h2 style="margin-top:0;">${vencida ? "Terminó tu prueba gratis" : "Tu prueba gratis está por terminar ⏳"}</h2>
+        <p>${
+          vencida
+            ? `Los 7 días de prueba de <strong>${empresa.nombre}</strong> terminaron. Para seguir recibiendo reservas sin interrupciones, escríbenos y activamos tu plan.`
+            : `A <strong>${empresa.nombre}</strong> le quedan pocos días de prueba: termina el <strong>${fechaCorta(fin)}</strong>. Si te está sirviendo, escríbenos y dejamos tu plan activo para que no se corte nada.`
+        }</p>
+        ${ctaButton(wsp, "Escribir por WhatsApp", "#25d366")}
+        <p style="color:#555;font-size:14px;">Tu panel: <a href="${panelUrl}" style="color:#4361ee;">${panelUrl}</a></p>
+        <p style="color:#555;font-size:14px;">Atentamente,<br/><strong>Equipo 🗓️ Agenda Fonfach</strong></p>
+      `),
+    text: `${vencida ? "Terminó tu prueba gratis" : `Tu prueba gratis termina el ${fechaCorta(fin)}`} — ${empresa.nombre}.\nEscríbenos por WhatsApp para activar tu plan: ${wsp}\nPanel: ${panelUrl}`,
+  });
+};
+
+// Resumen para Hans (super-admin) con los avisos de prueba del día
+export const sendResumenPruebasAdminEmail = async (to, empresas = []) => {
+  const fila = (e) =>
+    `<tr><td style="padding:8px;border-top:1px solid #eee;"><strong>${e.nombre}</strong><br/><span style="color:#777;font-size:12px;">${e.rubro || ""} · ${e.correo || ""} · ${e.telefono || ""}</span></td><td style="padding:8px;border-top:1px solid #eee;white-space:nowrap;">${e.tipo === "vencido" ? "Venció" : `Le quedan ${e.dias} día${e.dias === 1 ? "" : "s"}`}</td><td style="padding:8px;border-top:1px solid #eee;"><a href="https://www.agendafonfach.cl/${e.slug}" style="color:#4361ee;">Ver</a></td></tr>`;
+  return await sendBaseEmail({
+    to,
+    subject: `Pruebas gratis: ${empresas.length} negocio${empresas.length === 1 ? "" : "s"} por revisar`,
+    html: layout(`
+        <h2 style="margin-top:0;">Pruebas gratis por revisar</h2>
+        <p>Se les avisó hoy a estos negocios. Si ya pagaron, márcalos como activos en tu panel; si no, decide si suspenderlos.</p>
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="font-size:14px;margin:12px 0;">${empresas.map(fila).join("")}</table>
+        ${ctaButton("https://www.agendafonfach.cl/superadmin", "Abrir panel de super-admin", "#1a1a1a")}
+      `),
+    text: `Pruebas gratis por revisar:\n${empresas.map((e) => `- ${e.nombre} (${e.slug}): ${e.tipo === "vencido" ? "venció" : `le quedan ${e.dias} días`}`).join("\n")}`,
   });
 };
 

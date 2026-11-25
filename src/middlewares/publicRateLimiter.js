@@ -17,6 +17,17 @@ export const limitarEscrituraPublica = rateLimit({
   },
 });
 
+// Registro de negocios nuevos: crea una empresa y manda un correo, así que
+// el tope es bajo (5 por hora por IP) para que nadie llene la base de
+// negocios falsos ni use el correo de Agenda Fonfach para spam.
+export const limitarRegistroNegocio = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Hiciste varios intentos seguidos. Espera un rato y vuelve a intentar." },
+});
+
 // Límite más laxo para endpoints públicos de solo lectura (ver planes,
 // horarios, etc.) — igual conviene un tope alto para que un scraper agresivo
 // no sature el servidor.

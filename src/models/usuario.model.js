@@ -42,6 +42,10 @@ const UsuarioSchema = new Schema(
       por: { type: Schema.Types.ObjectId, ref: "Usuario", default: null },
     },
     esAdmin: { type: Boolean, default: false },
+    // Profesional (rol "barbero") que atiende clientes: aparece en la página
+    // pública y se le puede reservar. false = solo administra (ej. el dueño
+    // que registró el negocio y no atiende).
+    atiendeClientes: { type: Boolean, default: true },
     plan: {
       type: String,
       enum: ["gratis", "premium"],

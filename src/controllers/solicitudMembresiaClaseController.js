@@ -1,4 +1,5 @@
 import cloudinary from "../config/cloudinary.js";
+import { normalizarTelefonoCL } from "../utils/telefono.js";
 import SolicitudMembresiaClase from "../models/solicitudMembresiaClase.model.js";
 import MembresiaClase from "../models/membresiaClase.model.js";
 import PlanMembresiaClase from "../models/planMembresiaClase.model.js";
@@ -220,7 +221,7 @@ export const crearSolicitudPublica = async (req, res) => {
         apellido: apellido.trim(),
         rut,
         email,
-        telefono: telefono.trim(),
+        telefono: normalizarTelefonoCL(telefono.trim()),
         rol: "invitado",
         empresa: empresa._id,
       });
@@ -229,7 +230,7 @@ export const crearSolicitudPublica = async (req, res) => {
       cliente.nombre = nombre.trim();
       cliente.apellido = apellido.trim();
       cliente.email = email;
-      cliente.telefono = telefono.trim();
+      cliente.telefono = normalizarTelefonoCL(telefono.trim());
       await cliente.save();
     }
     // Si ya es una cuenta real (cliente/admin/barbero) se reutiliza tal cual,

@@ -1,4 +1,5 @@
 import dayjs from "dayjs";
+import { normalizarTelefonoCL } from "../utils/telefono.js";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
 
@@ -944,7 +945,7 @@ const resolverClienteInvitadoPorRut = async ({
       apellido: apellido.trim(),
       rut,
       email,
-      telefono: telefono.trim(),
+      telefono: normalizarTelefonoCL(telefono.trim()),
       rol: "invitado",
       empresa: empresaId,
     });
@@ -952,7 +953,7 @@ const resolverClienteInvitadoPorRut = async ({
     cliente.nombre = nombre.trim();
     cliente.apellido = apellido.trim();
     cliente.email = email;
-    cliente.telefono = telefono.trim();
+    cliente.telefono = normalizarTelefonoCL(telefono.trim());
     await cliente.save();
   }
 
@@ -1198,7 +1199,7 @@ export const inscribirClasePublica = async (req, res) => {
       // de otra persona), así que pedimos que además coincida el teléfono o
       // el correo que esa persona tiene registrado.
       const telefonoCoincide =
-        telefono && soloDigitos(telefono) === soloDigitos(usuarioExistente.telefono);
+        telefono && normalizarTelefonoCL(telefono) === normalizarTelefonoCL(usuarioExistente.telefono);
       const emailCoincide =
         email &&
         String(email).toLowerCase().trim() ===

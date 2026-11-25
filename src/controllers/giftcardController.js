@@ -4,6 +4,7 @@
 // comprobante), el admin la aprueba y se le envía por correo con un link.
 // El admin también puede crearlas directo cuando la venden en el local.
 import mongoose from "mongoose";
+import { normalizarTelefonoCL } from "../utils/telefono.js";
 import cloudinary from "../config/cloudinary.js";
 import GiftCard from "../models/giftCard.model.js";
 import Empresa from "../models/empresa.model.js";
@@ -89,7 +90,7 @@ const leerDatosGiftcard = async (empresa, body, { exigirComprador = true } = {})
   const comprador = {
     nombre: texto(body.compradorNombre, 80),
     email: texto(body.compradorEmail, 120).toLowerCase(),
-    telefono: texto(body.compradorTelefono, 30),
+    telefono: normalizarTelefonoCL(texto(body.compradorTelefono, 30)),
   };
   const destinatario = {
     nombre: texto(body.destinatarioNombre, 80),

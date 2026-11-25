@@ -3,9 +3,14 @@
 //
 // WhatsApp (API de WhatsApp Cloud de Meta, mismas variables ACCESS_TOKEN y
 // PHONE_NUMBER del resto del sistema). Meta solo deja iniciar conversaciones
-// con PLANTILLAS aprobadas; hay que crearlas en WhatsApp Manager con estos
-// nombres exactos (Utilidad, Español). Mientras no estén aprobadas, el envío
-// falla en silencio y los correos funcionan igual.
+// con PLANTILLAS aprobadas.
+//
+// HOY se reutilizan las plantillas que ya están aprobadas para barberías,
+// así funcionan sin esperar a Meta (ver PLANTILLAS más abajo):
+//  - aviso al recinto  → "notificacion_reserva" (la del profesional)
+//  - recordatorio      → "recordatorio3_cita"   (la del cliente)
+// Si algún día se aprueban las propias de la cancha (textos de abajo), basta
+// con poner WHATSAPP_CANCHA_PLANTILLAS_PROPIAS=1 en el .env.
 //
 //  1) nueva_reserva_cancha  → al dueño/encargado
 //       ⚽ *Nueva reserva en {{1}}*
@@ -176,6 +181,7 @@ export const correoAvisoLocal = (r, empresa) =>
 /* ─────────── WhatsApp ─────────── */
 
 const IDIOMA = process.env.WHATSAPP_IDIOMA_CANCHAS || process.env.WHATSAPP_IDIOMA_MESAS || "es_CL";
+const PROPIAS = process.env.WHATSAPP_CANCHA_PLANTILLAS_PROPIAS === "1";
 
 export const formatearTelefono = (telefono) => {
   const d = String(telefono || "").replace(/\D/g, "");
@@ -190,7 +196,7 @@ const parametro = (v) => ({
   text: String(v ?? "").replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim().slice(0, 300) || "-",
 });
 
-const enviarPlantilla = async (telefono, plantilla, parametros) => {
+const enviarPlantilla = async (telefono, plantilla, parametros, idioma = IDIOMA) => {
   if (!process.env.ACCESS_TOKEN || !process.env.PHONE_NUMBER) return { ok: false, error: "Sin credenciales de WhatsApp" };
   const to = formatearTelefono(telefono);
   if (to.length < 10) return { ok: false, error: "Teléfono inválido" };
@@ -202,7 +208,7 @@ const enviarPlantilla = async (telefono, plantilla, parametros) => {
         messaging_product: "whatsapp",
         to,
         type: "template",
-        template: { name: plantilla, language: { code: IDIOMA }, components: [{ type: "body", parameters: parametros.map(parametro) }] },
+        template: { name: plantilla, language: { code: idioma }, components: [{ type: "body", parameters: parametros.map(parametro) }] },
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -226,6 +232,19 @@ export const cuandoEs = (r, ahora = new Date()) => {
 
 export const whatsappAvisoLocal = async (r, empresa, telefonos = []) => {
   for (const tel of telefonos) {
+    if (!PROPIAS) {
+      // Plantilla de barbería "notificacion_reserva" (es_CL):
+      // {{1}} profesional · {{2}} cliente · {{3}} fecha · {{4}} hora · {{5}} servicio · {{6}} teléfono
+      await enviarPlantilla(tel, "notificacion_reserva", [
+        empresa.nombre,
+        `${r.cliente.nombre}${r.equipo ? ` (${r.equipo})` : ""}`,
+        fechaLarga(r.fecha),
+        r.hora,
+        `${tipoTexto(r)}${r.estado === "pendiente" ? " · pendiente de abono" : ""}`,
+        `+${formatearTelefono(r.cliente.telefono)}`,
+      ], "es_CL");
+      continue;
+    }
     await enviarPlantilla(tel, "nueva_reserva_cancha", [
       empresa.nombre,
       `${r.cliente.nombre}${r.equipo ? ` (${r.equipo})` : ""}`,
@@ -238,7 +257,19 @@ export const whatsappAvisoLocal = async (r, empresa, telefonos = []) => {
 };
 
 export const whatsappRecordatorio = (r, empresa, config, ahora = new Date()) =>
-  enviarPlantilla(r.cliente.telefono, "recordatorio_reserva_cancha", [
+  !PROPIAS
+    ? // Plantilla de barbería "recordatorio3_cita" (en): {{1}} cliente · {{2}} negocio ·
+      // {{3}} profesional · {{4}} fecha · {{5}} hora · {{6}} servicio · {{7}} dirección
+      enviarPlantilla(r.cliente.telefono, "recordatorio3_cita", [
+        r.cliente.nombre.split(/\s+/)[0],
+        empresa.nombre,
+        config?.nombreCancha || "Cancha",
+        fechaLarga(r.fecha),
+        r.hora,
+        tipoTexto(r),
+        empresa.direccion || empresa.nombre,
+      ], "en")
+    : enviarPlantilla(r.cliente.telefono, "recordatorio_reserva_cancha", [
     r.cliente.nombre.split(/\s+/)[0],
     empresa.nombre,
     cuandoEs(r, ahora),

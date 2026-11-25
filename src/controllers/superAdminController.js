@@ -1,8 +1,11 @@
 import bcrypt from "bcryptjs";
+import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import { TOKEN_SECRET } from "../config.js";
 import Empresa from "../models/empresa.model.js";
 import PagoEmpresa from "../models/pagoEmpresa.model.js";
+import Usuario from "../models/usuario.model.js";
+import { construirCambiosEmpresa, mesAnioCobro } from "../utils/edicionEmpresa.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
@@ -82,7 +85,7 @@ export const listarEmpresas = async (req, res) => {
   try {
     const empresas = await Empresa.find(
       {},
-      "nombre slug correo logo ciudad rubro tipo estado estadoSuscripcion cuotaMensual fechaPago ultimoPago proximoPago suspendidaDesde motivoSuspension trial creadoEn",
+      "nombre slug correo telefono logo ciudad rubro tipo estado estadoSuscripcion cuotaMensual fechaPago ultimoPago proximoPago suspendidaDesde motivoSuspension notasSuperAdmin trial creadoEn",
     )
       .sort({ nombre: 1 })
       .lean();
@@ -472,5 +475,165 @@ export const resumenGanancias = async (req, res) => {
   } catch (error) {
     console.error("Error al calcular ganancias (superadmin):", error);
     return res.status(500).json({ message: "Error al calcular las ganancias" });
+  }
+};
+
+/* =====================================================
+   EDITAR NEGOCIO (modal "Editar negocio" del panel)
+   GET  /empresas/:id → ficha completa (datos, plan, módulos, admins,
+                        cobros pendientes y últimos pagos)
+   PATCH /empresas/:id → guarda los cambios (lista blanca en
+                        utils/edicionEmpresa.js)
+===================================================== */
+const CAMPOS_DETALLE =
+  "nombre slug rubro tipo correo telefono direccion ciudad rutEmpresa logo estado estadoSuscripcion plan trial cuotaMensual fechaPago ultimoPago proximoPago suspendidaDesde motivoSuspension modulos moduloProductos permiteSuscripcion directorioVisible notasSuperAdmin creadoEn";
+
+const fichaEmpresa = async (id) => {
+  const empresa = await Empresa.findById(id)
+    .select(`${CAMPOS_DETALLE} historialPagos`)
+    .lean();
+  if (!empresa) return null;
+
+  const [admins, profesionales, clientes, cobrosAbiertos] = await Promise.all([
+    Usuario.find({ empresa: id, esAdmin: true }).select("nombre apellido email telefono").lean(),
+    Usuario.countDocuments({ empresa: id, rol: "barbero" }),
+    Usuario.countDocuments({ empresa: id, rol: "cliente" }),
+    PagoEmpresa.find({ empresa: id, estado: { $in: ["pendiente", "atrasado"] } })
+      .select("fechaVencimiento monto estado")
+      .sort({ fechaVencimiento: 1 })
+      .lean(),
+  ]);
+
+  const historialPagos = [...(empresa.historialPagos || [])]
+    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
+    .slice(0, 12);
+
+  return {
+    ...empresa,
+    historialPagos,
+    admins,
+    totales: { profesionales, clientes },
+    cobrosAbiertos,
+  };
+};
+
+export const detalleEmpresa = async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ message: "Empresa no encontrada" });
+    const ficha = await fichaEmpresa(req.params.id);
+    if (!ficha) return res.status(404).json({ message: "Empresa no encontrada" });
+    return res.json({ empresa: ficha });
+  } catch (error) {
+    console.error("Error al cargar la ficha de la empresa (superadmin):", error);
+    return res.status(500).json({ message: "No se pudo cargar el negocio" });
+  }
+};
+
+/**
+ * Deja el cobro pendiente (PagoEmpresa, el que lee el cron de avisos por
+ * correo) en la nueva fecha de próximo pago:
+ *  - "mover": el cobro pendiente más antiguo pasa a esa fecha, con los avisos
+ *    en cero; si no hay ninguno, se crea.
+ *  - "cancelar": se borró el próximo pago → los cobros pendientes se anulan
+ *    para que el cron no avise ni suspenda.
+ * Es "best effort": si falla, lo editado ya quedó guardado.
+ */
+const sincronizarCobroPendiente = async (empresa, { accion, fecha }) => {
+  const abiertos = await PagoEmpresa.find({
+    empresa: empresa._id,
+    estado: { $in: ["pendiente", "atrasado"] },
+  }).sort({ fechaVencimiento: 1 });
+
+  if (accion === "cancelar") {
+    for (const p of abiertos) {
+      p.estado = "cancelado";
+      p.observacion = "Anulado desde el panel (se quitó el próximo pago)";
+      await p.save();
+    }
+    return { accion: "cancelados", cantidad: abiertos.length };
+  }
+
+  const { mes, anio } = mesAnioCobro(fecha);
+  const avisosEnCero = {
+    diasAntes5: false,
+    diasAntes2: false,
+    diasAntes1: false,
+    diaVencimiento: false,
+    diasDespues3: false,
+  };
+
+  const [cobro] = abiertos;
+  if (cobro) {
+    cobro.fechaVencimiento = fecha;
+    cobro.estado = "pendiente";
+    cobro.mes = mes;
+    cobro.anio = anio;
+    if (empresa.cuotaMensual) cobro.monto = empresa.cuotaMensual;
+    cobro.notificaciones = avisosEnCero;
+    cobro.markModified("notificaciones");
+    await cobro.save();
+    return { accion: "movido", fecha };
+  }
+
+  await PagoEmpresa.create({
+    empresa: empresa._id,
+    mes,
+    anio,
+    monto: empresa.cuotaMensual || 0,
+    estado: "pendiente",
+    fechaVencimiento: fecha,
+    metodoPago: "transferencia",
+    observacion: "Cobro creado al editar el próximo pago desde el panel",
+    notificaciones: avisosEnCero,
+  });
+  return { accion: "creado", fecha };
+};
+
+export const editarEmpresa = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) return res.status(404).json({ message: "Empresa no encontrada" });
+    const actual = await Empresa.findById(id)
+      .select("estadoSuscripcion trial fechaPago proximoPago")
+      .lean();
+    if (!actual) return res.status(404).json({ message: "Empresa no encontrada" });
+
+    const { set, errores, cobro } = construirCambiosEmpresa(req.body || {}, actual, {
+      rubrosValidos: Empresa.schema.path("rubro").enumValues,
+    });
+    if (errores.length) {
+      return res.status(400).json({ message: errores.join(". "), errores });
+    }
+    if (!Object.keys(set).length) {
+      return res.status(400).json({ message: "No hay cambios para guardar" });
+    }
+
+    const empresa = await Empresa.findByIdAndUpdate(
+      id,
+      { $set: set },
+      { new: true, runValidators: true },
+    ).lean();
+
+    let resultadoCobro = null;
+    if (cobro) {
+      try {
+        resultadoCobro = await sincronizarCobroPendiente(empresa, cobro);
+      } catch (err) {
+        console.error("No se pudo actualizar el cobro pendiente (PagoEmpresa):", err.message);
+        resultadoCobro = { accion: "error" };
+      }
+    }
+
+    return res.json({
+      message: "Negocio actualizado",
+      empresa: await fichaEmpresa(id),
+      cobro: resultadoCobro,
+    });
+  } catch (error) {
+    console.error("Error al editar empresa (superadmin):", error);
+    if (error?.name === "ValidationError") {
+      return res.status(400).json({ message: "Revisa los datos: alguno no es válido" });
+    }
+    return res.status(500).json({ message: "No se pudo guardar el negocio" });
   }
 };

@@ -9,6 +9,8 @@ import {
   registrarPago,
   enviarRecordatorioVencimiento,
   resumenGanancias,
+  detalleEmpresa,
+  editarEmpresa,
 } from "../controllers/superAdminController.js";
 import { verificarSuperAdmin } from "../middlewares/verificarSuperAdmin.js";
 
@@ -20,6 +22,8 @@ router.post("/login", loginSuperAdmin);
 // Protegidas — todo lo demás requiere el token de super-admin
 router.post("/logout", verificarSuperAdmin, logoutSuperAdmin);
 router.get("/empresas", verificarSuperAdmin, listarEmpresas);
+router.get("/empresas/:id", verificarSuperAdmin, detalleEmpresa);
+router.patch("/empresas/:id", verificarSuperAdmin, editarEmpresa);
 router.patch("/empresas/:id/estado", verificarSuperAdmin, actualizarEstadoEmpresa);
 router.patch("/empresas/:id/suscripcion", verificarSuperAdmin, actualizarEstadoSuscripcion);
 router.patch("/empresas/:id/cobro", verificarSuperAdmin, actualizarCobro);

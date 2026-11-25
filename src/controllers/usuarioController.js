@@ -43,6 +43,8 @@ export const getBarberosPublicos = async (req, res) => {
         empresa: empresa._id,
         rol: "barbero",
         estado: "activo", // 🔹 Cambiado de activo: true a estado: "activo"
+        // El dueño que solo administra no aparece como profesional
+        atiendeClientes: { $ne: false },
       })
       .select("_id nombre apellido descripcion perfilProfesional")
       .lean();
@@ -313,6 +315,7 @@ export const updateUsuario = async (req, res) => {
       descripcion,
       aniosExperiencia,
       esAdmin,
+      atiendeClientes,
     } = req.body || {};
 
     const data = {};
@@ -335,6 +338,15 @@ export const updateUsuario = async (req, res) => {
       const usuarioObjetivo = await Usuario.findById(id).select("rol");
       if (usuarioObjetivo?.rol === "barbero") {
         data.esAdmin = esAdmin === true || esAdmin === "true";
+      }
+    }
+
+    // Si el profesional atiende clientes (aparece en la página) o solo
+    // administra. Solo lo cambia un admin y solo para profesionales.
+    if (atiendeClientes !== undefined && req.usuario?.esAdmin === true) {
+      const objetivo = await Usuario.findById(id).select("rol");
+      if (objetivo?.rol === "barbero") {
+        data.atiendeClientes = atiendeClientes === true || atiendeClientes === "true";
       }
     }
 

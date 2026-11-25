@@ -217,6 +217,9 @@ const EmpresaSchema = new mongoose.Schema({
 
   trial: {
     activo: { type: Boolean, default: true },
+    // Avisos de fin de prueba ya enviados (cron/pruebaGratisCron.js)
+    avisoPrevio: { type: Date, default: null },
+    avisoVencido: { type: Date, default: null },
     inicio: { type: Date, default: Date.now },
     fin: {
       type: Date,
@@ -239,6 +242,9 @@ const EmpresaSchema = new mongoose.Schema({
   suspendidaDesde: Date,
 
   motivoSuspension: String,
+
+  // Notas internas del super-admin (acuerdos, contacto, etc.). El negocio no las ve.
+  notasSuperAdmin: { type: String, default: "" },
 
   // Cuánto le cobra Hans (dueño del SaaS) a esta empresa por mes — para el
   // panel de super-admin, no confundir con "pagos" de arriba (eso es

@@ -1,4 +1,5 @@
 import empresaModel from "../models/empresa.model.js";
+import { normalizarTelefonoCL } from "../utils/telefono.js";
 import usuarioModel from "../models/usuario.model.js";
 import { createReserva } from "./reservaController.js";
 import accesTokenModel from "../models/accesToken.model.js";
@@ -54,7 +55,7 @@ export const reservarComoInvitado = async (req, res) => {
       apellido,
       rut,
       email,
-      telefono,
+      telefono: normalizarTelefonoCL(telefono),
       rol: "invitado",
       empresa: empresa._id,
     });
@@ -64,7 +65,7 @@ export const reservarComoInvitado = async (req, res) => {
     usuario.nombre = nombre;
     usuario.apellido = apellido;
     usuario.email = email;
-    usuario.telefono = telefono;
+    usuario.telefono = normalizarTelefonoCL(telefono);
     await usuario.save();
   }
   // si usuario.rol === "cliente", lo dejamos intacto y solo lo usamos para la reserva
