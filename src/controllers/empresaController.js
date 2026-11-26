@@ -209,7 +209,7 @@ export const getEmpresasPublicas = async (req, res) => {
     const empresas = await empresaModel
       .find({ estado: "activo" })
       .select(
-        "nombre slug tipo rubro descripcion direccion horarios logo colores",
+        "nombre slug tipo rubro descripcion direccion ciudad horarios logo colores",
       );
 
     res.json(empresas);
