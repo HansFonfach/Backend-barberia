@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { linkPagoPlan } from "../utils/linkPagoPlan.js";
 
 // El cliente se crea recién en el primer envío (no al importar este archivo).
 // index.js llama a dotenv.config() DESPUÉS de sus imports estáticos (así
@@ -792,11 +793,27 @@ export const sendRecordatorioPagoEmail = async (empresa, { tipo }) => {
     `,
   };
 
+  // Si el pago online está activo, botón para pagar con tarjeta (link firmado
+  // del negocio: sirve aunque esté suspendido y no pueda iniciar sesión)
+  let botonPago = "";
+  let textoPago = "";
+  if (process.env.MP_ACCESS_TOKEN && empresa?._id) {
+    const link = linkPagoPlan(empresa._id);
+    botonPago = `
+      <div style="text-align:center;margin:24px 0 8px;">
+        <a href="${link}" style="display:inline-block;background:#e86020;color:#fff;text-decoration:none;font-weight:700;padding:13px 26px;border-radius:10px;">
+          Pagar ahora con tarjeta
+        </a>
+        <p style="color:#888;font-size:12px;margin:10px 0 0;">Pago seguro con Mercado Pago. Tu plan se renueva al instante.</p>
+      </div>`;
+    textoPago = `\nPaga con tarjeta aquí: ${link}`;
+  }
+
   return await sendBaseEmail({
     to: destinatario,
     subject: asuntos[tipo],
-    html: layout(mensajes[tipo]),
-    text: mensajes[tipo].replace(/<[^>]*>/g, "").trim(),
+    html: layout(mensajes[tipo] + botonPago),
+    text: mensajes[tipo].replace(/<[^>]*>/g, "").trim() + textoPago,
   });
 };
 

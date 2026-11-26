@@ -34,7 +34,7 @@ const generarSlug = (nombre) =>
 const SLUGS_RESERVADOS = [
   "negocios", "admin", "superadmin", "registro-negocio", "baja-promociones",
   "asistencia-mesa", "confirmar-reserva", "cancelar-reserva", "sitemap.xml", "robots.txt",
-  "login", "register", "auth", "api", "politicas", "centro-ayuda", "contacto",
+  "login", "register", "auth", "api", "politicas", "centro-ayuda", "contacto", "pagar-plan",
 ];
 
 // Rubros con menú propio: el dueño administra, no atiende como profesional

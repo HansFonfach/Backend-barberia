@@ -243,6 +243,16 @@ const EmpresaSchema = new mongoose.Schema({
 
   motivoSuspension: String,
 
+  // Pago automático de la mensualidad con Mercado Pago (suscripción).
+  // estado: inactivo | pendiente | activo | pausado | cancelado
+  pagoAutomatico: {
+    proveedor: { type: String, default: "" },
+    suscripcionId: { type: String, default: "" },
+    estado: { type: String, default: "inactivo" },
+    email: { type: String, default: "" },
+    actualizadoEn: { type: Date, default: null },
+  },
+
   // Notas internas del super-admin (acuerdos, contacto, etc.). El negocio no las ve.
   notasSuperAdmin: { type: String, default: "" },
 

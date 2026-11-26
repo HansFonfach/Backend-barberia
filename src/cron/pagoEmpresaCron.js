@@ -30,6 +30,11 @@ export const iniciarCronpagoEmpresa = () => {
       const diasDiff = vencimiento.diff(hoy, "day");
       let modificado = false;
 
+      // Con pago automático de Mercado Pago activo no se mandan los avisos de
+      // "tu plan vence…" (se le cobra solo ese día). Si el cobro falla y el
+      // pago no llega, igual se suspende a los 3 días, como a todos.
+      if (empresa.pagoAutomatico?.estado === "activo" && diasDiff >= 0) continue;
+
       // 5 días antes
       if (diasDiff === 5 && !pago.notificaciones.diasAntes5) {
         try {

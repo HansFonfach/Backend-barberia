@@ -22,6 +22,8 @@ export const recordatorioPagoCron = {
       const empresas = await empresaModel.find({
         estado: { $ne: "inactivo" },
         estadoSuscripcion: "activo",
+        // Con pago automático activo no se avisa: Mercado Pago le cobra solo
+        "pagoAutomatico.estado": { $ne: "activo" },
         proximoPago: {
           $gte: hoy.toDate(),
           $lt: hoy.endOf("day").toDate(),

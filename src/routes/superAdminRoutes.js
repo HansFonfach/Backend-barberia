@@ -13,6 +13,7 @@ import {
   editarEmpresa,
 } from "../controllers/superAdminController.js";
 import { verificarSuperAdmin } from "../middlewares/verificarSuperAdmin.js";
+import { linkPagoParaSuperAdmin } from "../controllers/planSaasController.js";
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.post("/logout", verificarSuperAdmin, logoutSuperAdmin);
 router.get("/empresas", verificarSuperAdmin, listarEmpresas);
 router.get("/empresas/:id", verificarSuperAdmin, detalleEmpresa);
 router.patch("/empresas/:id", verificarSuperAdmin, editarEmpresa);
+router.get("/empresas/:id/link-pago", verificarSuperAdmin, linkPagoParaSuperAdmin);
 router.patch("/empresas/:id/estado", verificarSuperAdmin, actualizarEstadoEmpresa);
 router.patch("/empresas/:id/suscripcion", verificarSuperAdmin, actualizarEstadoSuscripcion);
 router.patch("/empresas/:id/cobro", verificarSuperAdmin, actualizarCobro);
